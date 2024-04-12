@@ -1,95 +1,95 @@
-# 📷 EasyAnimate | Your Animation Generator.
-😊 EasyAnimate is a repo for generating long videos and training transformer based diffusion generators.
+# EasyAnimate | 您的智能生成器。
+😊 EasyAnimate是一个用于生成长视频和训练基于transformer的扩散生成器的repo。
 
 😊 Welcome!
 
-English | [简体中文](./README_zh-CN.md)
+[English](./README.md) | 简体中文
 
-# Table of Contents
-- [Table of Contents](#table-of-contents)
-- [Introduction](#introduction)
+# 目录
+- [EasyPhoto | 您的智能生成器。](#easyphoto--您的智能生成器)
+- [目录](#目录)
+- [简介](#简介)
 - [TODO List](#todo-list)
 - [Model zoo](#model-zoo)
-    - [1、Motion Weights](#1motion-weights)
-    - [2、Other Weights](#2other-weights)
-- [Quick Start](#quick-start)
-    - [1. Cloud usage: AliyunDSW/Docker](#1-cloud-usage-aliyundswdocker)
-    - [2. Local install: Environment Check/Downloading/Installation](#2-local-install-environment-checkdownloadinginstallation)
-- [How to use](#how-to-use)
-    - [1. Inference](#1-inference)
-    - [2. Model Training](#2-model-training)
-- [Algorithm Detailed](#algorithm-detailed)
-- [Reference](#reference)
-- [License](#license)
+    - [1、运动权重](#1运动权重)
+    - [2、其他权重](#2其他权重)
+- [快速启动](#快速启动)
+    - [1. 云使用: AliyunDSW/Docker](#1-云使用-aliyundswdocker)
+    - [2. 本地安装: 环境检查/下载/安装](#2-本地安装-环境检查下载安装)
+- [如何使用](#如何使用)
+    - [1. 生成](#1-生成)
+    - [2. 模型训练](#2-模型训练)
+- [算法细节](#算法细节)
+- [参考文献](#参考文献)
+- [许可证](#许可证)
 
-# Introduction
-EasyAnimate is a pipeline based on the transformer architecture that can be used to generate AI animations, train baseline models and Lora models for the Diffusion Transformer. We support making predictions directly from the pre-trained EasyAnimate model to generate videos of about 5 seconds with 12 fps (in the future, we will support longer videos). Users are also supported to train their own baseline models and Lora models to perform certain style transformations. 
+# 简介
+EasyAnimate是一个基于transformer结构的pipeline，可用于生成AI动画、训练Diffusion Transformer的基线模型与Lora模型，我们支持从已经训练好的EasyAnimate模型直接进行预测，生成5秒左右、fps12的视频（未来会支持更长的视频），也支持用户训练自己的基线模型与Lora模型，进行一定的风格变换。
 
-We will support quick pull-ups from different platforms, refer to [Quick Start](#quick-start).
+我们会逐渐支持从不同平台快速启动，请参阅 [快速启动](#快速启动)。
 
-What's New:
-- Create Code! Support for Windows and Linux Now. [ 2024.04.12 ]
+新特性：
+- 创建代码！现在支持 Windows 和 Linux。[ 2024.04.12 ]
 
-These are our generated results:
+这些是我们的生成结果:
 
-Our UI interface is as follows:
+我们的ui界面如下:
 ![ui](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/ui.png)
 
 # TODO List
-- Support model with different resolution ratio.
-- Support model with different number of frames.
-- Support model with magvit.
-- Support video inpaint model.
+- 支持不同分辨率的文图生成模型。
+- 支持不同帧数的文图生成模型。
+- 支持基于magvit的文图生成模型。
+- 支持视频inpaint模型。
 
 # Model zoo
-### 1、Motion Weights
-| Name | Type | Storage Space | Url | Description |
+### 1、运动权重
+| 名称 | 种类 | 存储空间 | 下载地址 | 描述 |
 |--|--|--|--|--| 
 | easyanimate_v1_mm.safetensors | Motion Module | 4.1GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Motion_Module/easyanimate_v1_mm.safetensors) | Training with 80 frames and fps 12 |
 
-### 2、Other Weights
-| Name | Type | Storage Space | Url | Description |
+### 2、其他权重
+| 名称 | 种类 | 存储空间 | 下载地址 | 描述 |
 |--|--|--|--|--| 
 | PixArt-XL-2-512x512.tar | Pixart | 11.4GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/PixArt-XL-2-512x512.tar)| Pixart-Alpha official weights |
 | easyanimate_portrait.safetensors | Checkpoint of Pixart | 2.3GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait.safetensors) | Training with internal portrait datasets |
 | easyanimate_portrait_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait_lora.safetensors)| Training with internal portrait datasets |
 
-# Result Gallery
-When generating landscape animations, the sampler recommends using DPM++and Euler A. When generating portrait animations, the sampler recommends using Euler A and Euler.
 
-Sometimes Github cannot display large GIFs properly. You can download GIFs locally to view them.
+# 生成效果
+在生成风景类animation时，采样器推荐使用DPM++和Euler A。在生成人像类animation时，采样器推荐使用Euler A和Euler。
+
+有些时候Github无法正常显示大GIF，可以通过Download GIF下载到本地查看。
 
 | A serene night scene in a forested area. The first frame shows a tranquil lake reflecting the star-filled sky above. The second frame reveals a beautiful sunset, casting a warm glow over the landscape. The third frame showcases the night sky, filled with stars and a vibrant Milky Way galaxy. The video is a time-lapse, capturing the transition from day to night, with the lake and forest serving as a constant backdrop. The style of the video is naturalistic, emphasizing the beauty of the night sky and the peacefulness of the forest. | The video captures the majestic beauty of a waterfall cascading down a cliff into a serene lake. The waterfall, with its powerful flow, is the central focus of the video. The surrounding landscape is lush and green, with trees and foliage adding to the natural beauty of the scene. The camera angle provides a bird\'s eye view of the waterfall, allowing viewers to appreciate the full height and grandeur of the waterfall. The video is a stunning representation of nature\'s power and beauty. |
 | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | ![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/star.gif) [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/star.gif) | ![00000002](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/waterfull.gif) [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/waterfull.gif) |
-| **A soaring drone footage captures the majestic beauty of a coastal cliff, its red and yellow stratified rock faces rich in color and against the vibrant turquoise of the sea. Seabirds can be seen taking flight around the cliff\'s precipices. As the drone slowly moves from different angles, the changing sunlight casts shifting shadows that highlight the rugged textures of the cliff and the surrounding calm sea. The water gently laps at the rock base and the greenery that clings to the top of the cliff, and the scene gives a sense of peaceful isolation at the fringes of the ocean. The video captures the essence of pristine natural beauty untouched by human structures.** | **1girl, bangs, blue eyes, blunt bangs, 4k, best quality, blurry, blurry background, bob cut, depth of field, lips, looking at viewer, motion blur, nose, realistic, red lips, shirt, short hair, solo, white shirt, (best quality), (realistic, photo-realistic:1.3), (beautiful eyes:1.3), (sparkling eyes:1.3), (beautiful mouth:1.3), finely detail, light smile, extremely detailed CG unity 8k wallpaper, huge filesize, best quality, realistic, photo-realistic, ultra high res, raw photo, put on makeup. （based on portrait DiT）** |
+| **A soaring drone footage captures the majestic beauty of a coastal cliff, its red and yellow stratified rock faces rich in color and against the vibrant turquoise of the sea. Seabirds can be seen taking flight around the cliff\'s precipices. As the drone slowly moves from different angles, the changing sunlight casts shifting shadows that highlight the rugged textures of the cliff and the surrounding calm sea. The water gently laps at the rock base and the greenery that clings to the top of the cliff, and the scene gives a sense of peaceful isolation at the fringes of the ocean. The video captures the essence of pristine natural beauty untouched by human structures.** | **1girl, bangs, blue eyes, blunt bangs, 4k, best quality, blurry, blurry background, bob cut, depth of field, lips, looking at viewer, motion blur, nose, realistic, red lips, shirt, short hair, solo, white shirt, (best quality), (realistic, photo-realistic:1.3), (beautiful eyes:1.3), (sparkling eyes:1.3), (beautiful mouth:1.3), finely detail, light smile, extremely detailed CG unity 8k wallpaper, huge filesize, best quality, realistic, photo-realistic, ultra high res, raw photo, put on makeup. （基于人像的 DiT）** |
 | ![00000003](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/water.gif) [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/water.gif) | ![00000004](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/girl.gif) [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/girl.gif) |
 | **A serene sunrise over the Grand Canyon, with elegant condors soaring in the morning breeze.** | **A tranquil Vermont autumn, with leaves in vibrant colors of orange and red fluttering down a mountain stream.** |
 | ![00000005](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/sunshine.gif) [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/sunshine.gif)| ![00000006](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/autumn.gif) [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/autumn.gif)|
 
-# Quick Start
-### 1. Cloud usage: AliyunDSW/Docker
-#### a. From AliyunDSW
-Stay tuned.
+# 快速启动
+### 1. 云使用: AliyunDSW/Docker
+#### a. 通过阿里云 DSW
+敬请期待。
 
-#### b. From docker
-If you are using docker, please make sure that the graphics card driver and CUDA environment have been installed correctly in your machine.
-
-Then execute the following commands in this way:
+#### b. 通过docker
+使用docker的情况下，请保证机器中已经正确安装显卡驱动与CUDA环境，然后以此执行以下命令：
 ```
-# pull image
+# 拉取镜像
 docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
 
-# enter image
+# 进入镜像
 docker run -it -p 7860:7860 --network host --gpus all mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
 
-# clone code
+# clone 代码
 git clone https://github.com/aigc-apps/EasyAnimate.git
 
-# enter EasyAnimate's dir
+# 进入EasyAnimate文件夹
 cd EasyAnimate
 
-# download weights
+# 下载权重
 mkdir models/Diffusion_Transformer
 mkdir models/Motion_Module
 mkdir models/Personalized_Model
@@ -104,22 +104,22 @@ tar -xvf PixArt-XL-2-512x512.tar
 cd ../../
 ```
 
-### 2. Local install: Environment Check/Downloading/Installation
-#### a. Environment Check
-We have verified EasyPhoto execution on the following environment:
+### 2. 本地安装: 环境检查/下载/安装
+#### a. 环境检查
+我们已验证EasyPhoto可在以下环境中执行：
 
-The detailed of Linux:
-- OS: Ubuntu 20.04, CentOS
-- python: py3.10 & py3.11
+Linux 的详细信息：
+- 操作系统 Ubuntu 20.04, CentOS
+- python: python3.10 & python3.11
 - pytorch: torch2.2.0
 - CUDA: 11.8
 - CUDNN: 8+
 - GPU： Nvidia-A10 24G & Nvidia-A100 40G & Nvidia-A100 80G
 
-We need about 60GB available on disk (for saving weights), please check!
+我们需要大约 60GB 的可用磁盘空间，请检查！
 
-#### b. Weights
-We'd better place the weights along the specified path:
+#### b. 权重放置
+我们最好将权重按照指定路径进行放置：
 
 ```
 📦 models/
@@ -132,26 +132,26 @@ We'd better place the weights along the specified path:
 │   └── 📄 easyanimate_portrait_lora.safetensors
 ```
 
-# How to use
-### 1. Inference
-#### a. Using Python Code
-- Step 1: Download the corresponding weights and place them in the models folder.
-- Step 2: Modify prompt, neg_prompt, guidance_scale, and seed in the predict_t2v.py file.
-- Step 3: Run the predict_t2v.py file, wait for the generated results, and save the results in the samples/easyanimate-videos folder.
-- Step 4: If you want to combine other backbones you have trained with Lora, modify the predict_t2v.py and Lora_path in predict_t2v.py depending on the situation.
+# 如何使用
+### 1. 生成
+#### a. 视频生成
+##### i、运行python文件
+- 步骤1：下载对应权重放入models文件夹。
+- 步骤2：在predict_t2v.py文件中修改prompt、neg_prompt、guidance_scale和seed。
+- 步骤3：运行predict_t2v.py文件，等待生成结果，结果保存在samples/easyanimate-videos文件夹中。
+- 步骤4：如果想结合自己训练的其他backbone与Lora，则看情况修改predict_t2v.py中的predict_t2v.py和lora_path。
 
-#### b. Using webui
-- Step 1: Download the corresponding weights and place them in the models folder.
-- Step 2: Run the app. py file to enter the graph page.
-- Step 3: Select the generated model based on the page, fill in prompt, neg_prompt, guidance_scale, and seed, click on generate, wait for the generated result, and save the result in the samples folder.
+##### ii、通过ui界面
+- 步骤1：下载对应权重放入models文件夹。
+- 步骤2：运行app.py文件，进入gradio页面。
+- 步骤3：根据页面选择生成模型，填入prompt、neg_prompt、guidance_scale和seed等，点击生成，等待生成结果，结果保存在sample文件夹中。
 
-### 2. Model Training
-#### a、Training video generation model
-##### i、Base on webvid dataset
-If using the webvid dataset for training, you need to download the webvid dataset firstly.
+### 2. 模型训练
+#### a、训练视频生成模型
+##### i、基于webvid数据集
+如果使用webvid数据集进行训练，则需要首先下载webvid的数据集。
 
-You need to arrange the webvid dataset in this format.
-
+您需要以这种格式排列webvid数据集。
 ```
 📦 project/
 ├── 📂 datasets/
@@ -163,7 +163,7 @@ You need to arrange the webvid dataset in this format.
 │       └── 📄 csv_of_webvid.csv
 ```
 
-Then，set scripts/train_t2v.sh.
+然后，进入scripts/train_t2v.sh进行设置。
 ```
 export DATASET_NAME="datasets/webvid/videos/"
 export DATASET_META_NAME="datasets/webvid/csv_of_webvid.csv"
@@ -173,16 +173,15 @@ export DATASET_META_NAME="datasets/webvid/csv_of_webvid.csv"
 train_data_format="webvid"
 ```
 
-Then, we run scripts/train_t2v.sh.
+最后运行scripts/train_t2v.sh。
 ```sh
 sh scripts/train_t2v.sh
 ```
 
-##### ii、Base on internal dataset
-If using the internal dataset for training, you need to format the dataset firstly.
+##### ii、基于自建数据集
+如果使用内部数据集进行训练，则需要首先格式化数据集。
 
-You need to arrange the dataset in this format.
-
+您需要以这种格式排列数据集。
 ```
 📦 project/
 ├── 📂 datasets/
@@ -194,7 +193,7 @@ You need to arrange the dataset in this format.
 │       └── 📄 json_of_internal_datasets.json
 ```
 
-The json_of_internal_datasets.json is a standard JSON file, as shown in below:
+json_of_internal_datasets.json是一个标准的json文件，如下所示：
 ```json
 [
     {
@@ -210,9 +209,9 @@ The json_of_internal_datasets.json is a standard JSON file, as shown in below:
     .....
 ]
 ```
-The file_path in the json needs to be set as relative path.
+json中的file_path需要设置为相对路径。
 
-Then, set scripts/train_t2v.sh.
+然后，进入scripts/train_t2v.sh进行设置。
 ```
 export DATASET_NAME="datasets/internal_datasets/"
 export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.json"
@@ -222,15 +221,14 @@ export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.j
 train_data_format="normal"
 ```
 
-Then, we run scripts/train_t2v.sh.
+最后运行scripts/train_t2v.sh。
 ```sh
 sh scripts/train_t2v.sh
 ```
 
-#### b、Training text to image model
-##### i、Base on diffusers format
-The format of dataset can be set as diffuser format.
-If using the diffusers format dataset for training.
+#### b、训练基础文生图模型
+##### i、基于diffusers格式
+数据集的格式可以设置为diffusers格式。
 
 ```
 📦 project/
@@ -243,7 +241,7 @@ If using the diffusers format dataset for training.
 │       └── 📄 metadata.jsonl
 ```
 
-Then, set scripts/train_t2i.sh.
+然后，进入scripts/train_t2i.sh进行设置。
 ```
 export DATASET_NAME="datasets/diffusers_datasets/"
 
@@ -252,15 +250,14 @@ export DATASET_NAME="datasets/diffusers_datasets/"
 train_data_format="diffusers"
 ```
 
-Then, we run scripts/train_t2i.sh.
+最后运行scripts/train_t2i.sh。
 ```sh
 sh scripts/train_t2i.sh
 ```
-##### ii、Base on internal dataset
-If using the internal dataset for training, you need to format the dataset firstly.
+##### ii、基于自建数据集
+如果使用自建数据集进行训练，则需要首先格式化数据集。
 
-You need to arrange the dataset in this format.
-
+您需要以这种格式排列数据集。
 ```
 📦 project/
 ├── 📂 datasets/
@@ -272,7 +269,7 @@ You need to arrange the dataset in this format.
 │       └── 📄 json_of_internal_datasets.json
 ```
 
-The json_of_internal_datasets.json is a standard JSON file, as shown in below:
+json_of_internal_datasets.json是一个标准的json文件，如下所示：
 ```json
 [
     {
@@ -288,9 +285,9 @@ The json_of_internal_datasets.json is a standard JSON file, as shown in below:
     .....
 ]
 ```
-The file_path in the json needs to be set as relative path.
+json中的file_path需要设置为相对路径。
 
-Then, set scripts/train_t2i.sh.
+然后，进入scripts/train_t2i.sh进行设置。
 ```
 export DATASET_NAME="datasets/internal_datasets/"
 export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.json"
@@ -300,16 +297,14 @@ export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.j
 train_data_format="normal"
 ```
 
-Then, we run scripts/train_t2i.sh.
+最后运行scripts/train_t2i.sh。
 ```sh
 sh scripts/train_t2i.sh
 ```
 
-#### c、Training text to image Lora model
-##### i、Base on diffusers format
-The format of dataset can be set as diffuser format.
-If using the diffusers format dataset for training.
-
+#### c、训练Lora模型
+##### i、基于diffusers格式
+数据集的格式可以设置为diffusers格式。
 ```
 📦 project/
 ├── 📂 datasets/
@@ -321,7 +316,7 @@ If using the diffusers format dataset for training.
 │       └── 📄 metadata.jsonl
 ```
 
-Then, set scripts/train_lora.sh.
+然后，进入scripts/train_lora.sh进行设置。
 ```
 export DATASET_NAME="datasets/diffusers_datasets/"
 
@@ -330,16 +325,15 @@ export DATASET_NAME="datasets/diffusers_datasets/"
 train_data_format="diffusers"
 ```
 
-Then, we run scripts/train_lora.sh.
+最后运行scripts/train_lora.sh。
 ```sh
 sh scripts/train_lora.sh
 ```
 
-##### ii、Base on internal dataset
-If using the internal dataset for training, you need to format the dataset firstly.
+##### ii、基于自建数据集
+如果使用自建数据集进行训练，则需要首先格式化数据集。
 
-You need to arrange the dataset in this format.
-
+您需要以这种格式排列数据集。
 ```
 📦 project/
 ├── 📂 datasets/
@@ -351,7 +345,7 @@ You need to arrange the dataset in this format.
 │       └── 📄 json_of_internal_datasets.json
 ```
 
-The json_of_internal_datasets.json is a standard JSON file, as shown in below:
+json_of_internal_datasets.json是一个标准的json文件，如下所示：
 ```json
 [
     {
@@ -367,9 +361,9 @@ The json_of_internal_datasets.json is a standard JSON file, as shown in below:
     .....
 ]
 ```
-The file_path in the json needs to be set as relative path.
+json中的file_path需要设置为相对路径。
 
-Then, set scripts/train_lora.sh.
+然后，进入scripts/train_lora.sh进行设置。
 ```
 export DATASET_NAME="datasets/internal_datasets/"
 export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.json"
@@ -379,31 +373,39 @@ export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.j
 train_data_format="normal"
 ```
 
-Then, we run scripts/train_lora.sh.
+最后运行scripts/train_lora.sh。
 ```sh
 sh scripts/train_lora.sh
 ```
+# 算法细节
+我们使用了[PixArt-alpha](https://github.com/PixArt-alpha/PixArt-alpha)作为基础模型，并在此基础上引入额外的运动模块（motion module）来将DiT模型从2D图像生成扩展到3D视频生成上来。其框架图如下：
 
-# Algorithm Detailed
-We build EasyAnimate by introducing additional motion module upon [PixArt-alpha](https://github.com/PixArt-alpha/PixArt-alpha),so that can extend the DiT model from 2D image generation to 3D video generation. The pipeline is shwon as follows.
+
 
 <img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/pipeline.png" alt="ui" style="zoom:50%;" />
 
-The motion module is used to capture the temporal information among frames. The structure is shown as follows.
+
+
+其中，Motion Module 用于捕捉时序维度的帧间关系，其结构如下：
+
+
 
 <img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/motion_module.png" alt="motion" style="zoom:50%;" />
 
-We introduce attention mechanisms in the temporal dimension to enable the model to learn temporal information for generating continuous video frames. At the same time, we utilize an additional Grid Reshape calculation to expand the number of input tokens for the attention mechanism, thus making greater use of the spatial information in images to achieve better generative results.
-
-The Motion Module, as a separate module, can be applied to different DiT baseline models during inference. Furthermore, EasyAnimate not only supports the training of the motion-module but also supports the training of the DiT base model/LoRA model, making it convenient for users to complete training of a customized-style model according to their own needs and thereby generate videos of any style.
 
 
-# Reference
+我们在时序维度上引入注意力机制来让模型学习时序信息，以进行连续视频帧的生成。同时，我们利用额外的网格计算（Grid Reshape），来扩大注意力机制的input token数目，从而更多地利用图像的空间信息以达到更好的生成效果。Motion Module 作为一个单独的模块，在推理时可以用在不同的DiT基线模型上。此外，EasyAnimate不仅支持了motion-module模块的训练，也支持了DiT基模型/LoRA模型的训练，以方便用户根据自身需要来完成自定义风格的模型训练，进而生成任意风格的视频。
+
+
+# 算法限制
+- 受
+
+# 参考文献
 - magvit: https://github.com/google-research/magvit
 - PixArt: https://github.com/PixArt-alpha/PixArt-alpha
 - Open-Sora-Plan: https://github.com/PKU-YuanGroup/Open-Sora-Plan
 - Open-Sora: https://github.com/hpcaitech/Open-Sora
 - Animatediff: https://github.com/guoyww/AnimateDiff
 
-# License
-This project is licensed under the [Apache License (Version 2.0)](https://github.com/modelscope/modelscope/blob/master/LICENSE).
+# 许可证
+本项目采用 [Apache License (Version 2.0)](https://github.com/modelscope/modelscope/blob/master/LICENSE).
