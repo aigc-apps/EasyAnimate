@@ -18,7 +18,7 @@ config_path         = "config/easyanimate_video_motion_module_v1.yaml"
 model_name          = "models/Diffusion_Transformer/PixArt-XL-2-512x512"
 
 # Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" and "DDIM"
-sampler_name        = "Euler A"
+sampler_name        = "DPM++"
 
 # Load pretrained model if need
 transformer_path    = None
@@ -32,10 +32,10 @@ video_length        = 80
 fps                 = 12
 
 weight_dtype        = torch.float16
-prompt              = "1girl, bangs, blue eyes, blunt bangs, 4k, best quality, blurry, blurry background, bob cut, depth of field, lips, looking at viewer, motion blur, nose, realistic, red lips, shirt, short hair, solo, white shirt, (best quality), (realistic, photo-realistic:1.3), (beautiful eyes:1.3), (sparkling eyes:1.3), (beautiful mouth:1.3), finely detail, light smile, extremely detailed CG unity 8k wallpaper, huge filesize, best quality, realistic, photo-realistic, ultra high res, raw photo, put on makeup."# "1girl, bangs, blue eyes, blunt bangs, 4k, best quality, blurry, blurry background, bob cut, depth of field, lips, looking at viewer, motion blur, nose, realistic, red lips, shirt, short hair, solo, white shirt, (best quality), (realistic, photo-realistic:1.3), (beautiful eyes:1.3), (sparkling eyes:1.3), (beautiful mouth:1.3), finely detail, light smile, extremely detailed CG unity 8k wallpaper, huge filesize, best quality, realistic, photo-realistic, ultra high res, raw photo, put on makeup."
-negative_prompt     = "worst quality, normal quality, low quality, low res, blurry, text, watermark, logo, banner, extra digits, cropped, jpeg artifacts, signature, username, error, sketch ,duplicate, ugly, monochrome, horror, geometry"
-guidance_scale      = 7.0
-seed                = 42
+prompt              = "A snowy forest landscape with a dirt road running through it. The road is flanked by trees covered in snow, and the ground is also covered in snow. The sun is shining, creating a bright and serene atmosphere. The road appears to be empty, and there are no people or animals visible in the video. The style of the video is a natural landscape shot, with a focus on the beauty of the snowy forest and the peacefulness of the road."
+negative_prompt     = "Strange motion trajectory, a poor composition and deformed video, worst quality, normal quality, low quality, low resolution, duplicate and ugly" 
+guidance_scale      = 6.0
+seed                = 43
 num_inference_steps = 30
 lora_weight         = 0.55
 save_path           = "samples/easyanimate-videos"

@@ -16,7 +16,7 @@ from easyanimate.utils.lora_utils import merge_lora
 config_path         = "config/easyanimate_image_normal_v1.yaml"
 model_name          = "models/Diffusion_Transformer/PixArt-XL-2-512x512"
 # Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" and "DDIM"
-sampler_name        = "Euler A"
+sampler_name        = "DPM++"
 
 # Load pretrained model if need
 transformer_path    = None
@@ -28,8 +28,8 @@ sample_size     = [512, 512]
 weight_dtype    = torch.float16
 prompt          = "1girl, bangs, blue eyes, blunt bangs, blurry, blurry background, bob cut, depth of field, lips, looking at viewer, motion blur, nose, realistic, red lips, shirt, short hair, solo, white shirt."
 negative_prompt = "bad detailed"
-guidance_scale  = 7.0
-seed            = 42
+guidance_scale  = 6.0
+seed            = 43
 lora_weight     = 0.55
 save_path       = "samples/easyanimate-images"
 

@@ -312,18 +312,18 @@ def ui():
             )
             
             prompt_textbox = gr.Textbox(label="Prompt", lines=2)
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2)
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="Strange motion trajectory, a poor composition and deformed video, worst quality, normal quality, low quality, low resolution, duplicate and ugly" )
                 
             with gr.Row().style(equal_height=False):
                 with gr.Column():
                     with gr.Row():
                         sampler_dropdown   = gr.Dropdown(label="Sampling method", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
-                        sample_step_slider = gr.Slider(label="Sampling steps", value=25, minimum=10, maximum=100, step=1)
+                        sample_step_slider = gr.Slider(label="Sampling steps", value=30, minimum=10, maximum=100, step=1)
                         
                     width_slider     = gr.Slider(label="Width",            value=512, minimum=256, maximum=1024, step=64)
                     height_slider    = gr.Slider(label="Height",           value=512, minimum=256, maximum=1024, step=64)
                     length_slider    = gr.Slider(label="Animation length", value=80,  minimum=16,   maximum=96,   step=1)
-                    cfg_scale_slider = gr.Slider(label="CFG Scale",        value=7.0, minimum=0,   maximum=20)
+                    cfg_scale_slider = gr.Slider(label="CFG Scale",        value=6.0, minimum=0,   maximum=20)
                     
                     with gr.Row():
                         seed_textbox = gr.Textbox(label="Seed", value=-1)

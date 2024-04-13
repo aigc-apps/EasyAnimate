@@ -532,10 +532,6 @@ def parse_args():
     if env_local_rank != -1 and env_local_rank != args.local_rank:
         args.local_rank = env_local_rank
 
-    # Sanity checks
-    if args.dataset_name is None and args.train_data_dir is None:
-        raise ValueError("Need either a dataset name or a training folder.")
-
     # default to using the same revision for the non-ema model if not specified
     if args.non_ema_revision is None:
         args.non_ema_revision = args.revision
@@ -1052,6 +1048,14 @@ def main():
                 timesteps = timesteps.long()
 
                 added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
+                if unwrap_model(transformer2d).config.sample_size == 128:
+                    bs, height, width = batch["pixel_values"].size()[0], batch["pixel_values"].size()[-2], batch["pixel_values"].size()[-1]
+                    resolution = torch.tensor([height, width]).repeat(bs, 1)
+                    aspect_ratio = torch.tensor([float(height / width)]).repeat(bs, 1)
+                    resolution = resolution.to(dtype=encoder_hidden_states.dtype, device=latents.device)
+                    aspect_ratio = aspect_ratio.to(dtype=encoder_hidden_states.dtype, device=latents.device)
+                    added_cond_kwargs = {"resolution": resolution, "aspect_ratio": aspect_ratio}
+
                 loss_term = train_diffusion.training_losses(
                     transformer2d, 
                     latents, 
