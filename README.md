@@ -1,6 +1,8 @@
 # 📷 EasyAnimate | Your Animation Generator.
 😊 EasyAnimate is a repo for generating long videos and training transformer based diffusion generators.
+
 😊 Based on Sora like structure and DIT, we use transformer as a diffuser for video generation. In order to ensure good expansibility, we built easyanimate based on motion module. In the future, we will try more training programs to improve the effect.
+
 😊 Welcome!
 
 English | [简体中文](./README_zh-CN.md)

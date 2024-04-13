@@ -1,6 +1,8 @@
 # EasyAnimate | 您的智能生成器。
 😊 EasyAnimate是一个用于生成长视频和训练基于transformer的扩散生成器的repo。
+
 😊 我们基于类SORA结构与DIT，使用transformer进行作为扩散器进行视频生成。为了保证良好的拓展性，我们基于motion module构建了EasyAnimate，未来我们也会尝试更多的训练方案一提高效果。
+
 😊 Welcome!
 
 [English](./README.md) | 简体中文
