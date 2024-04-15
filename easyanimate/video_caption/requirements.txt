@@ -1,0 +1,5 @@
+pandas>=2.0.0
+auto_gptq
+vllm
+sglang[srt]
+func_timeout
