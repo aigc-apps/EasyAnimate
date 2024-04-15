@@ -4,7 +4,7 @@ EasyAnimate uses multi-modal LLMs to generate captions for frames extracted from
 ## Quick Start
 1. Cloud usage: AliyunDSW/Docker
     
-    Check [README.md](../README.md) for details.
+    Check [README.md](../../README.md#quick-start) for details.
 
 2. Local usage
 
