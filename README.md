@@ -30,6 +30,7 @@ EasyAnimate is a pipeline based on the transformer architecture that can be used
 We will support quick pull-ups from different platforms, refer to [Quick Start](#quick-start).
 
 What's New:
+- Add Code for [video-caption](./easyanimate/video_caption/). [ 2024.04.17 ]
 - Create Code! Support for Windows and Linux Now. [ 2024.04.12 ]
 
 These are our generated results:
@@ -254,6 +255,9 @@ Then, we run scripts/train_t2v.sh.
 ```sh
 sh scripts/train_t2v.sh
 ```
+
+##### iii、Dataset Captioning (Optional)
+We provide the captioning pipeline to get detailed descriptions of the video dataset. Please refer to [video_caption](./easyanimate/video_caption/) for details.
 
 #### b、Training text to image model
 ##### i、Base on diffusers format

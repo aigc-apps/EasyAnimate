@@ -30,6 +30,7 @@ EasyAnimate是一个基于transformer结构的pipeline，可用于生成AI动画
 我们会逐渐支持从不同平台快速启动，请参阅 [快速启动](#快速启动)。
 
 新特性：
+- 添加视频数据标注的[代码](./easyanimate/video_caption/)。[ 2024.04.17 ]
 - 创建代码！现在支持 Windows 和 Linux。[ 2024.04.12 ]
 
 这些是我们的生成结果:
@@ -251,6 +252,9 @@ train_data_format="normal"
 ```sh
 sh scripts/train_t2v.sh
 ```
+
+##### iii、标注视频数据集（可选）
+如果需要获取更为详细且丰富的视频描述，请参考 [video_caption](./easyanimate/video_caption/)。
 
 #### b、训练基础文生图模型
 ##### i、基于diffusers格式
