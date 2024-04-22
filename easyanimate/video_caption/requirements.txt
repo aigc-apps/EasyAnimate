@@ -1,5 +1,5 @@
+auto_gptq --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
 pandas>=2.0.0
-auto_gptq
-vllm
+vllm==0.3.3
 sglang[srt]
 func_timeout

@@ -26,6 +26,19 @@ COPY ./requirements.txt /root/requirements.txt
 RUN pip install -r /root/requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 RUN rm -rf /root/requirements.txt
 
+# vllm does not release compiled binaries with CUDA 11.8 and PyTorch >= 2.2.0.
+# build vllm-0.3.3-torch2.2.0-cu118 from source with NVIDIA Driver 525.105.17.
+RUN wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/package/vllm-0.3.3-torch2.2.0-cu118.zip && \
+    unzip vllm-0.3.3-torch2.2.0-cu118.zip && \
+    cd vllm/ && rm -rf ./.git
+
+RUN pip install -e vllm/ --extra-index-url https://download.pytorch.org/whl/cu118
+RUN pip install auto-gptq==0.6.0 --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
+RUN pip install sglang[srt] func_timeout pandas>=2.0.0 -i https://mirrors.aliyun.com/pypi/simple/
+
+# fix version
+RUN pip install outlines==0.0.34 transformers==4.37.2 -i https://mirrors.aliyun.com/pypi/simple/
+
 ENV PYTHONUNBUFFERED 1
 ENV NVIDIA_DISABLE_REQUIRE 1
 
