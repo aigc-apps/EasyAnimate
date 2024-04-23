@@ -15,7 +15,6 @@ EasyAnimate uses multi-modal LLMs to generate captions for frames extracted from
     # Install additional requirements for video caption.
     cd easyanimate/video_caption && pip install -r requirements.txt
 
-    # Since vllm does not release compiled binaries with CUDA 11.8 and PyTorch >= 2.2.0.
     # We strongly recommend using Docker unless you can properly handle the dependency between vllm with torch(cuda).
     ```
 
