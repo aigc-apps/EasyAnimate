@@ -1,5 +1,6 @@
-auto_gptq --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
+--extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
+auto_gptq==0.6.0
 pandas>=2.0.0
 vllm==0.3.3
-sglang[srt]
+sglang[srt]==0.1.13
 func_timeout
