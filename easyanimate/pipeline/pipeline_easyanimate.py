@@ -14,6 +14,7 @@
 
 import html
 import inspect
+import copy
 import re
 import urllib.parse as ul
 from dataclasses import dataclass
@@ -520,7 +521,9 @@ class EasyAnimatePipeline(DiffusionPipeline):
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_latents
     def prepare_latents(self, batch_size, num_channels_latents, video_length, height, width, dtype, device, generator, latents=None):
         if self.vae.quant_conv.weight.ndim==5:
-            shape = (batch_size, num_channels_latents, int(video_length // 21 * 6), height // self.vae_scale_factor, width // self.vae_scale_factor)
+            mini_batch_encoder = self.vae.mini_batch_encoder
+            mini_batch_decoder = self.vae.mini_batch_decoder
+            shape = (batch_size, num_channels_latents, int(video_length // mini_batch_encoder * mini_batch_decoder) if video_length != 1 else 1, height // self.vae_scale_factor, width // self.vae_scale_factor)
         else:
             shape = (batch_size, num_channels_latents, video_length, height // self.vae_scale_factor, width // self.vae_scale_factor)
 
@@ -538,46 +541,62 @@ class EasyAnimatePipeline(DiffusionPipeline):
         # scale the initial noise by the standard deviation required by the scheduler
         latents = latents * self.scheduler.init_noise_sigma
         return latents
-
+    
+    def smooth_output(self, video, mini_batch_encoder, mini_batch_decoder):
+        if video.size()[2] <= mini_batch_encoder:
+            return video
+        prefix_index_before = mini_batch_encoder // 2
+        prefix_index_after = mini_batch_encoder - prefix_index_before
+        pixel_values = video[:, :, prefix_index_before:-prefix_index_after]
+        
+        if self.vae.slice_compression_vae:
+            latents = self.vae.encode(pixel_values)[0]
+            latents = latents.sample()
+        else:
+            new_pixel_values = []
+            for i in range(0, pixel_values.shape[2], mini_batch_encoder):
+                with torch.no_grad():
+                    pixel_values_bs = pixel_values[:, :, i: i + mini_batch_encoder, :, :]
+                    pixel_values_bs = self.vae.encode(pixel_values_bs)[0]
+                    pixel_values_bs = pixel_values_bs.sample()
+                    new_pixel_values.append(pixel_values_bs)
+            latents = torch.cat(new_pixel_values, dim = 2)
+                
+        if self.vae.slice_compression_vae:
+            middle_video = self.vae.decode(latents)[0]
+        else:
+            middle_video = []
+            for i in range(0, latents.shape[2], mini_batch_decoder):
+                with torch.no_grad():
+                    start_index = i
+                    end_index = i + mini_batch_decoder
+                    latents_bs = self.vae.decode(latents[:, :, start_index:end_index, :, :])[0]
+                    middle_video.append(latents_bs)
+            middle_video = torch.cat(middle_video, 2)
+        video[:, :, prefix_index_before:-prefix_index_after] = (video[:, :, prefix_index_before:-prefix_index_after] + middle_video) / 2
+        return video
+    
     def decode_latents(self, latents):
         video_length = latents.shape[2]
         latents = 1 / 0.18215 * latents
         if self.vae.quant_conv.weight.ndim==5:
-            video = []
-            mini_batch = 6
-            
-            latents = latents.float()
-            self.vae.post_quant_conv = self.vae.post_quant_conv.float()
-            self.vae.decoder = self.vae.decoder.float()
-            for i in range(0, latents.shape[2], mini_batch):
-                with torch.no_grad():
-                    start_index = i
-                    end_index = i + mini_batch
-                    latents_bs = self.vae.decode(latents[:, :, start_index:end_index, :, :])[0]
-                    video.append(latents_bs)
-            # for i in range(0, latents.shape[2], mini_batch // 4):
-                # if i == latents.shape[2] - 1:
-                #     break
-                # with torch.no_grad():
-                    # if i == 0:
-                    #     start_index = i
-                    #     end_index = i + mini_batch // 4 + 1
-                    #     latents_bs = self.vae.decode(latents[:, :, start_index:end_index, :, :])[0]
-                    # else:
-                    #     start_index = i + 1
-                    #     end_index = i + mini_batch // 4 + 1
-
-                    #     weight_dtype = self.vae.encoder.encoder[0].conv.weight.dtype
-                    #     previous_video_encoded = self.vae.encode(video[-1][:, :, -1:].to(weight_dtype))[0]
-                    #     previous_video_encoded = previous_video_encoded.sample()
-                    #     latents_bs = self.vae.decode(
-                    #         torch.cat([previous_video_encoded, latents[:, :, start_index:end_index, :, :], ], 2)
-                    #     )[0][:, :, 1:, :, :]
-
-            video = torch.cat(video, 2)
+            mini_batch_encoder = self.vae.mini_batch_encoder
+            mini_batch_decoder = self.vae.mini_batch_decoder
+            if self.vae.slice_compression_vae:
+                video = self.vae.decode(latents)[0]
+            else:
+                video = []
+                for i in range(0, latents.shape[2], mini_batch_decoder):
+                    with torch.no_grad():
+                        start_index = i
+                        end_index = i + mini_batch_decoder
+                        latents_bs = self.vae.decode(latents[:, :, start_index:end_index, :, :])[0]
+                        video.append(latents_bs)
+                video = torch.cat(video, 2)
+            video = video.clamp(-1, 1)
+            video = self.smooth_output(video, mini_batch_encoder, mini_batch_decoder).cpu().clamp(-1, 1)
         else:
             latents = rearrange(latents, "b c f h w -> (b f) c h w")
-            # video = self.vae.decode(latents).sample
             video = []
             for frame_idx in tqdm(range(latents.shape[0])):
                 video.append(self.vae.decode(latents[frame_idx:frame_idx+1]).sample)

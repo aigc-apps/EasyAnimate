@@ -874,7 +874,6 @@ def main():
                         nh = int(h / w * nw)
                     
                     transform = transforms.Compose([
-                        transforms.RandomHorizontalFlip(),
                         transforms.Resize([nh, nw]),
                         transforms.CenterCrop([int(x) for x in random_sample_size]),
                         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
@@ -889,7 +888,6 @@ def main():
                     pixel_values = torch.from_numpy(example["pixel_values"]).permute(0, 3, 1, 2).contiguous()
                     pixel_values = pixel_values / 255.
                     transform = transforms.Compose([
-                        transforms.RandomHorizontalFlip(),
                         transforms.Resize(resize_size, interpolation=transforms.InterpolationMode.BILINEAR),  # Image.BICUBIC
                         transforms.CenterCrop(closest_size),
                         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
@@ -1136,6 +1134,13 @@ def main():
                 timesteps = timesteps.long()
 
                 added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
+                if unwrap_model(transformer3d).config.sample_size == 128:
+                    bs, height, width = batch["pixel_values"].size()[0], batch["pixel_values"].size()[-2], batch["pixel_values"].size()[-1]
+                    resolution = torch.tensor([height, width]).repeat(bs, 1)
+                    aspect_ratio = torch.tensor([float(height / width)]).repeat(bs, 1)
+                    resolution = resolution.to(dtype=encoder_hidden_states.dtype, device=latents.device)
+                    aspect_ratio = aspect_ratio.to(dtype=encoder_hidden_states.dtype, device=latents.device)
+                    added_cond_kwargs = {"resolution": resolution, "aspect_ratio": aspect_ratio}
                 loss_term = train_diffusion.training_losses(
                     transformer3d, 
                     latents, 

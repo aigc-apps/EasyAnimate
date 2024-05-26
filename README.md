@@ -1,5 +1,5 @@
-# 📷 EasyAnimate | Your Animation Generator.
-😊 EasyAnimate is a repo for generating long videos and training transformer based diffusion generators.
+# 📷 EasyAnimate | Integrated generation of baseline scheme for videos and images.
+😊 EasyAnimate is a repo for generating long videos and images, training transformer based diffusion generators.
 
 😊 Based on Sora like structure and DIT, we use transformer as a diffuser for video generation. In order to ensure good expansibility, we built easyanimate based on motion module. In the future, we will try more training programs to improve the effect.
 
@@ -12,38 +12,43 @@ English | [简体中文](./README_zh-CN.md)
 - [Introduction](#introduction)
 - [TODO List](#todo-list)
 - [Model zoo](#model-zoo)
-    - [1、Motion Weights](#1motion-weights)
-    - [2、Other Weights](#2other-weights)
 - [Quick Start](#quick-start)
-    - [1. Cloud usage: AliyunDSW/Docker](#1-cloud-usage-aliyundswdocker)
-    - [2. Local install: Environment Check/Downloading/Installation](#2-local-install-environment-checkdownloadinginstallation)
 - [How to use](#how-to-use)
-    - [1. Inference](#1-inference)
-    - [2. Model Training](#2-model-training)
 - [Algorithm Detailed](#algorithm-detailed)
 - [Reference](#reference)
 - [License](#license)
 
 # Introduction
-EasyAnimate is a pipeline based on the transformer architecture that can be used to generate AI animations, train baseline models and Lora models for the Diffusion Transformer. We support making predictions directly from the pre-trained EasyAnimate model to generate videos of about different resolutions, 6 seconds with 12 fps (40 ~ 80 frames, in the future, we will support longer videos). Users are also supported to train their own baseline models and Lora models to perform certain style transformations. 
+EasyAnimate is a pipeline based on the transformer architecture that can be used to generate AI photos and videos, train baseline models and Lora models for the Diffusion Transformer. We support making predictions directly from the pre-trained EasyAnimate model to generate videos of about different resolutions, 6 seconds with 24 fps (1 ~ 144 frames, in the future, we will support longer videos). Users are also supported to train their own baseline models and Lora models to perform certain style transformations. 
 
 We will support quick pull-ups from different platforms, refer to [Quick Start](#quick-start).
 
 What's New:
-- Add Code for [video-caption](./easyanimate/video_caption/). [ 2024.04.17 ]
+- Updated to v2 version, supports a maximum of 144 frames (6s, 24fps) for generation. [ 2024.05.26 ]
 - Create Code! Support for Windows and Linux Now. [ 2024.04.12 ]
 
 These are our generated results:
+![Combine_512](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Combine_512.jpg)
 
 Our UI interface is as follows:
 ![ui](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/ui.png)
 
 # TODO List
 - Support model with larger resolution.
-- Support model with magvit.
 - Support video inpaint model.
 
 # Model zoo
+
+EasyAnimateV2:
+| Name | Type | Storage Space | Url | Description |
+|--|--|--|--|--| 
+| EasyAnimateV2-XL-2-512x512.tar | EasyAnimateV2 | 16.2GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512.tar)| EasyAnimateV2 official weights for 512x512 resolution. Training with 144 frames and fps 24 |
+| EasyAnimateV2-XL-2-768x768.tar | EasyAnimateV2 | 16.2GB | Coming soon | EasyAnimateV2 official weights for 768x768 resolution. Training with 144 frames and fps 24 |
+| easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors)| A lora training with a specifial type images. Images can be downloaded from [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/webui/Minimalism.zip). |
+
+<details>
+  <summary>EasyAnimateV1:</summary>
+
 ### 1、Motion Weights
 | Name | Type | Storage Space | Url | Description |
 |--|--|--|--|--| 
@@ -55,46 +60,10 @@ Our UI interface is as follows:
 | PixArt-XL-2-512x512.tar | Pixart | 11.4GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/PixArt-XL-2-512x512.tar)| Pixart-Alpha official weights |
 | easyanimate_portrait.safetensors | Checkpoint of Pixart | 2.3GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait.safetensors) | Training with internal portrait datasets |
 | easyanimate_portrait_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait_lora.safetensors)| Training with internal portrait datasets |
+</details>
 
 # Result Gallery
-When generating landscape animations, the sampler recommends using DPM++and Euler A. When generating portrait animations, the sampler recommends using Euler A and Euler.
-
-Sometimes Github cannot display large GIFs properly. You can download GIFs locally to view them.
-
-Work with origin transformer weights.
-
-| Base Models | Sampler | Seed | Resolution (h x w x f) | Prompt  | GenerationResult | Download | 
-| ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| PixArt | DPM++ | 43 | 512x512x80 | A soaring drone footage captures the majestic beauty of a coastal cliff, its red and yellow stratified rock faces rich in color and against the vibrant turquoise of the sea. Seabirds can be seen taking flight around the cliff\'s precipices. | ![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/1-cliff.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/1-cliff.gif) |
-| PixArt | DPM++ | 43 | 448x640x80 | The video captures the majestic beauty of a waterfall cascading down a cliff into a serene lake. The waterfall, with its powerful flow, is the central focus of the video. The surrounding landscape is lush and green, with trees and foliage adding to the natural beauty of the scene. | ![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/2-waterfall.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/2-waterfall.gif) |
-| PixArt | DPM++ | 43 | 704x384x80 | A vibrant scene of a snowy mountain landscape. The sky is filled with a multitude of colorful hot air balloons, each floating at different heights, creating a dynamic and lively atmosphere. The balloons are scattered across the sky, some closer to the viewer, others further away, adding depth to the scene. | ![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/3-snowy.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/3-snowy.gif) |
-| PixArt | DPM++ | 43 | 448x640x64 | The vibrant beauty of a sunflower field. The sunflowers, with their bright yellow petals and dark brown centers, are in full bloom, creating a stunning contrast against the green leaves and stems. The sunflowers are arranged in neat rows, creating a sense of order and symmetry. | ![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/4-sunflower.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/4-sunflower.gif) |
-| PixArt | DPM++ | 43 | 384x704x48 | A tranquil Vermont autumn, with leaves in vibrant colors of orange and red fluttering down a mountain stream. | ![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/5-autumn.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/5-autumn.gif) |
-| PixArt | DPM++ | 43 | 704x384x48 | A vibrant underwater scene. A group of blue fish, with yellow fins, are swimming around a coral reef. The coral reef is a mix of brown and green, providing a natural habitat for the fish. The water is a deep blue, indicating a depth of around 30 feet. The fish are swimming in a circular pattern around the coral reef, indicating a sense of motion and activity. The overall scene is a beautiful representation of marine life. | ![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/6-underwater.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/6-underwater.gif) |
-| PixArt | DPM++ | 43 | 576x448x48 | Pacific coast, carmel by the blue sea ocean and peaceful waves | ![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/7-coast.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/7-coast.gif) |
-| PixArt | DPM++ | 43 | 576x448x80 | A snowy forest landscape with a dirt road running through it. The road is flanked by trees covered in snow, and the ground is also covered in snow. The sun is shining, creating a bright and serene atmosphere. The road appears to be empty, and there are no people or animals visible in the video. The style of the video is a natural landscape shot, with a focus on the beauty of the snowy forest and the peacefulness of the road. | ![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/8-forest.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/8-forest.gif) |
-| PixArt | DPM++ | 43 | 640x448x64 | The dynamic movement of tall, wispy grasses swaying in the wind. The sky above is filled with clouds, creating a dramatic backdrop. The sunlight pierces through the clouds, casting a warm glow on the scene. The grasses are a mix of green and brown, indicating a change in seasons. The overall style of the video is naturalistic, capturing the beauty of the landscape in a realistic manner. The focus is on the grasses and their movement, with the sky serving as a secondary element. The video does not contain any human or animal elements. |![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/9-grasses.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/9-grasses.gif) |
-| PixArt | DPM++ | 43 | 704x384x80 | A serene night scene in a forested area. The first frame shows a tranquil lake reflecting the star-filled sky above. The second frame reveals a beautiful sunset, casting a warm glow over the landscape. The third frame showcases the night sky, filled with stars and a vibrant Milky Way galaxy. The video is a time-lapse, capturing the transition from day to night, with the lake and forest serving as a constant backdrop. The style of the video is naturalistic, emphasizing the beauty of the night sky and the peacefulness of the forest. |![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/10-night.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/10-night.gif) |
-| PixArt | DPM++ | 43 | 640x448x80 | Sunset over the sea. | ![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/11-sunset.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/11-sunset.gif) |
-
-Work with Portrait transformer weights.
-
-| Base Models | Sampler | Seed | Resolution (h x w x f) | Prompt | GenerationResult | Download | 
-| ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| Portrait | Euler A | 43 | 448x576x80 | 1girl, 3d, black hair, brown eyes, earrings, grey background, jewelry, lips, long hair, looking at viewer, photo \\(medium\\), realistic, red lips, solo | ![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/1-check.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/1-check.gif) |
-| Portrait | Euler A | 43 | 448x576x80 | 1girl, bare shoulders, blurry, brown eyes, dirty, dirty face, freckles, lips, long hair, looking at viewer, realistic, sleeveless, solo, upper body |![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/2-check.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/2-check.gif) |
-| Portrait | Euler A | 43 | 512x512x64 | 1girl, black hair, brown eyes, earrings, grey background, jewelry, lips, looking at viewer, mole, mole under eye, neck tattoo, nose, ponytail, realistic, shirt, simple background, solo, tattoo |![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/3-check.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/3-check.gif) |
-| Portrait | Euler A | 43 | 576x448x64 | 1girl, black hair, lips, looking at viewer, mole, mole under eye, mole under mouth, realistic, solo |![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/5-check.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/5-check.gif) |
-
-Work with Portrait transformer Lora.
-
-| Base Models | Sampler | Seed | Resolution (h x w x f) | Prompt | GenerationResult | Download | 
-| ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| Pixart + Lora | Euler A | 43 | 512x512x64 | 1girl, 3d, black hair, brown eyes, earrings, grey background, jewelry, lips, long hair, looking at viewer, photo \\(medium\\), realistic, red lips, solo |![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/1-lora.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/1-lora.gif) |
-| Pixart + Lora | Euler A | 43 | 512x512x64 | 1girl, bare shoulders, blurry, brown eyes, dirty, dirty face, freckles, lips, long hair, looking at viewer, mole, mole on breast, mole on neck, mole under eye, mole under mouth, realistic, sleeveless, solo, upper body |![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/2-lora.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/2-lora.gif) |
-| Pixart + Lora | Euler A | 43 | 512x512x64 | 1girl, black hair, lips, looking at viewer, mole, mole under eye, mole under mouth, realistic, solo |![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/5-lora.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/5-lora.gif) |
-| Pixart + Lora | Euler A | 43 | 512x512x80 | 1girl, bare shoulders, blurry, blurry background, blurry foreground, bokeh, brown eyes, christmas tree, closed mouth, collarbone, depth of field, earrings, jewelry, lips, long hair, looking at viewer, photo \\(medium\\), realistic, smile, solo |![00000001](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/low_resolution/8-lora.gif) | [Download GIF](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/8-lora.gif) |
-
+We show some results in the [GALLERY](scripts/Result%20Gallery.md). 
 
 # Quick Start
 ### 1. Cloud usage: AliyunDSW/Docker
@@ -105,6 +74,36 @@ Stay tuned.
 If you are using docker, please make sure that the graphics card driver and CUDA environment have been installed correctly in your machine.
 
 Then execute the following commands in this way:
+
+EasyAnimateV2: 
+```
+# pull image
+docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
+
+# enter image
+docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
+
+# clone code
+git clone https://github.com/aigc-apps/EasyAnimate.git
+
+# enter EasyAnimate's dir
+cd EasyAnimate
+
+# download weights
+mkdir models/Diffusion_Transformer
+mkdir models/Motion_Module
+mkdir models/Personalized_Model
+
+wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512.tar -O models/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512.tar
+
+cd models/Diffusion_Transformer/
+tar -xvf EasyAnimateV2-XL-2-512x512.tar
+cd ../../
+```
+
+<details>
+  <summary>EasyAnimateV1:</summary>
+  
 ```
 # pull image
 docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
@@ -132,6 +131,7 @@ cd models/Diffusion_Transformer/
 tar -xvf PixArt-XL-2-512x512.tar
 cd ../../
 ```
+</details>
 
 ### 2. Local install: Environment Check/Downloading/Installation
 #### a. Environment Check
@@ -150,16 +150,27 @@ We need about 60GB available on disk (for saving weights), please check!
 #### b. Weights
 We'd better place the weights along the specified path:
 
+EasyAnimateV2: 
 ```
 📦 models/
 ├── 📂 Diffusion_Transformer/
-│   └── 📂 PixArt-XL-2-512x512/
-├── 📂 Motion_Module/
-│   └── 📄 easyanimate_v1_mm.safetensors
-├── 📂 Motion_Module/
-│   ├── 📄 easyanimate_portrait.safetensors
-│   └── 📄 easyanimate_portrait_lora.safetensors
+│   └── 📂 EasyAnimateV2-XL-2-512x512/
 ```
+
+<details>
+  <summary>EasyAnimateV1:</summary>
+
+  ```
+  📦 models/
+  ├── 📂 Diffusion_Transformer/
+  │   └── 📂 PixArt-XL-2-512x512/
+  ├── 📂 Motion_Module/
+  │   └── 📄 easyanimate_v1_mm.safetensors
+  ├── 📂 Motion_Module/
+  │   ├── 📄 easyanimate_portrait.safetensors
+  │   └── 📄 easyanimate_portrait_lora.safetensors
+  ```
+</details>
 
 # How to use
 ### 1. Inference
@@ -175,42 +186,7 @@ We'd better place the weights along the specified path:
 - Step 3: Select the generated model based on the page, fill in prompt, neg_prompt, guidance_scale, and seed, click on generate, wait for the generated result, and save the result in the samples folder.
 
 ### 2. Model Training
-#### a、Training video generation model
-##### i、Base on webvid dataset
-If using the webvid dataset for training, you need to download the webvid dataset firstly.
-
-You need to arrange the webvid dataset in this format.
-
-```
-📦 project/
-├── 📂 datasets/
-│   ├── 📂 webvid/
-│       ├── 📂 videos/
-│       │   ├── 📄 00000001.mp4
-│       │   ├── 📄 00000002.mp4
-│       │   └── 📄 .....
-│       └── 📄 csv_of_webvid.csv
-```
-
-Then，set scripts/train_t2v.sh.
-```
-export DATASET_NAME="datasets/webvid/videos/"
-export DATASET_META_NAME="datasets/webvid/csv_of_webvid.csv"
-
-...
-
-train_data_format="webvid"
-```
-
-Then, we run scripts/train_t2v.sh.
-```sh
-sh scripts/train_t2v.sh
-```
-
-##### ii、Base on internal dataset
-If using the internal dataset for training, you need to format the dataset firstly.
-
-You need to arrange the dataset in this format.
+If you want to train a text to image and video generation model. You need to arrange the dataset in this format.
 
 ```
 📦 project/
@@ -218,7 +194,7 @@ You need to arrange the dataset in this format.
 │   ├── 📂 internal_datasets/
 │       ├── 📂 videos/
 │       │   ├── 📄 00000001.mp4
-│       │   ├── 📄 00000002.mp4
+│       │   ├── 📄 00000001.jpg
 │       │   └── 📄 .....
 │       └── 📄 json_of_internal_datasets.json
 ```
@@ -232,188 +208,46 @@ The json_of_internal_datasets.json is a standard JSON file, as shown in below:
       "type": "video"
     },
     {
-      "file_path": "videos/00000002.mp4",
-      "text": "A notepad with a drawing of a woman on it.",
+      "file_path": "train/00000001.jpg",
+      "text": "A group of young men in suits and sunglasses are walking down a city street.",
+      "type": "image"
+    },
+    .....
+]
+```
+The file_path in the json can to be set as relative path.
+
+Then, set scripts/train_t2iv.sh.
+```
+export DATASET_NAME="datasets/internal_datasets/"
+export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.json"
+```
+
+You can also set the path as absolute path as follow:
+```json
+[
+    {
+      "file_path": "/mnt/data/videos/00000001.mp4",
+      "text": "A group of young men in suits and sunglasses are walking down a city street.",
       "type": "video"
-    }
-    .....
-]
-```
-The file_path in the json needs to be set as relative path.
-
-Then, set scripts/train_t2v.sh.
-```
-export DATASET_NAME="datasets/internal_datasets/"
-export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.json"
-
-...
-
-train_data_format="normal"
-```
-
-Then, we run scripts/train_t2v.sh.
-```sh
-sh scripts/train_t2v.sh
-```
-
-##### iii、Dataset Captioning (Optional)
-We provide the captioning pipeline to get detailed descriptions of the video dataset. Please refer to [video_caption](./easyanimate/video_caption/) for details.
-
-#### b、Training text to image model
-##### i、Base on diffusers format
-The format of dataset can be set as diffuser format.
-If using the diffusers format dataset for training.
-
-```
-📦 project/
-├── 📂 datasets/
-│   ├── 📂 diffusers_datasets/
-│       ├── 📂 train/
-│       │   ├── 📄 00000001.jpg
-│       │   ├── 📄 00000002.jpg
-│       │   └── 📄 .....
-│       └── 📄 metadata.jsonl
-```
-
-Then, set scripts/train_t2i.sh.
-```
-export DATASET_NAME="datasets/diffusers_datasets/"
-
-...
-
-train_data_format="diffusers"
-```
-
-Then, we run scripts/train_t2i.sh.
-```sh
-sh scripts/train_t2i.sh
-```
-##### ii、Base on internal dataset
-If using the internal dataset for training, you need to format the dataset firstly.
-
-You need to arrange the dataset in this format.
-
-```
-📦 project/
-├── 📂 datasets/
-│   ├── 📂 internal_datasets/
-│       ├── 📂 train/
-│       │   ├── 📄 00000001.jpg
-│       │   ├── 📄 00000002.jpg
-│       │   └── 📄 .....
-│       └── 📄 json_of_internal_datasets.json
-```
-
-The json_of_internal_datasets.json is a standard JSON file, as shown in below:
-```json
-[
+    },
     {
-      "file_path": "train/00000001.jpg",
+      "file_path": "/mnt/data/train/00000001.jpg",
       "text": "A group of young men in suits and sunglasses are walking down a city street.",
       "type": "image"
     },
-    {
-      "file_path": "train/00000002.jpg",
-      "text": "A notepad with a drawing of a woman on it.",
-      "type": "image"
-    }
     .....
 ]
 ```
-The file_path in the json needs to be set as relative path.
-
-Then, set scripts/train_t2i.sh.
+The scripts/train_t2iv.sh should be set as follow:
 ```
-export DATASET_NAME="datasets/internal_datasets/"
-export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.json"
-
-...
-
-train_data_format="normal"
+export DATASET_NAME=""
+export DATASET_META_NAME="/mnt/data/json_of_internal_datasets.json"
 ```
 
-Then, we run scripts/train_t2i.sh.
+Then, we run scripts/train_t2iv.sh.
 ```sh
-sh scripts/train_t2i.sh
-```
-
-#### c、Training text to image Lora model
-##### i、Base on diffusers format
-The format of dataset can be set as diffuser format.
-If using the diffusers format dataset for training.
-
-```
-📦 project/
-├── 📂 datasets/
-│   ├── 📂 diffusers_datasets/
-│       ├── 📂 train/
-│       │   ├── 📄 00000001.jpg
-│       │   ├── 📄 00000002.jpg
-│       │   └── 📄 .....
-│       └── 📄 metadata.jsonl
-```
-
-Then, set scripts/train_lora.sh.
-```
-export DATASET_NAME="datasets/diffusers_datasets/"
-
-...
-
-train_data_format="diffusers"
-```
-
-Then, we run scripts/train_lora.sh.
-```sh
-sh scripts/train_lora.sh
-```
-
-##### ii、Base on internal dataset
-If using the internal dataset for training, you need to format the dataset firstly.
-
-You need to arrange the dataset in this format.
-
-```
-📦 project/
-├── 📂 datasets/
-│   ├── 📂 internal_datasets/
-│       ├── 📂 train/
-│       │   ├── 📄 00000001.jpg
-│       │   ├── 📄 00000002.jpg
-│       │   └── 📄 .....
-│       └── 📄 json_of_internal_datasets.json
-```
-
-The json_of_internal_datasets.json is a standard JSON file, as shown in below:
-```json
-[
-    {
-      "file_path": "train/00000001.jpg",
-      "text": "A group of young men in suits and sunglasses are walking down a city street.",
-      "type": "image"
-    },
-    {
-      "file_path": "train/00000002.jpg",
-      "text": "A notepad with a drawing of a woman on it.",
-      "type": "image"
-    }
-    .....
-]
-```
-The file_path in the json needs to be set as relative path.
-
-Then, set scripts/train_lora.sh.
-```
-export DATASET_NAME="datasets/internal_datasets/"
-export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.json"
-
-...
-
-train_data_format="normal"
-```
-
-Then, we run scripts/train_lora.sh.
-```sh
-sh scripts/train_lora.sh
+sh scripts/train_t2iv.sh
 ```
 
 # Algorithm Detailed
@@ -426,9 +260,6 @@ The motion module is used to capture the temporal information among frames. The 
 <img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/motion_module.png" alt="motion" style="zoom:50%;" />
 
 We introduce attention mechanisms in the temporal dimension to enable the model to learn temporal information for generating continuous video frames. At the same time, we utilize an additional Grid Reshape calculation to expand the number of input tokens for the attention mechanism, thus making greater use of the spatial information in images to achieve better generative results.
-
-The Motion Module, as a separate module, can be applied to different DiT baseline models during inference. Furthermore, EasyAnimate not only supports the training of the motion-module but also supports the training of the DiT base model/LoRA model, making it convenient for users to complete training of a customized-style model according to their own needs and thereby generate videos of any style.
-
 
 # Reference
 - magvit: https://github.com/google-research/magvit

@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.nn.init as init
+import math
 from einops import rearrange
 from torch import nn
 
@@ -127,6 +128,95 @@ class UnPatch1D(nn.Module):
 
         return outputs
 
+class Upsampler(nn.Module):
+    def __init__(
+        self,
+        spatial_upsample_factor: int = 1,
+        temporal_upsample_factor: int = 1,
+    ):
+        super().__init__()
+
+        self.spatial_upsample_factor = spatial_upsample_factor
+        self.temporal_upsample_factor = temporal_upsample_factor
+
+class TemporalUpsampler3D(Upsampler):
+    def __init__(self):
+        super().__init__(
+            spatial_upsample_factor=1,
+            temporal_upsample_factor=2,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.shape[2] > 1:
+            first_frame, x = x[:, :, :1], x[:, :, 1:]
+            x = F.interpolate(x, scale_factor=(2, 1, 1), mode="trilinear")
+            x = torch.cat([first_frame, x], dim=2)
+        return x
+
+def cast_tuple(t, length = 1):
+    return t if isinstance(t, tuple) else ((t,) * length)
+
+def divisible_by(num, den):
+    return (num % den) == 0
+
+def is_odd(n):
+    return not divisible_by(n, 2)
+
+class CausalConv3d(nn.Conv3d):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size=3, # : int | tuple[int, int, int], 
+        stride=1, # : int | tuple[int, int, int] = 1,
+        padding=1, # : int | tuple[int, int, int],  # TODO: change it to 0.
+        dilation=1, # :  int | tuple[int, int, int] = 1,
+        **kwargs,
+    ):
+        kernel_size = kernel_size if isinstance(kernel_size, tuple) else (kernel_size,) * 3
+        assert len(kernel_size) == 3, f"Kernel size must be a 3-tuple, got {kernel_size} instead."
+
+        stride = stride if isinstance(stride, tuple) else (stride,) * 3
+        assert len(stride) == 3, f"Stride must be a 3-tuple, got {stride} instead."
+
+        dilation = dilation if isinstance(dilation, tuple) else (dilation,) * 3
+        assert len(dilation) == 3, f"Dilation must be a 3-tuple, got {dilation} instead."
+
+        t_ks, h_ks, w_ks = kernel_size
+        _, h_stride, w_stride = stride
+        t_dilation, h_dilation, w_dilation = dilation
+
+        t_pad = (t_ks - 1) * t_dilation
+        # TODO: align with SD
+        if padding is None:
+            h_pad = math.ceil(((h_ks - 1) * h_dilation + (1 - h_stride)) / 2)
+            w_pad = math.ceil(((w_ks - 1) * w_dilation + (1 - w_stride)) / 2)
+        elif isinstance(padding, int):
+            h_pad = w_pad = padding
+        else:
+            assert NotImplementedError
+
+        self.temporal_padding = t_pad
+
+        super().__init__(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            dilation=dilation,
+            padding=(0, h_pad, w_pad),
+            **kwargs,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (B, C, T, H, W)
+        x = F.pad(
+            x,
+            pad=(0, 0, 0, 0, self.temporal_padding, 0),
+            mode="replicate",     # TODO: check if this is necessary
+        )
+        return super().forward(x)
+
 class PatchEmbed3D(nn.Module):
     """3D Image to Patch Embedding"""
 
@@ -177,7 +267,6 @@ class PatchEmbed3D(nn.Module):
             latent = latent.flatten(2).transpose(1, 2)  # BCFHW -> BNC
         if self.layer_norm:
             latent = self.norm(latent)
-
         # Interpolate positional embeddings if needed.
         # (For PixArt-Alpha: https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L162C151-L162C160)
         if self.height != height or self.width != width:
@@ -254,6 +343,72 @@ class PatchEmbedF3D(nn.Module):
         if self.layer_norm:
             latent = self.norm(latent)
 
+        # Interpolate positional embeddings if needed.
+        # (For PixArt-Alpha: https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L162C151-L162C160)
+        if self.height != height or self.width != width:
+            pos_embed = get_2d_sincos_pos_embed(
+                embed_dim=self.pos_embed.shape[-1],
+                grid_size=(height, width),
+                base_size=self.base_size,
+                interpolation_scale=self.interpolation_scale,
+            )
+            pos_embed = torch.from_numpy(pos_embed)
+            pos_embed = pos_embed.float().unsqueeze(0).to(latent.device)
+        else:
+            pos_embed = self.pos_embed
+
+        return (latent + pos_embed).to(latent.dtype)
+
+class CasualPatchEmbed3D(nn.Module):
+    """3D Image to Patch Embedding"""
+
+    def __init__(
+        self,
+        height=224,
+        width=224,
+        patch_size=16,
+        time_patch_size=4,
+        in_channels=3,
+        embed_dim=768,
+        layer_norm=False,
+        flatten=True,
+        bias=True,
+        interpolation_scale=1,
+    ):
+        super().__init__()
+
+        num_patches = (height // patch_size) * (width // patch_size)
+        self.flatten = flatten
+        self.layer_norm = layer_norm
+
+        self.proj = CausalConv3d(
+            in_channels, embed_dim, kernel_size=(time_patch_size, patch_size, patch_size), stride=(time_patch_size, patch_size, patch_size), bias=bias, padding=None
+        )
+        if layer_norm:
+            self.norm = nn.LayerNorm(embed_dim, elementwise_affine=False, eps=1e-6)
+        else:
+            self.norm = None
+
+        self.patch_size = patch_size
+        # See:
+        # https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L161
+        self.height, self.width = height // patch_size, width // patch_size
+        self.base_size = height // patch_size
+        self.interpolation_scale = interpolation_scale
+        pos_embed = get_2d_sincos_pos_embed(
+            embed_dim, int(num_patches**0.5), base_size=self.base_size, interpolation_scale=self.interpolation_scale
+        )
+        self.register_buffer("pos_embed", torch.from_numpy(pos_embed).float().unsqueeze(0), persistent=False)
+
+    def forward(self, latent):
+        height, width = latent.shape[-2] // self.patch_size, latent.shape[-1] // self.patch_size
+
+        latent = self.proj(latent)
+        latent = rearrange(latent, "b c f h w -> (b f) c h w")
+        if self.flatten:
+            latent = latent.flatten(2).transpose(1, 2)  # BCFHW -> BNC
+        if self.layer_norm:
+            latent = self.norm(latent)
         # Interpolate positional embeddings if needed.
         # (For PixArt-Alpha: https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L162C151-L162C160)
         if self.height != height or self.width != width:

@@ -299,6 +299,9 @@ def parse_args():
     parser.add_argument(
         "--train_batch_size", type=int, default=16, help="Batch size (per device) for the training dataloader."
     )
+    parser.add_argument(
+        "--vae_mini_batch", type=int, default=32, help="mini batch size for vae."
+    )
     parser.add_argument("--num_train_epochs", type=int, default=100)
     parser.add_argument(
         "--max_train_steps",
@@ -917,7 +920,6 @@ def main():
                     pixel_values = torch.from_numpy(example["pixel_values"]).permute(2, 0, 1).unsqueeze(0).contiguous()
                     pixel_values = pixel_values / 255
                     transform = transforms.Compose([
-                        transforms.RandomHorizontalFlip(),
                         transforms.Resize(resize_size, interpolation=transforms.InterpolationMode.BILINEAR),  # Image.BICUBIC
                         transforms.CenterCrop(closest_size),
                         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
@@ -1052,10 +1054,26 @@ def main():
                     pixel_values = batch["pixel_values"]
                     if pixel_values.ndim==4:
                         pixel_values = pixel_values.unsqueeze(2)
-                    latents = vae.encode(pixel_values.to(weight_dtype)).latent_dist.sample()
+    
+                    bs = args.vae_mini_batch
+                    new_pixel_values = []
+                    for i in range(0, pixel_values.shape[0], bs):
+                        pixel_values_bs = pixel_values[i : i + bs]
+                        pixel_values_bs = vae.encode(pixel_values_bs.to(dtype=weight_dtype)).latent_dist
+                        pixel_values_bs = pixel_values_bs.sample()
+                        new_pixel_values.append(pixel_values_bs)
+                    latents = torch.cat(new_pixel_values, dim = 0)
                     latents = latents.permute(0, 2, 1, 3, 4).flatten(0, 1)
                 else:
-                    latents = vae.encode(batch["pixel_values"].to(weight_dtype)).latent_dist.sample()
+                    pixel_values = batch["pixel_values"]
+                    bs = args.vae_mini_batch
+                    new_pixel_values = []
+                    for i in range(0, pixel_values.shape[0], bs):
+                        pixel_values_bs = pixel_values[i : i + bs]
+                        pixel_values_bs = vae.encode(pixel_values_bs.to(dtype=weight_dtype)).latent_dist
+                        pixel_values_bs = pixel_values_bs.sample()
+                        new_pixel_values.append(pixel_values_bs)
+                    latents = torch.cat(new_pixel_values, dim = 0)
                 latents = latents * vae.config.scaling_factor
 
                 # Get the text embedding for conditioning

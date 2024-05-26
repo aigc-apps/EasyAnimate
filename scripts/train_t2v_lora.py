@@ -96,7 +96,7 @@ def auto_scale_lr(effective_bs, lr, rule='linear', base_batch_size=256):
 
 
 def log_validation(vae, text_encoder, tokenizer, transformer3d, network, config, args, accelerator, weight_dtype, global_step):
-    # try:
+    try:
         logger.info("Running validation... ")
 
         transformer3d_val = Transformer3DModel.from_pretrained_2d(
@@ -148,27 +148,29 @@ def log_validation(vae, text_encoder, tokenizer, transformer3d, network, config,
                 input_video_mask[:, 1:] = 255
 
                 with torch.no_grad():
-                    sample = pipeline(
-                        args.validation_prompts[i], 
-                        negative_prompt = "bad detailed",
-                        generator    = generator,
-                        video_length = args.sample_n_frames,
-                        video        = input_video,
-                        mask_video   = input_video_mask,
-                        height       = args.sample_size,
-                        width        = args.sample_size,
-                        strength     = 1,
-                    ).videos
+                    with torch.autocast("cuda"):
+                        sample = pipeline(
+                            args.validation_prompts[i], 
+                            negative_prompt = "bad detailed",
+                            generator    = generator,
+                            video_length = args.sample_n_frames,
+                            video        = input_video,
+                            mask_video   = input_video_mask,
+                            height       = args.sample_size,
+                            width        = args.sample_size,
+                            strength     = 1,
+                        ).videos
             else:
                 with torch.no_grad():
-                    sample = pipeline(
-                        args.validation_prompts[i], 
-                        video_length = args.sample_n_frames,
-                        negative_prompt = "bad detailed",
-                        height      = args.sample_size,
-                        width       = args.sample_size,
-                        generator   = generator
-                    ).videos
+                    with torch.autocast("cuda"):
+                        sample = pipeline(
+                            args.validation_prompts[i], 
+                            video_length = args.sample_n_frames,
+                            negative_prompt = "bad detailed",
+                            height      = args.sample_size,
+                            width       = args.sample_size,
+                            generator   = generator
+                        ).videos
             os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
             save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-{i}.gif"))
 
@@ -179,10 +181,10 @@ def log_validation(vae, text_encoder, tokenizer, transformer3d, network, config,
         torch.cuda.ipc_collect()
 
         return images
-    # except Exception as e:
-    #     print(f"Eval error with info {e}")
-    #     return None
-
+    except Exception as e:
+        print(f"Eval error with info {e}")
+        return None
+    
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
@@ -533,6 +535,7 @@ def parse_args():
         help=("If you want to load the weight from other vaes, input its path."),
     )
 
+    parser.add_argument("--save_state", action="store_true", help="Whether or not to save state.")
     parser.add_argument(
         '--tokenizer_max_length', 
         type=int,
@@ -843,7 +846,6 @@ def main():
                         nh = int(h / w * nw)
                     
                     transform = transforms.Compose([
-                        transforms.RandomHorizontalFlip(),
                         transforms.Resize([nh, nw]),
                         transforms.CenterCrop([int(x) for x in random_sample_size]),
                         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
@@ -858,7 +860,6 @@ def main():
                     pixel_values = torch.from_numpy(example["pixel_values"]).permute(0, 3, 1, 2).contiguous()
                     pixel_values = pixel_values / 255.
                     transform = transforms.Compose([
-                        transforms.RandomHorizontalFlip(),
                         transforms.Resize(resize_size, interpolation=transforms.InterpolationMode.BILINEAR),  # Image.BICUBIC
                         transforms.CenterCrop(closest_size),
                         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
@@ -1100,6 +1101,13 @@ def main():
                 timesteps = timesteps.long()
 
                 added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
+                if unwrap_model(transformer3d).config.sample_size == 128:
+                    bs, height, width = batch["pixel_values"].size()[0], batch["pixel_values"].size()[-2], batch["pixel_values"].size()[-1]
+                    resolution = torch.tensor([height, width]).repeat(bs, 1)
+                    aspect_ratio = torch.tensor([float(height / width)]).repeat(bs, 1)
+                    resolution = resolution.to(dtype=encoder_hidden_states.dtype, device=latents.device)
+                    aspect_ratio = aspect_ratio.to(dtype=encoder_hidden_states.dtype, device=latents.device)
+                    added_cond_kwargs = {"resolution": resolution, "aspect_ratio": aspect_ratio}
                 loss_term = train_diffusion.training_losses(
                     transformer3d, 
                     latents, 

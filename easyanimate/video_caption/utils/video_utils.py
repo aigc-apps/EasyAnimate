@@ -1,6 +1,7 @@
 import gc
 import os
 import random
+import urllib.request as request
 from contextlib import contextmanager
 from pathlib import Path
 from typing import List, Tuple, Optional
@@ -47,7 +48,16 @@ def get_video_path_list(
             video_path_list = [os.path.join(video_folder, video_path) for video_path in video_path_list]
         return video_path_list
 
-    if video_folder is not None:
+    if os.path.isfile(video_folder):
+        video_path_list = []
+        if video_folder.endswith("mp4"):
+            video_path_list.append(video_folder)
+        elif video_folder.endswith("txt"):
+            with open(video_folder, "r") as file:
+                video_path_list += [line.strip() for line in file.readlines()]
+        return video_path_list
+
+    elif video_folder is not None:
         video_path_list = []
         for ext in ALL_VIDEO_EXT:
             video_path_list.extend(Path(video_folder).rglob(f"*{ext}"))
@@ -85,3 +95,14 @@ def extract_frames(
         sampled_frame_list = [Image.fromarray(frame) for frame in sampled_frame_list]
 
         return list(sampled_frame_idx_list), sampled_frame_list
+
+
+def download_video(
+    video_url: str, 
+    save_path: str) -> bool:
+    try:
+        request.urlretrieve(video_url, save_path)
+        return os.path.isfile(save_path)
+    except Exception as e:
+        print(e, video_url)
+        return False

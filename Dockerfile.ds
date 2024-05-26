@@ -18,8 +18,15 @@ RUN pip install wandb tqdm GitPython==3.1.32 Pillow==9.5.0 setuptools --upgrade 
 
 # reinstall torch to keep compatible with xformers
 RUN pip uninstall -qy torch torchvision && \
-    pip install torch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 --index-url https://download.pytorch.org/whl/cu118
-RUN pip uninstall -qy xfromers && pip install xformers==0.0.24 --index-url https://download.pytorch.org/whl/cu118
+    pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cu118
+RUN pip uninstall -qy xfromers && pip install xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu118
+
+RUN apt-get update && apt-get install -y aria2
+RUN pip install -U http://eas-data.oss-cn-shanghai.aliyuncs.com/sdk/allspark-0.15-py2.py3-none-any.whl 
+RUN pip install https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/package/vllm-0.3.3%2Bcu118-cp310-cp310-manylinux1_x86_64.whl
+RUN pip install pandas>=2.0.0 auto_gptq sglang[srt] func_timeout -i https://mirrors.aliyun.com/pypi/simple/
+RUN pip install -e git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers
+RUN pip install pytorch_lightning==1.9.4 func_timeout -i https://mirrors.aliyun.com/pypi/simple/
 
 # install requirements
 COPY ./requirements.txt /root/requirements.txt
