@@ -120,11 +120,11 @@ class WebVid10M(Dataset):
             batch_index = [random.randint(0, video_length - 1)]
 
         if not self.enable_bucket:
-            pixel_values = torch.from_numpy(pixel_values).permute(0, 3, 1, 2).contiguous()
+            pixel_values = torch.from_numpy(video_reader.get_batch(batch_index).asnumpy()).permute(0, 3, 1, 2).contiguous()
             pixel_values = pixel_values / 255.
             del video_reader
         else:
-            pixel_values = pixel_values
+            pixel_values = video_reader.get_batch(batch_index).asnumpy()
 
         if self.is_image:
             pixel_values = pixel_values[0]
