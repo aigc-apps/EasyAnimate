@@ -93,11 +93,13 @@ class EasyAnimateController:
         if edition == "v1":
             self.inference_config = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_motion_module_v1.yaml"))
             return gr.Dropdown.update(), gr.update(value="none"), gr.update(visible=True), gr.update(visible=True), \
-                gr.update(visible=False), gr.update(value=80, minimum=40, maximum=80, step=1)
+                gr.update(visible=False), gr.update(value=512, minimum=384, maximum=704, step=32), \
+                gr.update(value=512, minimum=384, maximum=704, step=32), gr.update(value=80, minimum=40, maximum=80, step=1)
         else:
             self.inference_config = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_magvit_motion_module_v2.yaml"))
             return gr.Dropdown.update(), gr.update(value="none"), gr.update(visible=False), gr.update(visible=False), \
-                gr.update(visible=True), gr.update(value=144, minimum=9, maximum=144, step=9)
+                gr.update(visible=True), gr.update(value=672, minimum=128, maximum=1280, step=16), \
+                gr.update(value=384, minimum=128, maximum=1280, step=16), gr.update(value=144, minimum=9, maximum=144, step=9)
 
     def update_diffusion_transformer(self, diffusion_transformer_dropdown):
         print("Update diffusion transformer")
@@ -227,7 +229,7 @@ class EasyAnimateController:
             torch.cuda.ipc_collect()
             if self.lora_model_path != "none":
                 self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
-            return gr.Video.update()
+            return gr.Image.update(), gr.Video.update()
 
         # lora part
         if self.lora_model_path != "none":
@@ -274,7 +276,8 @@ def ui():
     with gr.Blocks(css=css) as demo:
         gr.Markdown(
             """
-            # EasyAnimate: Generate your animation easily
+            # EasyAnimate: Integrated generation of baseline scheme for videos and images.
+            Generate your videos easily
             [Github](https://github.com/aigc-apps/EasyAnimate/)
             """
         )
@@ -374,8 +377,8 @@ def ui():
                         sampler_dropdown   = gr.Dropdown(label="Sampling method", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
                         sample_step_slider = gr.Slider(label="Sampling steps", value=30, minimum=10, maximum=100, step=1)
                         
-                    width_slider     = gr.Slider(label="Width",            value=672, minimum=256, maximum=1024, step=32)
-                    height_slider    = gr.Slider(label="Height",           value=384, minimum=256, maximum=1024, step=32)
+                    width_slider     = gr.Slider(label="Width",            value=672, minimum=128, maximum=1280, step=16)
+                    height_slider    = gr.Slider(label="Height",           value=384, minimum=128, maximum=1280, step=16)
                     with gr.Row():
                         is_image      = gr.Checkbox(False, label="Generate Image")
                         length_slider = gr.Slider(label="Animation length", value=144, minimum=9,   maximum=144,  step=9)
@@ -405,7 +408,9 @@ def ui():
                     motion_module_dropdown, 
                     motion_module_refresh_button, 
                     is_image, 
-                    length_slider
+                    width_slider, 
+                    height_slider, 
+                    length_slider, 
                 ]
             )
             generate_button.click(
@@ -538,7 +543,8 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
     with gr.Blocks(css=css) as demo:
         gr.Markdown(
             """
-            # EasyAnimate: Generate your animation easily
+            # EasyAnimate: Integrated generation of baseline scheme for videos and images.
+            Generate your videos easily
             [Github](https://github.com/aigc-apps/EasyAnimate/)
             """
         )
@@ -553,15 +559,15 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
                         sample_step_slider = gr.Slider(label="Sampling steps", value=30, minimum=10, maximum=100, step=1)
                     
                     if edition == "v1":
-                        width_slider     = gr.Slider(label="Width",            value=512, minimum=384, maximum=704, step=64)
-                        height_slider    = gr.Slider(label="Height",           value=512, minimum=384, maximum=704, step=64)
+                        width_slider     = gr.Slider(label="Width",            value=512, minimum=384, maximum=704, step=32)
+                        height_slider    = gr.Slider(label="Height",           value=512, minimum=384, maximum=704, step=32)
                         with gr.Row():
                             is_image      = gr.Checkbox(False, label="Generate Image", visible=False)
                         length_slider    = gr.Slider(label="Animation length", value=80,  minimum=40,  maximum=96,   step=1)
                         cfg_scale_slider = gr.Slider(label="CFG Scale",        value=6.0, minimum=0,   maximum=20)
                     else:
-                        width_slider     = gr.Slider(label="Width",            value=672, minimum=256, maximum=1024, step=32)
-                        height_slider    = gr.Slider(label="Height",           value=384, minimum=256, maximum=1024, step=32)
+                        width_slider     = gr.Slider(label="Width",            value=672, minimum=384, maximum=704, step=16)
+                        height_slider    = gr.Slider(label="Height",           value=384, minimum=384, maximum=704, step=16)
                         with gr.Row():
                             is_image      = gr.Checkbox(False, label="Generate Image")
                             length_slider = gr.Slider(label="Animation length", value=144, minimum=9,   maximum=144,  step=9)
