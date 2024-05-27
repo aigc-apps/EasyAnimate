@@ -5,6 +5,7 @@ import os
 import pandas as pd
 from accelerate import PartialState
 from accelerate.utils import gather_object
+from natsort import natsorted
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 
@@ -85,6 +86,11 @@ def accelerate_inference(args, video_path_list):
         image_caption_model = InternLMXComposer2(device=device, quantized=args.image_caption_model_quantized)
     elif args.image_caption_model_name == "Qwen-VL-Chat":
         image_caption_model = QwenVLChat(device=device, quantized=args.image_caption_model_quantized)
+    
+    # The workaround can be removed after https://github.com/huggingface/accelerate/pull/2781 is released.
+    index = len(video_path_list) - len(video_path_list) % state.num_processes
+    logger.info(f"Drop {len(video_path_list) % state.num_processes} videos to avoid duplicates in state.split_between_processes.")
+    video_path_list = video_path_list[:index]
     
     if state.is_main_process:
         os.makedirs(args.output_dir, exist_ok=True)
@@ -242,6 +248,8 @@ def main():
         saved_video_path_list = saved_metadata_df[args.video_path_column].tolist()
         saved_video_path_list = [os.path.join(args.video_folder, path) for path in saved_video_path_list]
         video_path_list = list(set(video_path_list) - set(saved_video_path_list))
+        # Sorting to guarantee the same result for each process.
+        video_path_list = natsorted(video_path_list)
         logger.info(f"Resume from {args.saved_path}: {len(saved_video_path_list)} processed and {len(video_path_list)} to be processed.")
     
     if args.image_caption_model_name in SGLANG_SUPPORTED_MODELS:
