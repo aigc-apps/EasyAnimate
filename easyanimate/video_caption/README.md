@@ -13,7 +13,11 @@ EasyAnimate uses multi-modal LLMs to generate captions for frames extracted from
     cd EasyAnimate && pip install -r requirements.txt
 
     # Install additional requirements for video caption.
-    cd easyanimate/video_caption && pip install -r requirements.txt
+    cd easyanimate/video_caption && pip install -r requirements.txt --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
+
+    # Use DDP instead of DP in EasyOCR detection.
+    site_pkg_path=$(python -c 'import site; print(site.getsitepackages()[0])')
+    cp -v easyocr_detection_patched.py $site_pkg_path/easyocr/detection.py
 
     # We strongly recommend using Docker unless you can properly handle the dependency between vllm with torch(cuda).
     ```
