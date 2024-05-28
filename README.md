@@ -24,7 +24,7 @@ EasyAnimate is a pipeline based on the transformer architecture that can be used
 We will support quick pull-ups from different platforms, refer to [Quick Start](#quick-start).
 
 What's New:
-- Updated to v2 version, supports a maximum of 144 frames (6s, 24fps) for generation. [ 2024.05.26 ]
+- Updated to v2 version, supports a maximum of 144 frames (768x768, 6s, 24fps) for generation. [ 2024.05.26 ]
 - Create Code! Support for Windows and Linux Now. [ 2024.04.12 ]
 
 These are our generated results:
@@ -59,7 +59,7 @@ EasyAnimateV2:
 |--|--|--|--|--| 
 | PixArt-XL-2-512x512.tar | Pixart | 11.4GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/PixArt-XL-2-512x512.tar)| Pixart-Alpha official weights |
 | easyanimate_portrait.safetensors | Checkpoint of Pixart | 2.3GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait.safetensors) | Training with internal portrait datasets |
-| easyanimate_portrait_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait_lora.safetensors)| Training with internal portrait datasets |
+| easyanimate_portrait_lora.safetensors | Lora of Pixart | 485.11MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait_lora.safetensors)| Training with internal portrait datasets |
 </details>
 
 # Result Gallery
@@ -186,6 +186,8 @@ EasyAnimateV2:
 - Step 3: Select the generated model based on the page, fill in prompt, neg_prompt, guidance_scale, and seed, click on generate, wait for the generated result, and save the result in the samples folder.
 
 ### 2. Model Training
+We have provided a simple demo of training the Lora model through image data, which can be found in the [wiki](https://github.com/aigc-apps/EasyAnimate/wiki/Training-Lora) for details.
+
 If you want to train a text to image and video generation model. You need to arrange the dataset in this format.
 
 ```
@@ -251,15 +253,35 @@ sh scripts/train_t2iv.sh
 ```
 
 # Algorithm Detailed
-We build EasyAnimate by introducing additional motion module upon [PixArt-alpha](https://github.com/PixArt-alpha/PixArt-alpha),so that can extend the DiT model from 2D image generation to 3D video generation. The pipeline is shwon as follows.
+### 1. Data Preprocessing
+**Video Cut**
 
-<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/pipeline.png" alt="ui" style="zoom:50%;" />
+For long video cut, EasyAnimate utilizes PySceneDetect to identify scene changes within the video and performs scene cutting based on certain threshold values to ensure consistency in the themes of the video segments. After cutting, we only keep segments with lengths ranging from 3 to 10 seconds for model training.
 
-The motion module is used to capture the temporal information among frames. The structure is shown as follows.
+**Video Cleaning and Description**
 
-<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/motion_module.png" alt="motion" style="zoom:50%;" />
+Following SVD's data preparation process, EasyAnimate provides a simple yet effective data processing pipeline for high-quality data filtering and labeling. It also supports distributed processing to accelerate the speed of data preprocessing. The overall process is as follows:
 
-We introduce attention mechanisms in the temporal dimension to enable the model to learn temporal information for generating continuous video frames. At the same time, we utilize an additional Grid Reshape calculation to expand the number of input tokens for the attention mechanism, thus making greater use of the spatial information in images to achieve better generative results.
+- Duration filtering: Analyze the basic information of the video to filter out low-quality videos that are short in duration or low in resolution.
+- Aesthetic filtering: Filter out videos with poor content (blurry, dim, etc.) by calculating the average aesthetic score of uniformly distributed 4 frames.
+- Text filtering: Use easyocr to calculate the text proportion of middle frames to filter out videos with a large proportion of text.
+- Motion filtering: Calculate interframe optical flow differences to filter out videos that move too slowly or too quickly.
+- Text description: Recaption video frames using videochat2 and vila. PAI is also developing a higher quality video recaption model, which will be released for use as soon as possible.
+
+### 2. Model Architecture
+We have adopted [PixArt-alpha](https://github.com/PixArt-alpha/PixArt-alpha) as the base model and modified the VAE and DiT model structures on this basis to better support video generation. The overall structure of EasyAnimate is as follows:
+
+The diagram below outlines the pipeline of EasyAnimate. It includes the Text Encoder, Video VAE (video encoder and decoder), and Diffusion Transformer (DiT). The T5 Encoder is used as the text encoder. Other components are detailed in the sections below.
+
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/pipeline_v2.jpg" alt="ui" style="zoom:50%;" />
+
+To introduce feature information along the temporal axis, EasyAnimate incorporates the Motion Module to achieve the expansion from 2D images to 3D videos. For better generation effects, it jointly finetunes the Backbone together with the Motion Module, thereby achieving image generation and video generation within a single Pipeline.
+
+Additionally, referencing U-ViT, it introduces a skip connection structure into EasyAnimate to further optimize deeper features by incorporating shallow features. A fully connected layer is also zero-initialized for each skip connection structure, allowing it to be applied as a plug-in module to previously trained and well-performing DiTs.
+
+Moreover, it proposes Slice VAE, which addresses the memory difficulties encountered by MagViT when dealing with long and large videos, while also achieving greater compression in the temporal dimension during video encoding and decoding stages compared to MagViT.
+
+For more details, please refer to [arxiv]().
 
 # Reference
 - magvit: https://github.com/google-research/magvit

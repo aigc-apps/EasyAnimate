@@ -25,7 +25,7 @@ EasyAnimate是一个基于transformer结构的pipeline，可用于生成AI图片
 我们会逐渐支持从不同平台快速启动，请参阅 [快速启动](#快速启动)。
 
 新特性：
-- 更新到v2版本，最大支持144帧(6s, 24fps)生成。[ 2024.05.26 ]
+- 更新到v2版本，最大支持144帧(768x768, 6s, 24fps)生成。[ 2024.05.26 ]
 - 创建代码！现在支持 Windows 和 Linux。[ 2024.04.12 ]
 
 这些是我们的生成结果:
@@ -186,6 +186,8 @@ EasyAnimateV2:
 - 步骤3：根据页面选择生成模型，填入prompt、neg_prompt、guidance_scale和seed等，点击生成，等待生成结果，结果保存在sample文件夹中。
 
 ### 2. 模型训练
+我们给出了一个简单的demo通过图片数据训练lora模型，详情可以查看[wiki](https://github.com/aigc-apps/EasyAnimate/wiki/Training-Lora)。
+
 如果期望训练一个文生图视频的生成模型，您需要以这种格式排列数据集。
 ```
 📦 project/
@@ -254,15 +256,35 @@ sh scripts/train_t2iv.sh
 ```
 
 # 算法细节
-我们使用了[PixArt-alpha](https://github.com/PixArt-alpha/PixArt-alpha)作为基础模型，并在此基础上引入额外的运动模块（motion module）来将DiT模型从2D图像生成扩展到3D视频生成上来。其框架图如下：
+### 1. 数据预处理
+**视频分割**
 
-<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/pipeline.png" alt="ui" style="zoom:50%;" />
+对于较长的视频分割，EasyAnimate使用PySceneDetect以识别视频内的场景变化并基于这些转换，根据一定的门限值来执行场景剪切，以确保视频片段的主题一致性。切割后，我们只保留长度在3到10秒之间的片段用于模型训练。
 
-其中，Motion Module 用于捕捉时序维度的帧间关系，其结构如下：
+**视频清洗与描述**
 
-<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/motion_module.png" alt="motion" style="zoom:50%;" />
+参考SVD的数据准备流程，EasyAnimate提供了一条简单但有效的数据处理链路来进行高质量的数据筛选与打标。并且支持了分布式处理来提升数据预处理的速度，其整体流程如下：
 
-我们在时序维度上引入注意力机制来让模型学习时序信息，以进行连续视频帧的生成。同时，我们利用额外的网格计算（Grid Reshape），来扩大注意力机制的input token数目，从而更多地利用图像的空间信息以达到更好的生成效果。Motion Module 作为一个单独的模块，在推理时可以用在不同的DiT基线模型上。此外，EasyAnimate不仅支持了motion-module模块的训练，也支持了DiT基模型/LoRA模型的训练，以方便用户根据自身需要来完成自定义风格的模型训练，进而生成任意风格的视频。
+- 时长过滤： 统计视频基本信息，来过滤时间短/分辨率低的低质量视频
+- 美学过滤： 通过计算视频均匀4帧的美学得分均值，来过滤内容较差的视频（模糊、昏暗等）
+- 文本过滤： 通过easyocr计算中间帧的文本占比，来过滤文本占比过大的视频
+- 运动过滤： 计算帧间光流差异来过滤运动过慢或过快的视频。
+- 文本描述： 通过videochat2和vila对视频帧进行recaption。PAI也在自研质量更高的视频recaption模型，将在第一时间放出供大家使用。
+
+### 2. 模型结构
+我们使用了[PixArt-alpha](https://github.com/PixArt-alpha/PixArt-alpha)作为基础模型，并在此基础上修改了VAE和DiT的模型结构来更好地支持视频的生成。EasyAnimate的整体结构如下：
+
+下图概述了EasyAnimate的管道。它包括Text Encoder、Video VAE（视频编码器和视频解码器）和Diffusion Transformer（DiT）。T5 Encoder用作文本编码器。其他组件将在以下部分中详细说明。
+
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/pipeline_v2.jpg" alt="ui" style="zoom:50%;" />
+
+为了引入特征点在时间轴上的特征信息，EasyAnimate引入了运动模块（Motion Module），以实现从2D图像到3D视频的扩展。为了更好的生成效果，其联合图片和视频将Backbone连同Motion Module一起Finetune。在一个Pipeline中即实现了图片的生成，也实现了视频的生成。
+
+另外，参考U-ViT，其将跳连接结构引入到EasyAnimate当中，通过引入浅层特征进一步优化深层特征，并且0初始化了一个全连接层给每一个跳连接结构，使其可以作为一个可插入模块应用到之前已经训练的还不错的DIT中。
+
+同时，其提出了Slice VAE，用于解决MagViT在面对长、大视频时编解码上的显存困难，同时相比于MagViT在视频编解码阶段进行了时间维度更大的压缩。
+
+更多细节可以看查看[arxiv]()。
 
 # 参考文献
 - magvit: https://github.com/google-research/magvit
