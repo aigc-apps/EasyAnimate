@@ -1,20 +1,19 @@
 import argparse
-import os
-from tqdm import tqdm
 import copy
 import json
+import os
 import shutil
 from multiprocessing import Pool
 
-from scenedetect import open_video, SceneManager
+from scenedetect import SceneManager, open_video
 from scenedetect.detectors import ContentDetector
 from scenedetect.video_splitter import split_video_ffmpeg
+from tqdm import tqdm
 
-from utils.util import download_video, get_video_list
-
+from utils.video_utils import download_video, get_video_path_list
 
 tmp_file_dir = "./tmp"
-
+DEFAULT_FFMPEG_ARGS = '-c:v libx264 -preset veryfast -crf 22 -c:a aac'
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -68,6 +67,9 @@ def parse_args():
         type = int, 
         default = os.cpu_count() // 2,
         help = 'Number of CPU cores to process the video scene cut.')
+    parser.add_argument(
+        "--save_json", action="store_true", help="Whether save json in datasets."
+    )
     args = parser.parse_args()
     return args
 
@@ -79,7 +81,8 @@ def split_video_into_scenes(
     min_seconds: int = 3,
     max_seconds: int = 8,
     save_dir: str = "",
-    name_template: str = "$VIDEO_NAME-Scene-$SCENE_NUMBER.mp4"):
+    name_template: str = "$VIDEO_NAME-Scene-$SCENE_NUMBER.mp4",
+    save_json: bool = False ):
     # SceneDetect video through casceded (threshold, FPS)
     frame_points = []
     frame_timecode = {}
@@ -104,6 +107,16 @@ def split_video_into_scenes(
         del video, scene_manager
     frame_points = sorted(frame_points)
     output_scene_list = []
+
+    # Detect No Scene Change
+    if len(frame_points) == 0:
+        video = open_video(video_path, backend='pyav')
+        frame_points = [0, video.duration.get_frames() - 1]
+        frame_timecode = {
+            frame_points[0]: video.base_timecode,
+            frame_points[-1]: video.base_timecode + video.base_timecode + video.duration
+        }
+        del video
 
     for idx in range(len(frame_points) - 1):
         # Limit save out min seconds
@@ -136,33 +149,31 @@ def split_video_into_scenes(
     # Ensure save dir exists
     elif not os.path.isdir(save_dir):
         os.makedirs(save_dir)
+    
     clip_info_path = os.path.join(save_dir, os.path.splitext(os.path.basename(video_path))[0] + '.json')
-    # Early exit (If the video cannot be split into multiple scenes, save the original video).
-    if len(output_scene_list) == 0:
-        shutil.copy2(video_path, save_dir)
-        with open(clip_info_path, 'w', encoding='utf-8') as f:
-            json.dump({}, f)
-        return clip_info_path
 
     output_file_template = os.path.join(save_dir, name_template)
     split_video_ffmpeg(
         video_path, 
         output_scene_list, 
+        arg_override=DEFAULT_FFMPEG_ARGS,
         output_file_template=output_file_template,
         show_progress=False, 
         show_output=False) # ffmpeg print
-    # Save clip info
-    json.dump(
-        [(frame_timecode_tuple[0].get_timecode(), frame_timecode_tuple[1].get_timecode()) for frame_timecode_tuple in output_scene_list], 
-        open(clip_info_path, 'w'), 
-        indent=2
-    )
+    
+    if save_json:
+        # Save clip info
+        json.dump(
+            [(frame_timecode_tuple[0].get_timecode(), frame_timecode_tuple[1].get_timecode()) for frame_timecode_tuple in output_scene_list], 
+            open(clip_info_path, 'w'), 
+            indent=2
+        )
 
     return clip_info_path
 
 
 def process_single_video(args):
-    video, threshold, frame_skip, min_seconds, max_seconds, save_dir, name_template = args
+    video, threshold, frame_skip, min_seconds, max_seconds, save_dir, name_template, save_json = args
     basename = os.path.splitext(os.path.basename(video))[0]
     # Video URL
     if video.startswith("http"):
@@ -185,7 +196,8 @@ def process_single_video(args):
             min_seconds=min_seconds,
             max_seconds=max_seconds,
             save_dir=save_dir,
-            name_template=name_template
+            name_template=name_template,
+            save_json=save_json
         )
     except Exception as e:
         print(e, video)
@@ -202,13 +214,14 @@ def main():
     save_dir = args.save_dir
     name_template = args.name_template
     num_processes = args.num_processes
+    save_json = args.save_json
 
     assert len(threshold) == len(frame_skip), \
         "Threshold must one-to-one match frame_skip."
 
-    video_list = get_video_list(video_input)
+    video_list = get_video_path_list(video_input)
     args_list = [
-        (video, threshold, frame_skip, min_seconds, max_seconds, save_dir, name_template)
+        (video, threshold, frame_skip, min_seconds, max_seconds, save_dir, name_template, save_json)
         for video in video_list
     ]
 
