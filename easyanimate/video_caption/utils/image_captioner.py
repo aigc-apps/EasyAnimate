@@ -90,10 +90,10 @@ class InternLMXComposer2:
 
 class LLaVASRT:
     def __init__(self, device: str = "cuda:0", quantized: bool = True):
-        runtime = sgl.Runtime(model_path="liuhaotian/llava-v1.6-vicuna-7b", tokenizer_path="llava-hf/llava-1.5-7b-hf")
-        sgl.set_default_backend(runtime)
+        self.runtime = sgl.Runtime(model_path="liuhaotian/llava-v1.6-vicuna-7b", tokenizer_path="llava-hf/llava-1.5-7b-hf")
+        sgl.set_default_backend(self.runtime)
         logger.info(
-            f"Start the SGLang runtime for llava-v1.6-vicuna-7b with chat template: {runtime.endpoint.chat_template.name}. "
+            f"Start the SGLang runtime for llava-v1.6-vicuna-7b with chat template: {self.runtime.endpoint.chat_template.name}. "
             "Input parameter device and quantized do not take effect."
         )
         if not os.path.exists(TMP_DIR):
@@ -135,6 +135,9 @@ class LLaVASRT:
             return [s["answer"] for s in state], state
         else:
             raise ValueError("Input prompt and image must be both strings or list of strings with the same length.")
+    
+    def __del__(self):
+        self.runtime.shutdown()
 
 
 if __name__ == "__main__":

@@ -13,7 +13,13 @@ EasyAnimate uses multi-modal LLMs to generate captions for frames extracted from
     cd EasyAnimate && pip install -r requirements.txt
 
     # Install additional requirements for video caption.
-    cd easyanimate/video_caption && pip install -r requirements.txt
+    cd easyanimate/video_caption && pip install -r requirements.txt --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
+
+    # Use DDP instead of DP in EasyOCR detection.
+    site_pkg_path=$(python -c 'import site; print(site.getsitepackages()[0])')
+    cp -v easyocr_detection_patched.py $site_pkg_path/easyocr/detection.py
+
+    # We strongly recommend using Docker unless you can properly handle the dependency between vllm with torch(cuda).
     ```
 
 ## How to use
@@ -29,7 +35,7 @@ EasyAnimate uses multi-modal LLMs to generate captions for frames extracted from
     ```shell
     CUDA_VISIBLE_DEVICES=0 python caption_video_frame.py \
         --video_folder="your-video-folder/"
-        --frame_sample_method="extract_mid_frame" \
+        --frame_sample_method="mid" \
         --num_sampled_frames=1 \
         --image_caption_model_name="llava-v1.6-vicuna-7b" \
         --image_caption_prompt="Please describe this image in detail." \
@@ -53,6 +59,7 @@ EasyAnimate uses multi-modal LLMs to generate captions for frames extracted from
         2. Output the video description directly. Begin with 'In this video'. \
         3. Limit the video description within 100 words. \
         Here is the mid-frame description: " \
+        --output_dir="tmp" \
         --saved_path="video_summary_caption.jsonl"
     ```
 
