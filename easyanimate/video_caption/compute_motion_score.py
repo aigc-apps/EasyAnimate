@@ -1,3 +1,4 @@
+import ast
 import argparse
 import gc
 import os
@@ -106,9 +107,9 @@ def parse_args():
     )
     parser.add_argument("--asethetic_score_threshold", type=float, default=4.0, help="The asethetic score threshold.")
     parser.add_argument(
-        "--video_text_metadata_path", type=str, default=None, help="The path to the video text score metadata (csv/jsonl)."
+        "--text_score_metadata_path", type=str, default=None, help="The path to the video text score metadata (csv/jsonl)."
     )
-    parser.add_argument("--text_threshold", type=float, default=0.02, help="The text threshold.")
+    parser.add_argument("--text_score_threshold", type=float, default=0.02, help="The text threshold.")
 
     args = parser.parse_args()
     return args
@@ -145,6 +146,10 @@ def main():
         elif args.asethetic_score_metadata_path.endswith(".jsonl"):
             asethetic_score_df = pd.read_json(args.asethetic_score_metadata_path, lines=True)
 
+        # In pandas, csv will save lists as strings, whereas jsonl will not.
+        asethetic_score_df["aesthetic_score"] = asethetic_score_df["aesthetic_score"].apply(
+            lambda x: ast.literal_eval(x) if isinstance(x, str) else x
+        )
         asethetic_score_df["aesthetic_score_mean"] = asethetic_score_df["aesthetic_score"].apply(lambda x: sum(x) / len(x))
         filtered_asethetic_score_df = asethetic_score_df[asethetic_score_df["aesthetic_score_mean"] < args.asethetic_score_threshold]
         filtered_video_path_list = filtered_asethetic_score_df[args.video_path_column].tolist()
@@ -161,7 +166,6 @@ def main():
         elif args.text_score_metadata_path.endswith(".jsonl"):
             text_score_df = pd.read_json(args.text_score_metadata_path, lines=True)
 
-        text_score_df["aesthetic_score_mean"] = text_score_df["aesthetic_score"].apply(lambda x: sum(x) / len(x))
         filtered_text_score_df = text_score_df[text_score_df["text_score"] > args.text_score_threshold]
         filtered_video_path_list = filtered_text_score_df[args.video_path_column].tolist()
         filtered_video_path_list = [os.path.join(args.video_folder, video_path) for video_path in filtered_video_path_list]

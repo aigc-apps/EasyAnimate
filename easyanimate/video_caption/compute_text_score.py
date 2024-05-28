@@ -1,3 +1,4 @@
+import ast
 import argparse
 import os
 from pathlib import Path
@@ -9,26 +10,31 @@ from accelerate import PartialState
 from accelerate.utils import gather_object
 from natsort import natsorted
 from tqdm import tqdm
+from torchvision.datasets.utils import download_url
 
 from utils.logger import logger
 from utils.video_utils import extract_frames, get_video_path_list
 
 
-# @contextmanager
-# def video_reader(*args, **kwargs):
-#     vr = VideoReader(*args, **kwargs)
-#     try:
-#         yield vr
-#     finally:
-#         del vr
-#         gc.collect()
+def init_ocr_reader(root: str = "~/.cache/easyocr", device: str = "gpu"):
+    root = os.path.expanduser(root)
+    if not os.path.exists(root):
+        os.makedirs(root)
+    download_url(
+        "https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/video_caption/easyocr/craft_mlt_25k.pth",
+        root,
+        filename="craft_mlt_25k.pth",
+        md5="2f8227d2def4037cdb3b34389dcf9ec1",
+    )
+    ocr_reader = easyocr.Reader(
+        lang_list=["en", "ch_sim"],
+        gpu=device,
+        recognizer=False,
+        verbose=False,
+        model_storage_directory=root,
+    )
 
-# def extract_mid_frame(video_path: str):
-#     with video_reader(video_path, num_threads=2) as vr:
-#         middle_frame_index = len(vr) // 2
-#         middle_frame = vr[middle_frame_index].asnumpy()
-
-#         return [middle_frame_index], [middle_frame]
+    return ocr_reader
 
 
 def triangle_area(p1, p2, p3):
@@ -43,6 +49,7 @@ def triangle_area(p1, p2, p3):
 
 def compute_text_score(video_path, ocr_reader):
     _, images = extract_frames(video_path, sample_method="mid")
+    images = [np.array(image) for image in images]
 
     frame_ocr_area_ratios = []
     for image in images:
@@ -93,6 +100,10 @@ def parse_args():
     )
     parser.add_argument("--saved_path", type=str, required=True, help="The save path to the output results (csv/jsonl).")
     parser.add_argument("--saved_freq", type=int, default=100, help="The frequency to save the output results.")
+    parser.add_argument(
+        "--asethetic_score_metadata_path", type=str, default=None, help="The path to the video quality metadata (csv/jsonl)."
+    )
+    parser.add_argument("--asethetic_score_threshold", type=float, default=4.0, help="The asethetic score threshold.")
 
     args = parser.parse_args()
     return args
@@ -122,16 +133,29 @@ def main():
         # Sorting to guarantee the same result for each process.
         video_path_list = natsorted(video_path_list)
         logger.info(f"Resume from {args.saved_path}: {len(saved_video_path_list)} processed and {len(video_path_list)} to be processed.")
+    
+    if args.asethetic_score_metadata_path is not None:
+        if args.asethetic_score_metadata_path.endswith(".csv"):
+            asethetic_score_df = pd.read_csv(args.asethetic_score_metadata_path)
+        elif args.asethetic_score_metadata_path.endswith(".jsonl"):
+            asethetic_score_df = pd.read_json(args.asethetic_score_metadata_path, lines=True)
+
+        # In pandas, csv will save lists as strings, whereas jsonl will not.
+        asethetic_score_df["aesthetic_score"] = asethetic_score_df["aesthetic_score"].apply(
+            lambda x: ast.literal_eval(x) if isinstance(x, str) else x
+        )
+        asethetic_score_df["aesthetic_score_mean"] = asethetic_score_df["aesthetic_score"].apply(lambda x: sum(x) / len(x))
+        filtered_asethetic_score_df = asethetic_score_df[asethetic_score_df["aesthetic_score_mean"] < args.asethetic_score_threshold]
+        filtered_video_path_list = filtered_asethetic_score_df[args.video_path_column].tolist()
+        filtered_video_path_list = [os.path.join(args.video_folder, video_path) for video_path in filtered_video_path_list]
+
+        video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
+        # Sorting to guarantee the same result for each process.
+        video_path_list = natsorted(video_path_list)
+        logger.info(f"Load {args.asethetic_score_metadata_path} and filter {len(filtered_video_path_list)} videos.")
 
     state = PartialState()
-    ocr_reader = easyocr.Reader(
-        lang_list=["en", "ch_sim"],
-        gpu=state.device,
-        recognizer=False,
-        verbose=False,
-        model_storage_directory="/mnt/nas/huangkunzhe.hkz/code/video-caption/models/",
-        # https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/video_caption/easyocr/craft_mlt_25k.pth
-    )
+    ocr_reader = init_ocr_reader(device=state.device)
 
     # The workaround can be removed after https://github.com/huggingface/accelerate/pull/2781 is released.
     index = len(video_path_list) - len(video_path_list) % state.num_processes

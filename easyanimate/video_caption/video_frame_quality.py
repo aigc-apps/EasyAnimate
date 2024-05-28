@@ -55,15 +55,8 @@ def parse_args():
         required=False,
         help="The batch size for the video dataset.",
     )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        required=True,
-        help="The directory to creat the subfolder (named with the video name) to indicate the video has been processed.",
-    )
     parser.add_argument("--saved_path", type=str, required=True, help="The save path to the output results (csv/jsonl).")
     parser.add_argument("--saved_freq", type=int, default=1000, help="The frequency to save the output results.")
-    parser.add_argument("--resume", default=False, action="store_true", help="Whether to resume from the saved_path.")
 
     args = parser.parse_args()
     return args
@@ -121,7 +114,7 @@ def main():
     with state.split_between_processes(video_path_list) as splitted_video_path_list:
         video_dataset = VideoDataset(
             video_path_list=splitted_video_path_list,
-            sample_method="extract_uniform_frames",
+            sample_method="uniform",
             num_sampled_frames=args.num_sampled_frames
         )
         video_loader = DataLoader(video_dataset, batch_size=args.batch_size, num_workers=4, collate_fn=collate_fn)
