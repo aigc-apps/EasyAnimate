@@ -83,9 +83,8 @@ else:
     Choosen_AutoencoderKL = AutoencoderKL
 vae = Choosen_AutoencoderKL.from_pretrained(
     model_name, 
-    subfolder="vae", 
-    torch_dtype=weight_dtype
-)
+    subfolder="vae"
+).to(weight_dtype)
 
 if vae_path is not None:
     print(f"From checkpoint: {vae_path}")

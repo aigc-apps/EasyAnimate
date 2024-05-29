@@ -189,7 +189,7 @@ EasyAnimateV2:
 
 #### b. Using webui
 - Step 1: Download the corresponding weights and place them in the models folder.
-- Step 2: Run the app. py file to enter the graph page.
+- Step 2: Run the app.py file to enter the graph page.
 - Step 3: Select the generated model based on the page, fill in prompt, neg_prompt, guidance_scale, and seed, click on generate, wait for the generated result, and save the result in the samples folder.
 
 ### 2. Model Training
@@ -250,9 +250,9 @@ You can also set the path as absolute path as follow:
 
 #### b. Video VAE training (optional)
 Video VAE training is an optional option as we have already provided pre trained Video VAEs.
-If you want to train video vae, you can refer to [README] (easyanimate/vae/README. md) in the video vae section.
+If you want to train video vae, you can refer to [README](easyanimate/vae/README.md) in the video vae section.
 
-#### c. Video VAE training
+#### c. Video DiT training
 If the data format is relative path during data preprocessing, please set ```scripts/train_t2iv.sh``` as follow.
 ```
 export DATASET_NAME="datasets/internal_datasets/"

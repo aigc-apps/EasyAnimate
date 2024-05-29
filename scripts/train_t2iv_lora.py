@@ -133,7 +133,7 @@ def log_validation(vae, text_encoder, tokenizer, transformer3d, network, config,
 
         for i in range(len(args.validation_prompts)):
             with torch.no_grad():
-                with torch.autocast("cuda"):
+                with torch.autocast("cuda", dtype=weight_dtype):
                     sample = pipeline(
                         args.validation_prompts[i], 
                         video_length = args.video_sample_n_frames,
