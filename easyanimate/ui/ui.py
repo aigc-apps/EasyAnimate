@@ -114,15 +114,14 @@ class EasyAnimateController:
         self.vae = Choosen_AutoencoderKL.from_pretrained(
             diffusion_transformer_dropdown, 
             subfolder="vae", 
-            torch_dtype=self.weight_dtype
-        )
+        ).to(self.weight_dtype)
         self.transformer = Transformer3DModel.from_pretrained_2d(
             diffusion_transformer_dropdown, 
             subfolder="transformer", 
             transformer_additional_kwargs=OmegaConf.to_container(self.inference_config.transformer_additional_kwargs)
         ).to(self.weight_dtype)
         self.tokenizer = T5Tokenizer.from_pretrained(diffusion_transformer_dropdown, subfolder="tokenizer")
-        self.text_encoder = T5EncoderModel.from_pretrained(diffusion_transformer_dropdown, subfolder="text_encoder", torch_dtype = self.weight_dtype)
+        self.text_encoder = T5EncoderModel.from_pretrained(diffusion_transformer_dropdown, subfolder="text_encoder", torch_dtype=self.weight_dtype)
 
         # Get pipeline
         self.pipeline = EasyAnimatePipeline(
@@ -250,7 +249,7 @@ class EasyAnimateController:
             if is_api:
                 return save_sample_path, f"Error. error information is {str(e)}"
             else:
-                return gr.Image.update(), gr.Video.update()
+                return gr.Image.update(), gr.Video.update(), f"Error. error information is {str(e)}"
 
         # lora part
         if self.lora_model_path != "none":
@@ -289,7 +288,7 @@ class EasyAnimateController:
             if is_api:
                 return save_sample_path, "Success"
             else:
-                return gr.Image.update(value=save_sample_path, visible=True), gr.Video.update(value=None, visible=False)
+                return gr.Image.update(value=save_sample_path, visible=True), gr.Video.update(value=None, visible=False), "Success"
         else:
             save_sample_path = os.path.join(self.savedir_sample, prefix + f".mp4")
             save_videos_grid(sample, save_sample_path, fps=12 if self.edition == "v1" else 24)
@@ -297,7 +296,7 @@ class EasyAnimateController:
             if is_api:
                 return save_sample_path, "Success"
             else:
-                return gr.Image.update(visible=False, value=None), gr.Video.update(value=save_sample_path, visible=True)
+                return gr.Image.update(visible=False, value=None), gr.Video.update(value=save_sample_path, visible=True), "Success"
 
 def ui():
     controller = EasyAnimateController()
@@ -417,8 +416,14 @@ def ui():
 
                     generate_button = gr.Button(value="Generate", variant='primary')
                     
-                result_image = gr.Image(label="Generated Image", interactive=False, visible=False)
-                result_video = gr.Video(label="Generated Animation", interactive=False)
+                with gr.Column():
+                    result_image = gr.Image(label="Generated Image", interactive=False, visible=False)
+                    result_video = gr.Video(label="Generated Animation", interactive=False)
+                    infer_progress = gr.Textbox(
+                        label="Generation Info",
+                        value="No task currently",
+                        interactive=False
+                    )
 
             is_image.change(
                 lambda x: gr.update(visible=not x),
@@ -458,7 +463,7 @@ def ui():
                     cfg_scale_slider, 
                     seed_textbox,
                 ],
-                outputs=[result_image, result_video]
+                outputs=[result_image, result_video, infer_progress]
             )
     return demo, controller
 
@@ -484,9 +489,8 @@ class EasyAnimateController_Modelscope:
             Choosen_AutoencoderKL = AutoencoderKL
         self.vae = Choosen_AutoencoderKL.from_pretrained(
             model_name, 
-            subfolder="vae", 
-            torch_dtype=weight_dtype
-        )
+            subfolder="vae"
+        ).to(weight_dtype)
         self.tokenizer = T5Tokenizer.from_pretrained(
             model_name, 
             subfolder="tokenizer"
@@ -494,7 +498,7 @@ class EasyAnimateController_Modelscope:
         self.text_encoder = T5EncoderModel.from_pretrained(
             model_name, 
             subfolder="text_encoder", 
-            torch_dtype = weight_dtype
+            torch_dtype=weight_dtype
         )
         self.pipeline = EasyAnimatePipeline(
             vae=self.vae, 
@@ -543,7 +547,7 @@ class EasyAnimateController_Modelscope:
             gc.collect()
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
-            return gr.Image.update(), gr.Video.update()
+            return gr.Image.update(), gr.Video.update(), f"Error. error information is {str(e)}"
 
         if not os.path.exists(self.savedir_sample):
             os.makedirs(self.savedir_sample, exist_ok=True)
@@ -558,11 +562,11 @@ class EasyAnimateController_Modelscope:
             image = (image * 255).numpy().astype(np.uint8)
             image = Image.fromarray(image)
             image.save(save_sample_path)
-            return gr.Image.update(value=save_sample_path, visible=True), gr.Video.update(value=None, visible=False)
+            return gr.Image.update(value=save_sample_path, visible=True), gr.Video.update(value=None, visible=False), "Success"
         else:
             save_sample_path = os.path.join(self.savedir_sample, prefix + f".mp4")
             save_videos_grid(sample, save_sample_path, fps=12 if self.edition == "v1" else 24)
-            return gr.Image.update(visible=False, value=None), gr.Video.update(value=save_sample_path, visible=True)
+            return gr.Image.update(visible=False, value=None), gr.Video.update(value=save_sample_path, visible=True), "Success"
 
 def ui_modelscope(edition, config_path, model_name, savedir_sample):
     controller = EasyAnimateController_Modelscope(edition, config_path, model_name, savedir_sample)
@@ -607,8 +611,14 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
 
                     generate_button = gr.Button(value="Generate", variant='primary')
                     
-                result_image = gr.Image(label="Generated Image", interactive=False, visible=False)
-                result_video = gr.Video(label="Generated Animation", interactive=False)
+                with gr.Column():
+                    result_image = gr.Image(label="Generated Image", interactive=False, visible=False)
+                    result_video = gr.Video(label="Generated Animation", interactive=False)
+                    infer_progress = gr.Textbox(
+                        label="Generation Info",
+                        value="No task currently",
+                        interactive=False
+                    )
 
             is_image.change(
                 lambda x: gr.update(visible=not x),
@@ -630,6 +640,6 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
                     cfg_scale_slider, 
                     seed_textbox,
                 ],
-                outputs=[result_image, result_video]
+                outputs=[result_image, result_video, infer_progress]
             )
     return demo, controller
