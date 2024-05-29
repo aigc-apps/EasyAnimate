@@ -1,14 +1,16 @@
-# EasyAnimate | 视频与图片一体化生成基线方案。
+# EasyAnimate | 高分辨率长视频生成的端到端解决方案
 😊 EasyAnimate是一个用于生成高分辨率和长视频的端到端解决方案。我们可以训练基于转换器的扩散生成器，训练用于处理长视频的VAE，以及预处理元数据。
 
 😊 我们基于类SORA结构与DIT，使用transformer进行作为扩散器进行视频与图片生成。我们基于motion module、u-vit和slice-vae构建了EasyAnimate，未来我们也会尝试更多的训练方案一提高效果。
 
 😊 Welcome!
+ 
+[![Project Page](https://img.shields.io/badge/Project-Website-green)](https://easyanimate.github.io/)
+[![Modelscope Studio](https://img.shields.io/badge/Modelscope-Studio-blue)](https://modelscope.cn/studios/PAI/EasyAnimate/summary)
 
 [English](./README.md) | 简体中文
 
 # 目录
-- [EasyPhoto | 您的智能生成器。](#easyphoto--您的智能生成器)
 - [目录](#目录)
 - [简介](#简介)
 - [TODO List](#todo-list)
@@ -47,11 +49,11 @@ EasyAnimateV2:
 | easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors)| A lora training with a specifial type images. Images can be downloaded from [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/webui/Minimalism.zip). |
 
 <details>
-  <summary>EasyAnimateV1:</summary>
+  <summary>(Obsolete) EasyAnimateV1:</summary>
 
 ### 1、运动权重
 | 名称 | 种类 | 存储空间 | 下载地址 | 描述 |
-|--|--|--|--|--| 
+|--|--|--|--|--|  
 | easyanimate_v1_mm.safetensors | Motion Module | 4.1GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Motion_Module/easyanimate_v1_mm.safetensors) | Training with 80 frames and fps 12 |
 
 ### 2、其他权重
@@ -104,7 +106,7 @@ cd ../../
 ```
 
 <details>
-  <summary>EasyAnimateV1:</summary>
+  <summary>(Obsolete) EasyAnimateV1:</summary>
   
 ```
 # 拉取镜像
@@ -160,7 +162,7 @@ EasyAnimateV2:
 ```
 
 <details>
-  <summary>EasyAnimateV1:</summary>
+  <summary>(Obsolete) EasyAnimateV1:</summary>
 
   ```
   📦 models/
@@ -268,6 +270,11 @@ export DATASET_META_NAME="/mnt/data/json_of_internal_datasets.json"
 ```sh
 sh scripts/train_t2iv.sh
 ```
+
+<details>
+  <summary>(Obsolete) EasyAnimateV1:</summary>
+  如果你想训练EasyAnimateV1。请切换到git分支v1。
+</details>
 
 # 算法细节
 ### 1. 数据预处理

@@ -5,6 +5,9 @@
 
 😊 Welcome!
 
+[![Project Page](https://img.shields.io/badge/Project-Website-green)](https://easyanimate.github.io/)
+[![Modelscope Studio](https://img.shields.io/badge/Modelscope-Studio-blue)](https://modelscope.cn/studios/PAI/EasyAnimate/summary)
+
 English | [简体中文](./README_zh-CN.md)
 
 # Table of Contents
@@ -47,7 +50,7 @@ EasyAnimateV2:
 | easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors)| A lora training with a specifial type images. Images can be downloaded from [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/webui/Minimalism.zip). |
 
 <details>
-  <summary>EasyAnimateV1:</summary>
+  <summary>(Obsolete) EasyAnimateV1:</summary>
 
 ### 1、Motion Weights
 | Name | Type | Storage Space | Url | Description |
@@ -106,7 +109,7 @@ cd ../../
 ```
 
 <details>
-  <summary>EasyAnimateV1:</summary>
+  <summary>(Obsolete) EasyAnimateV1:</summary>
   
 ```
 # pull image
@@ -162,7 +165,7 @@ EasyAnimateV2:
 ```
 
 <details>
-  <summary>EasyAnimateV1:</summary>
+  <summary>(Obsolete) EasyAnimateV1:</summary>
 
   ```
   📦 models/
@@ -266,6 +269,11 @@ Then, we run scripts/train_t2iv.sh.
 ```sh
 sh scripts/train_t2iv.sh
 ```
+
+<details>
+  <summary>(Obsolete) EasyAnimateV1:</summary>
+  If you want to train EasyAnimateV1. Please switch to the git branch v1.
+</details>
 
 # Algorithm Detailed
 ### 1. Data Preprocessing
