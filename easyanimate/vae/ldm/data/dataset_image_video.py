@@ -90,7 +90,7 @@ class ImageVideoDataset(Dataset):
     # If caught exception(timeout or others), try another index until successful and return.
     def __init__(self, size=None, video_size=128, video_len=25,
                  degradation=None, downscale_f=4,  random_crop=True, min_crop_f=0.25, max_crop_f=1.,
-                 s_t=None, slice_interval=None,
+                 s_t=None, slice_interval=None, data_root=None
                 ):
         """
         Imagenet Superresolution Dataloader
@@ -124,6 +124,7 @@ class ImageVideoDataset(Dataset):
         self.video_rescaler = albumentations.SmallestMaxSize(max_size=video_size, interpolation=cv2.INTER_AREA)
         self.video_len = video_len
         self.video_size = video_size
+        self.data_root = data_root
 
         self.pil_interpolation = False # gets reset later if incase interp_op is from pillow
 
@@ -165,7 +166,10 @@ class ImageVideoDataset(Dataset):
     def __getitem__(self, i):
         @func_set_timeout(3) # time wait 3 seconds
         def get_video_item(example):
-            video_reader = VideoReader(example['file_path'])
+            if self.data_root is not None:
+                video_reader = VideoReader(os.path.join(self.data_root, example['file_path']))
+            else:
+                video_reader = VideoReader(example['file_path'])
             video_length = len(video_reader)
             
             clip_length = min(video_length, (self.video_len - 1) * self.slice_interval + 1)
@@ -221,7 +225,10 @@ class ImageVideoDataset(Dataset):
             while True:
                 try:
                     example = self.base[i]
-                    image = Image.open(example['file_path'])
+                    if self.data_root is not None:
+                        image = Image.open(os.path.join(self.data_root, example['file_path']))
+                    else:
+                        image = Image.open(example['file_path'])
                     image = image.convert("RGB")
                     image = np.array(image).astype(np.uint8)
 

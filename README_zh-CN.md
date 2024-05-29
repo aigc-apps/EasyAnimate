@@ -1,7 +1,7 @@
 # EasyAnimate | 视频与图片一体化生成基线方案。
-😊 EasyAnimate是一个用于生成长视频和图片 和 训练基于transformer的扩散生成器的repo。
+😊 EasyAnimate是一个用于生成高分辨率和长视频的端到端解决方案。我们可以训练基于转换器的扩散生成器，训练用于处理长视频的VAE，以及预处理元数据。
 
-😊 我们基于类SORA结构与DIT，使用transformer进行作为扩散器进行视频与图片生成。为了保证良好的拓展性，我们基于motion module构建了EasyAnimate，未来我们也会尝试更多的训练方案一提高效果。
+😊 我们基于类SORA结构与DIT，使用transformer进行作为扩散器进行视频与图片生成。我们基于motion module、u-vit和slice-vae构建了EasyAnimate，未来我们也会尝试更多的训练方案一提高效果。
 
 😊 Welcome!
 
@@ -39,7 +39,6 @@ EasyAnimate是一个基于transformer结构的pipeline，可用于生成AI图片
 - 支持视频inpaint模型。
 
 # Model zoo
-
 EasyAnimateV2:
 | 名称 | 种类 | 存储空间 | 下载地址 | 描述 |
 |--|--|--|--|--| 
@@ -69,7 +68,11 @@ EasyAnimateV2:
 # 快速启动
 ### 1. 云使用: AliyunDSW/Docker
 #### a. 通过阿里云 DSW
-敬请期待。
+DSW 有免费 GPU 时间，用户可申请一次，申请后3个月内有效。
+
+阿里云在[Freetier](https://free.aliyun.com/?product=9602825&crowd=enterprise&spm=5176.28055625.J_5831864660.1.e939154aRgha4e&scm=20140722.M_9974135.P_110.MO_1806-ID_9974135-MID_9974135-CID_30683-ST_8512-V_1)提供免费GPU时间，获取并在阿里云PAI-DSW中使用，5分钟内即可启动EasyAnimate
+
+[![DSW Notebook](images/dsw.png)](https://gallery.pai-ml.com/#/preview/deepLearning/cv/easyanimate)
 
 #### b. 通过docker
 使用docker的情况下，请保证机器中已经正确安装显卡驱动与CUDA环境，然后以此执行以下命令：
@@ -186,7 +189,12 @@ EasyAnimateV2:
 - 步骤3：根据页面选择生成模型，填入prompt、neg_prompt、guidance_scale和seed等，点击生成，等待生成结果，结果保存在sample文件夹中。
 
 ### 2. 模型训练
+一个完整的EasyAnimate训练链路应该包括数据预处理、Video VAE训练、Video DiT训练。其中Video VAE训练是一个可选项，因为我们已经提供了训练好的Video VAE。
+
+#### a. 数据预处理
 我们给出了一个简单的demo通过图片数据训练lora模型，详情可以查看[wiki](https://github.com/aigc-apps/EasyAnimate/wiki/Training-Lora)。
+
+一个完整的长视频切分、清洗、描述的数据预处理链路可以参考video caption部分的[README](easyanimate/video_caption/README.md)进行。
 
 如果期望训练一个文生图视频的生成模型，您需要以这种格式排列数据集。
 ```
@@ -200,7 +208,7 @@ EasyAnimateV2:
 │       └── 📄 json_of_internal_datasets.json
 ```
 
-json_of_internal_datasets.json是一个标准的json文件，如下所示：
+json_of_internal_datasets.json是一个标准的json文件。json中的file_path可以被设置为相对路径，如下所示：
 ```json
 [
     {
@@ -215,17 +223,6 @@ json_of_internal_datasets.json是一个标准的json文件，如下所示：
     },
     .....
 ]
-```
-json中的file_path可以被设置为相对路径。
-
-然后，进入scripts/train_t2iv.sh进行设置。
-```
-export DATASET_NAME="datasets/internal_datasets/"
-export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.json"
-
-...
-
-train_data_format="normal"
 ```
 
 你也可以将路径设置为绝对路径：
@@ -244,7 +241,24 @@ train_data_format="normal"
     .....
 ]
 ```
-此时 scripts/train_t2iv.sh 可以被设置为如下:
+
+#### b. Video VAE训练 （可选）
+Video VAE训练是一个可选项，因为我们已经提供了训练好的Video VAE。
+
+如果想要进行训练，可以参考video vae部分的[README](easyanimate/vae/README.md)进行。
+
+#### c. Video DiT训练 
+如果数据预处理时，数据的格式为相对路径，则进入scripts/train_t2iv.sh进行如下设置。
+```
+export DATASET_NAME="datasets/internal_datasets/"
+export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.json"
+
+...
+
+train_data_format="normal"
+```
+
+如果数据的格式为绝对路径，则进入scripts/train_t2iv.sh进行如下设置。
 ```
 export DATASET_NAME=""
 export DATASET_META_NAME="/mnt/data/json_of_internal_datasets.json"

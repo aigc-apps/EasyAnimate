@@ -1,7 +1,7 @@
-# 📷 EasyAnimate | Integrated generation of baseline scheme for videos and images.
-😊 EasyAnimate is a repo for generating long videos and images, training transformer based diffusion generators.
+# 📷 EasyAnimate | An End-to-End Solution for High-Resolution and Long Video Generation
+😊 EasyAnimate is an end-to-end solution for generating high-resolution and long videos. We can train transformer based diffusion generators, train VAEs for processing long videos, and preprocess metadata. 
 
-😊 Based on Sora like structure and DIT, we use transformer as a diffuser for video generation. In order to ensure good expansibility, we built easyanimate based on motion module. In the future, we will try more training programs to improve the effect.
+😊 Based on Sora like structure and DIT, we use transformer as a diffuser for video generation. We built easyanimate based on motion module, u-vit and slice-vae. In the future, we will try more training programs to improve the effect.
 
 😊 Welcome!
 
@@ -68,7 +68,11 @@ We show some results in the [GALLERY](scripts/Result%20Gallery.md).
 # Quick Start
 ### 1. Cloud usage: AliyunDSW/Docker
 #### a. From AliyunDSW
-Stay tuned.
+DSW has free GPU time, which can be applied once by a user and is valid for 3 months after applying.
+
+Aliyun provide free GPU time in [Freetier](https://free.aliyun.com/?product=9602825&crowd=enterprise&spm=5176.28055625.J_5831864660.1.e939154aRgha4e&scm=20140722.M_9974135.P_110.MO_1806-ID_9974135-MID_9974135-CID_30683-ST_8512-V_1), get it and use in Aliyun PAI-DSW to start EasyAnimate within 5min!
+
+[![DSW Notebook](images/dsw.png)](https://gallery.pai-ml.com/#/preview/deepLearning/cv/easyanimate)
 
 #### b. From docker
 If you are using docker, please make sure that the graphics card driver and CUDA environment have been installed correctly in your machine.
@@ -186,7 +190,13 @@ EasyAnimateV2:
 - Step 3: Select the generated model based on the page, fill in prompt, neg_prompt, guidance_scale, and seed, click on generate, wait for the generated result, and save the result in the samples folder.
 
 ### 2. Model Training
-We have provided a simple demo of training the Lora model through image data, which can be found in the [wiki](https://github.com/aigc-apps/EasyAnimate/wiki/Training-Lora) for details.
+A complete EasyAnimate training pipeline should include data preprocessing, Video VAE training, and Video DiT training. Among these, Video VAE training is optional because we have already provided a pre-trained Video VAE.
+
+#### a. data preprocessing
+We have provided a simple demo of training the Lora model through image data, which can be found in the [wiki](https://github.com/aigc-apps/
+EasyAnimate/wiki/Training-Lora) for details.
+
+A complete data preprocessing link for long video segmentation, cleaning, and description can refer to [README](https://github.com/aigc-apps/EasyAnimate/wiki/Training-Lora) in the video captions section. 
 
 If you want to train a text to image and video generation model. You need to arrange the dataset in this format.
 
@@ -201,7 +211,7 @@ If you want to train a text to image and video generation model. You need to arr
 │       └── 📄 json_of_internal_datasets.json
 ```
 
-The json_of_internal_datasets.json is a standard JSON file, as shown in below:
+The json_of_internal_datasets.json is a standard JSON file. The file_path in the json can to be set as relative path, as shown in below:
 ```json
 [
     {
@@ -216,13 +226,6 @@ The json_of_internal_datasets.json is a standard JSON file, as shown in below:
     },
     .....
 ]
-```
-The file_path in the json can to be set as relative path.
-
-Then, set scripts/train_t2iv.sh.
-```
-export DATASET_NAME="datasets/internal_datasets/"
-export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.json"
 ```
 
 You can also set the path as absolute path as follow:
@@ -241,7 +244,19 @@ You can also set the path as absolute path as follow:
     .....
 ]
 ```
-The scripts/train_t2iv.sh should be set as follow:
+
+#### b. Video VAE training (optional)
+Video VAE training is an optional option as we have already provided pre trained Video VAEs.
+If you want to train video vae, you can refer to [README] (easyanimate/vae/README. md) in the video vae section.
+
+#### c. Video VAE training
+If the data format is relative path during data preprocessing, please set ```scripts/train_t2iv.sh``` as follow.
+```
+export DATASET_NAME="datasets/internal_datasets/"
+export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.json"
+```
+
+If the data format is absolute path during data preprocessing, please set ```scripts/train_t2iv.sh``` as follow.
 ```
 export DATASET_NAME=""
 export DATASET_META_NAME="/mnt/data/json_of_internal_datasets.json"

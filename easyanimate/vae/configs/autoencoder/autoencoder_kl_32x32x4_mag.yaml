@@ -29,6 +29,7 @@ data:
       target: easyanimate.vae.ldm.data.dataset_image_video.CustomSRTrain
       params:
         data_json_path: pretrain.json
+        data_root: /your_data_root # This is used in relative path
         size: 128
         degradation: pil_nearest
         video_size: 128
@@ -38,6 +39,7 @@ data:
       target: easyanimate.vae.ldm.data.dataset_image_video.CustomSRValidation
       params:
         data_json_path: pretrain.json
+        data_root: /your_data_root # This is used in relative path
         size: 128
         degradation: pil_nearest
         video_size: 128
