@@ -31,7 +31,7 @@ Data preprocessing can be divided into three parts:
 
 The input for data preprocessing can be a video folder or a metadata file (txt/csv/jsonl) containing the video path column. Please check `get_video_path_list` function in [utils/video_utils.py](utils/video_utils.py) for details.
 
-For easier understanding, we use one data from Panda70m as an example for data preprocessing. Please download the video and push it in "datasets/panda_70m/before_vcut/"
+For easier understanding, we use one data from Panda70m as an example for data preprocessing, [Download here](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/--C66yU3LjM_2.mp4). Please download the video and push it in "datasets/panda_70m/before_vcut/"
 
 ```
 📦 datasets/
