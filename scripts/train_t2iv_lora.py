@@ -20,6 +20,7 @@ import gc
 import logging
 import math
 import os
+import pickle
 import shutil
 import sys
 
@@ -50,7 +51,6 @@ from tqdm.auto import tqdm
 from transformers import T5EncoderModel, T5Tokenizer
 from transformers.utils import ContextManagers
 
-import pickle
 import datasets
 
 current_file_path = os.path.abspath(__file__)
@@ -61,33 +61,26 @@ for project_root in project_roots:
 from easyanimate.data.bucket_sampler import (ASPECT_RATIO_512,
                                              ASPECT_RATIO_RANDOM_CROP_512,
                                              ASPECT_RATIO_RANDOM_CROP_PROB,
-                                             AspectRatioBatchImageSampler, RandomSampler,
+                                             AspectRatioBatchImageSampler,
                                              AspectRatioBatchImageVideoSampler,
-                                             get_closest_ratio)
+                                             AspectRatioBatchSampler,
+                                             RandomSampler, get_closest_ratio)
 from easyanimate.data.dataset_image import CC15M
 from easyanimate.data.dataset_image_video import (ImageVideoDataset,
                                                   ImageVideoSampler)
+from easyanimate.data.dataset_video import VideoDataset, WebVid10M
 from easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
 from easyanimate.models.transformer2d import Transformer2DModel
 from easyanimate.models.transformer3d import Transformer3DModel
 from easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
+from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
+    EasyAnimateInpaintPipeline
 from easyanimate.pipeline.pipeline_pixart_magvit import \
     PixArtAlphaMagvitPipeline
-from easyanimate.utils.IDDIM import IDDPM
-from easyanimate.utils.utils import save_videos_grid
-
-from easyanimate.data.bucket_sampler import (ASPECT_RATIO_512,
-                                          ASPECT_RATIO_RANDOM_CROP_512,
-                                          ASPECT_RATIO_RANDOM_CROP_PROB,
-                                          AspectRatioBatchSampler,
-                                          get_closest_ratio)
-from easyanimate.data.dataset_video import VideoDataset, WebVid10M
-from easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
-from easyanimate.models.transformer3d import Transformer3DModel
-from easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
-from easyanimate.pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaintPipeline
-from easyanimate.utils.IDDIM import IDDPM
-from easyanimate.utils.lora_utils import create_network, merge_lora, unmerge_lora
+from easyanimate.utils import gaussian_diffusion as gd
+from easyanimate.utils.lora_utils import (create_network, merge_lora,
+                                          unmerge_lora)
+from easyanimate.utils.respace import SpacedDiffusion, space_timesteps
 from easyanimate.utils.utils import save_videos_grid
 
 if is_wandb_available():
@@ -619,7 +612,11 @@ def main():
 
     # Load scheduler, tokenizer and models.
     # noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
-    train_diffusion = IDDPM(str(args.train_sampling_steps), learn_sigma=True, pred_sigma=True, snr=args.snr_loss)
+    train_diffusion = SpacedDiffusion(
+        use_timesteps=space_timesteps(1000, str(args.train_sampling_steps)), betas=gd.get_named_beta_schedule("linear", 1000),
+        model_mean_type=(gd.ModelMeanType.EPSILON), model_var_type=((gd.ModelVarType.LEARNED_RANGE)),
+        loss_type=gd.LossType.MSE, snr=args.snr_loss, return_startx=False,
+    )
     tokenizer = T5Tokenizer.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
     )
