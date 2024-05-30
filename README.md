@@ -8,7 +8,7 @@
 [![Arxiv Page](https://img.shields.io/badge/Arxiv-Page-red)](https://arxiv.org/pdf/2405.18991v1/)
 [![Project Page](https://img.shields.io/badge/Project-Website-green)](https://easyanimate.github.io/)
 [![Modelscope Studio](https://img.shields.io/badge/Modelscope-Studio-blue)](https://modelscope.cn/studios/PAI/EasyAnimate/summary)
-[![Paper](https://img.shields.io/badge/Paper-arxiv-red)](https://arxiv.org/pdf/2405.18991v1)
+
 
 
 English | [简体中文](./README_zh-CN.md)
