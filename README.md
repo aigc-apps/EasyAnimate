@@ -30,7 +30,7 @@ EasyAnimate is a pipeline based on the transformer architecture that can be used
 We will support quick pull-ups from different platforms, refer to [Quick Start](#quick-start).
 
 What's New:
-- Updated to v2 version, supports a maximum of 144 frames (768x768, 6s, 24fps) for generation. [ 2024.05.26 ]
+- Updated to v2, supports a maximum of 144 frames (768x768, 6s, 24fps) for generation. [ 2024.05.26 ]
 - Create Code! Support for Windows and Linux Now. [ 2024.04.12 ]
 
 Function：
@@ -177,10 +177,9 @@ A complete EasyAnimate training pipeline should include data preprocessing, Vide
 
 <h4 id="data-preprocess">a. data preprocessing</h4>
 
-We have provided a simple demo of training the Lora model through image data, which can be found in the [wiki](https://github.com/aigc-apps/
-EasyAnimate/wiki/Training-Lora) for details.
+We have provided a simple demo of training the Lora model through image data, which can be found in the [wiki](https://github.com/aigc-apps/EasyAnimate/wiki/Training-Lora) for details.
 
-A complete data preprocessing link for long video segmentation, cleaning, and description can refer to [README](https://github.com/aigc-apps/EasyAnimate/wiki/Training-Lora) in the video captions section. 
+A complete data preprocessing link for long video segmentation, cleaning, and description can refer to [README](./easyanimate/video_caption/README.md) in the video captions section. 
 
 If you want to train a text to image and video generation model. You need to arrange the dataset in this format.
 
