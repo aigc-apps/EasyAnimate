@@ -304,7 +304,7 @@ Additionally, referencing U-ViT, it introduces a skip connection structure into 
 
 Moreover, it proposes Slice VAE, which addresses the memory difficulties encountered by MagViT when dealing with long and large videos, while also achieving greater compression in the temporal dimension during video encoding and decoding stages compared to MagViT.
 
-For more details, please refer to [arxiv]().
+For more details, please refer to [arxiv](https://arxiv.org/pdf/2405.18991v1).
 
 # Reference
 - magvit: https://github.com/google-research/magvit
