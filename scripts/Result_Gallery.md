@@ -7,8 +7,13 @@ Result of 512x512:
 This is an image containing the first frame of all videos. Due to Github's security policy, it is not possible to directly upload videos for playback. Specific videos can be downloaded through this [link](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Res_512.zip).
 ![Combine_512](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Combine_512.jpg)
 
+Result of 768x768:
+
+This is an image containing the first frame of all videos. Due to Github's security policy, it is not possible to directly upload videos for playback. Specific videos can be downloaded through this [link](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Res_768.zip).
+![Combine_768](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Combine_768.jpg)
+
 <details>
-  <summary>EasyAnimateV1:</summary>
+  <summary>(Obsolete) EasyAnimateV1:</summary>
 
 Sometimes Github cannot display large GIFs properly. You can download GIFs locally to view them.
 
