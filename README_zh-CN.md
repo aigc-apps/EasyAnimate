@@ -7,17 +7,18 @@
  
 [![Project Page](https://img.shields.io/badge/Project-Website-green)](https://easyanimate.github.io/)
 [![Modelscope Studio](https://img.shields.io/badge/Modelscope-Studio-blue)](https://modelscope.cn/studios/PAI/EasyAnimate/summary)
+[![Paper](https://img.shields.io/badge/Paper-arxiv-red)](https://arxiv.org/pdf/2405.18991v1)
 
 [English](./README.md) | 简体中文
 
 # 目录
 - [目录](#目录)
 - [简介](#简介)
-- [TODO List](#todo-list)
-- [Model zoo](#model-zoo)
 - [快速启动](#快速启动)
 - [如何使用](#如何使用)
+- [模型地址](#model-zoo)
 - [算法细节](#算法细节)
+- [未来计划](#todo-list)
 - [参考文献](#参考文献)
 - [许可证](#许可证)
 
@@ -30,42 +31,18 @@ EasyAnimate是一个基于transformer结构的pipeline，可用于生成AI图片
 - 更新到v2版本，最大支持144帧(768x768, 6s, 24fps)生成。[ 2024.05.26 ]
 - 创建代码！现在支持 Windows 和 Linux。[ 2024.04.12 ]
 
-这些是我们的生成结果:
+功能概览：
+- [数据预处理](#data-preprocess)
+- [训练VAE](#vae-train)
+- [训练DiT](#dit-train)
+- [模型生成](#video-gen)
+
+这些是我们的生成结果 [GALLERY](scripts/Result_Gallery.md):
+
 ![Combine_512](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Combine_512.jpg)
 
 我们的ui界面如下:
 ![ui](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/ui.png)
-
-# TODO List
-- 支持更大分辨率的文视频生成模型。
-- 支持视频inpaint模型。
-
-# Model zoo
-EasyAnimateV2:
-| 名称 | 种类 | 存储空间 | 下载地址 | 描述 |
-|--|--|--|--|--| 
-| EasyAnimateV2-XL-2-512x512.tar | EasyAnimateV2 | 16.2GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512.tar)| EasyAnimateV2 official weights for 512x512 resolution. Training with 144 frames and fps 24 |
-| EasyAnimateV2-XL-2-768x768.tar | EasyAnimateV2 | 16.2GB | Coming soon | EasyAnimateV2 official weights for 768x768 resolution. Training with 144 frames and fps 24 |
-| easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors)| A lora training with a specifial type images. Images can be downloaded from [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/webui/Minimalism.zip). |
-
-<details>
-  <summary>(Obsolete) EasyAnimateV1:</summary>
-
-### 1、运动权重
-| 名称 | 种类 | 存储空间 | 下载地址 | 描述 |
-|--|--|--|--|--|  
-| easyanimate_v1_mm.safetensors | Motion Module | 4.1GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Motion_Module/easyanimate_v1_mm.safetensors) | Training with 80 frames and fps 12 |
-
-### 2、其他权重
-| 名称 | 种类 | 存储空间 | 下载地址 | 描述 |
-|--|--|--|--|--| 
-| PixArt-XL-2-512x512.tar | Pixart | 11.4GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/PixArt-XL-2-512x512.tar)| Pixart-Alpha official weights |
-| easyanimate_portrait.safetensors | Checkpoint of Pixart | 2.3GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait.safetensors) | Training with internal portrait datasets |
-| easyanimate_portrait_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait_lora.safetensors)| Training with internal portrait datasets |
-</details>
-
-# 生成效果
-我们将一些结果展示在这里 [GALLERY](scripts/Result%20Gallery.md). 
 
 # 快速启动
 ### 1. 云使用: AliyunDSW/Docker
@@ -152,7 +129,7 @@ Linux 的详细信息：
 我们需要大约 60GB 的可用磁盘空间，请检查！
 
 #### b. 权重放置
-我们最好将权重按照指定路径进行放置：
+我们最好将[权重](#model-zoo)按照指定路径进行放置：
 
 EasyAnimateV2: 
 ```
@@ -177,23 +154,25 @@ EasyAnimateV2:
 </details>
 
 # 如何使用
-### 1. 生成
+
+<h3 id="video-gen">1. 生成 </h3>
+
 #### a. 视频生成
 ##### i、运行python文件
-- 步骤1：下载对应权重放入models文件夹。
+- 步骤1：下载对应[权重](#model-zoo)放入models文件夹。
 - 步骤2：在predict_t2v.py文件中修改prompt、neg_prompt、guidance_scale和seed。
 - 步骤3：运行predict_t2v.py文件，等待生成结果，结果保存在samples/easyanimate-videos文件夹中。
 - 步骤4：如果想结合自己训练的其他backbone与Lora，则看情况修改predict_t2v.py中的predict_t2v.py和lora_path。
 
 ##### ii、通过ui界面
-- 步骤1：下载对应权重放入models文件夹。
+- 步骤1：下载对应[权重](#model-zoo)放入models文件夹。
 - 步骤2：运行app.py文件，进入gradio页面。
 - 步骤3：根据页面选择生成模型，填入prompt、neg_prompt、guidance_scale和seed等，点击生成，等待生成结果，结果保存在sample文件夹中。
 
 ### 2. 模型训练
 一个完整的EasyAnimate训练链路应该包括数据预处理、Video VAE训练、Video DiT训练。其中Video VAE训练是一个可选项，因为我们已经提供了训练好的Video VAE。
 
-#### a. 数据预处理
+<h4 id="data-preprocess">a.数据预处理</h4>
 我们给出了一个简单的demo通过图片数据训练lora模型，详情可以查看[wiki](https://github.com/aigc-apps/EasyAnimate/wiki/Training-Lora)。
 
 一个完整的长视频切分、清洗、描述的数据预处理链路可以参考video caption部分的[README](easyanimate/video_caption/README.md)进行。
@@ -243,13 +222,13 @@ json_of_internal_datasets.json是一个标准的json文件。json中的file_path
     .....
 ]
 ```
-
-#### b. Video VAE训练 （可选）
+<h4 id="vae-train">b. Video VAE训练 （可选）</h4>
 Video VAE训练是一个可选项，因为我们已经提供了训练好的Video VAE。
 
 如果想要进行训练，可以参考video vae部分的[README](easyanimate/vae/README.md)进行。
 
-#### c. Video DiT训练 
+<h4 id="dit-train">c. Video DiT训练 </h4>
+
 如果数据预处理时，数据的格式为相对路径，则进入scripts/train_t2iv.sh进行如下设置。
 ```
 export DATASET_NAME="datasets/internal_datasets/"
@@ -306,6 +285,36 @@ sh scripts/train_t2iv.sh
 同时，其提出了Slice VAE，用于解决MagViT在面对长、大视频时编解码上的显存困难，同时相比于MagViT在视频编解码阶段进行了时间维度更大的压缩。
 
 更多细节可以看查看[arxiv](https://arxiv.org/pdf/2405.18991v1)。
+
+
+# TODO List
+- 支持更大分辨率的文视频生成模型。
+- 支持视频inpaint模型。
+
+# Model zoo
+EasyAnimateV2:
+| 名称 | 种类 | 存储空间 | 下载地址 | 描述 |
+|--|--|--|--|--| 
+| EasyAnimateV2-XL-2-512x512.tar | EasyAnimateV2 | 16.2GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512.tar)| EasyAnimateV2 official weights for 512x512 resolution. Training with 144 frames and fps 24 |
+| EasyAnimateV2-XL-2-768x768.tar | EasyAnimateV2 | 16.2GB | Coming soon | EasyAnimateV2 official weights for 768x768 resolution. Training with 144 frames and fps 24 |
+| easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors)| A lora training with a specifial type images. Images can be downloaded from [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/webui/Minimalism.zip). |
+
+<details>
+  <summary>(Obsolete) EasyAnimateV1:</summary>
+
+### 1、运动权重
+| 名称 | 种类 | 存储空间 | 下载地址 | 描述 |
+|--|--|--|--|--|  
+| easyanimate_v1_mm.safetensors | Motion Module | 4.1GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Motion_Module/easyanimate_v1_mm.safetensors) | Training with 80 frames and fps 12 |
+
+### 2、其他权重
+| 名称 | 种类 | 存储空间 | 下载地址 | 描述 |
+|--|--|--|--|--| 
+| PixArt-XL-2-512x512.tar | Pixart | 11.4GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/PixArt-XL-2-512x512.tar)| Pixart-Alpha official weights |
+| easyanimate_portrait.safetensors | Checkpoint of Pixart | 2.3GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait.safetensors) | Training with internal portrait datasets |
+| easyanimate_portrait_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait_lora.safetensors)| Training with internal portrait datasets |
+</details>
+
 
 # 参考文献
 - magvit: https://github.com/google-research/magvit
