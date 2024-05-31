@@ -9,10 +9,12 @@ from glob import glob
 
 import gradio as gr
 import torch
+import numpy as np
 from diffusers import (AutoencoderKL, DDIMScheduler,
                        DPMSolverMultistepScheduler,
                        EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
                        PNDMScheduler)
+from easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
 from diffusers.utils.import_utils import is_xformers_available
 from omegaconf import OmegaConf
 from safetensors import safe_open
@@ -22,6 +24,7 @@ from easyanimate.models.transformer3d import Transformer3DModel
 from easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import save_videos_grid
+from PIL import Image
 
 sample_idx = 0
 scheduler_dict = {
@@ -45,11 +48,14 @@ class EasyAnimateController:
     def __init__(self):
         # config dirs
         self.basedir                    = os.getcwd()
+        self.config_dir                 = os.path.join(self.basedir, "config")
         self.diffusion_transformer_dir  = os.path.join(self.basedir, "models", "Diffusion_Transformer")
         self.motion_module_dir          = os.path.join(self.basedir, "models", "Motion_Module")
         self.personalized_model_dir     = os.path.join(self.basedir, "models", "Personalized_Model")
         self.savedir                    = os.path.join(self.basedir, "samples", datetime.now().strftime("Gradio-%Y-%m-%dT%H-%M-%S"))
         self.savedir_sample             = os.path.join(self.savedir, "sample")
+        self.edition                    = "v2"
+        self.inference_config           = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_magvit_motion_module_v2.yaml"))
         os.makedirs(self.savedir, exist_ok=True)
 
         self.diffusion_transformer_list = []
@@ -59,17 +65,18 @@ class EasyAnimateController:
         self.refresh_diffusion_transformer()
         self.refresh_motion_module()
         self.refresh_personalized_model()
-        
+
         # config models
         self.tokenizer             = None
         self.text_encoder          = None
         self.vae                   = None
         self.transformer           = None
         self.pipeline              = None
+        self.motion_module_path    = "none"
+        self.base_model_path       = "none"
         self.lora_model_path       = "none"
         
-        self.weight_dtype = torch.float16
-        self.inference_config = OmegaConf.load("config/easyanimate_video_motion_module_v1.yaml")
+        self.weight_dtype = torch.bfloat16
 
     def refresh_diffusion_transformer(self):
         self.diffusion_transformer_list = glob(os.path.join(self.diffusion_transformer_dir, "*/"))
@@ -81,23 +88,55 @@ class EasyAnimateController:
     def refresh_personalized_model(self):
         personalized_model_list = glob(os.path.join(self.personalized_model_dir, "*.safetensors"))
         self.personalized_model_list = [os.path.basename(p) for p in personalized_model_list]
+    
+    def update_edition(self, edition):
+        print("Update edition of EasyAnimate")
+        self.edition = edition
+        if edition == "v1":
+            self.inference_config = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_motion_module_v1.yaml"))
+            return gr.Dropdown.update(), gr.update(value="none"), gr.update(visible=True), gr.update(visible=True), \
+                gr.update(visible=False), gr.update(value=512, minimum=384, maximum=704, step=32), \
+                gr.update(value=512, minimum=384, maximum=704, step=32), gr.update(value=80, minimum=40, maximum=80, step=1)
+        else:
+            self.inference_config = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_magvit_motion_module_v2.yaml"))
+            return gr.Dropdown.update(), gr.update(value="none"), gr.update(visible=False), gr.update(visible=False), \
+                gr.update(visible=True), gr.update(value=672, minimum=128, maximum=1280, step=16), \
+                gr.update(value=384, minimum=128, maximum=1280, step=16), gr.update(value=144, minimum=9, maximum=144, step=9)
 
     def update_diffusion_transformer(self, diffusion_transformer_dropdown):
         print("Update diffusion transformer")
         if diffusion_transformer_dropdown == "none":
             return gr.Dropdown.update()
-        self.vae = AutoencoderKL.from_pretrained(diffusion_transformer_dropdown, subfolder="vae", torch_dtype = self.weight_dtype)
+        if OmegaConf.to_container(self.inference_config['vae_kwargs'])['enable_magvit']:
+            Choosen_AutoencoderKL = AutoencoderKLMagvit
+        else:
+            Choosen_AutoencoderKL = AutoencoderKL
+        self.vae = Choosen_AutoencoderKL.from_pretrained(
+            diffusion_transformer_dropdown, 
+            subfolder="vae", 
+        ).to(self.weight_dtype)
         self.transformer = Transformer3DModel.from_pretrained_2d(
             diffusion_transformer_dropdown, 
             subfolder="transformer", 
             transformer_additional_kwargs=OmegaConf.to_container(self.inference_config.transformer_additional_kwargs)
         ).to(self.weight_dtype)
         self.tokenizer = T5Tokenizer.from_pretrained(diffusion_transformer_dropdown, subfolder="tokenizer")
-        self.text_encoder = T5EncoderModel.from_pretrained(diffusion_transformer_dropdown, subfolder="text_encoder", torch_dtype = self.weight_dtype)
+        self.text_encoder = T5EncoderModel.from_pretrained(diffusion_transformer_dropdown, subfolder="text_encoder", torch_dtype=self.weight_dtype)
+
+        # Get pipeline
+        self.pipeline = EasyAnimatePipeline(
+            vae=self.vae, 
+            text_encoder=self.text_encoder, 
+            tokenizer=self.tokenizer, 
+            transformer=self.transformer,
+            scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
+        )
+        self.pipeline.enable_model_cpu_offload()
         print("Update diffusion transformer done")
         return gr.Dropdown.update()
 
     def update_motion_module(self, motion_module_dropdown):
+        self.motion_module_path = motion_module_dropdown
         print("Update motion module")
         if motion_module_dropdown == "none":
             return gr.Dropdown.update()
@@ -114,11 +153,11 @@ class EasyAnimateController:
                     raise RuntimeError(f"{motion_module_dropdown} does not exist")
                 motion_module_state_dict = torch.load(motion_module_dropdown, map_location="cpu")
             missing, unexpected = self.transformer.load_state_dict(motion_module_state_dict, strict=False)
-            assert len(unexpected) == 0
-            print("Update motion module done")
+            print("Update motion module done.")
             return gr.Dropdown.update()
 
     def update_base_model(self, base_model_dropdown):
+        self.base_model_path = base_model_dropdown
         print("Update base model")
         if base_model_dropdown == "none":
             return gr.Dropdown.update()
@@ -136,6 +175,10 @@ class EasyAnimateController:
             return gr.Dropdown.update()
 
     def update_lora_model(self, lora_model_dropdown):
+        print("Update lora model")
+        if lora_model_dropdown == "none":
+            self.lora_model_path = "none"
+            return gr.Dropdown.update()
         lora_model_dropdown = os.path.join(self.personalized_model_dir, lora_model_dropdown)
         self.lora_model_path = lora_model_dropdown
         return gr.Dropdown.update()
@@ -145,51 +188,56 @@ class EasyAnimateController:
         diffusion_transformer_dropdown,
         motion_module_dropdown,
         base_model_dropdown,
+        lora_model_dropdown, 
         lora_alpha_slider,
         prompt_textbox, 
         negative_prompt_textbox, 
         sampler_dropdown, 
         sample_step_slider, 
         width_slider, 
-        length_slider, 
         height_slider, 
+        is_image,
+        length_slider, 
         cfg_scale_slider, 
-        seed_textbox
-    ):    
+        seed_textbox,
+        is_api = False,
+    ):
         global sample_idx
         if self.transformer is None:
             raise gr.Error(f"Please select a pretrained model path.")
-        if motion_module_dropdown == "": 
-            raise gr.Error(f"Please select a motion module.")
+
+        if self.base_model_path != base_model_dropdown:
+            self.update_base_model(base_model_dropdown)
+
+        if self.motion_module_path != motion_module_dropdown:
+            self.update_motion_module(motion_module_dropdown)
+
+        if self.lora_model_path != lora_model_dropdown:
+            print("Update lora model")
+            self.update_lora_model(lora_model_dropdown)
 
         if is_xformers_available(): self.transformer.enable_xformers_memory_efficient_attention()
 
-        pipeline = EasyAnimatePipeline(
-            vae=self.vae, 
-            text_encoder=self.text_encoder, 
-            tokenizer=self.tokenizer, 
-            transformer=self.transformer,
-            scheduler=scheduler_dict[sampler_dropdown](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
-        )
+        self.pipeline.scheduler = scheduler_dict[sampler_dropdown](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
         if self.lora_model_path != "none":
             # lora part
-            pipeline = merge_lora(pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
-            
-        pipeline.to("cuda")
+            self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
+        self.pipeline.to("cuda")
 
-        if seed_textbox != -1 and seed_textbox != "": torch.manual_seed(int(seed_textbox))
-        else: torch.seed()
-        seed = torch.initial_seed()
+        if int(seed_textbox) != -1 and seed_textbox != "": torch.manual_seed(int(seed_textbox))
+        else: seed_textbox = np.random.randint(0, 1e10)
+        generator = torch.Generator(device="cuda").manual_seed(int(seed_textbox))
         
         try:
-            sample = pipeline(
+            sample = self.pipeline(
                 prompt_textbox,
                 negative_prompt     = negative_prompt_textbox,
                 num_inference_steps = sample_step_slider,
                 guidance_scale      = cfg_scale_slider,
                 width               = width_slider,
                 height              = height_slider,
-                video_length        = length_slider,
+                video_length        = length_slider if not is_image else 1,
+                generator           = generator
             ).videos
         except Exception as e:
             # lora part
@@ -197,17 +245,16 @@ class EasyAnimateController:
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
             if self.lora_model_path != "none":
-                pipeline = unmerge_lora(pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
-            return gr.Video.update()
+                self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
+            if is_api:
+                return save_sample_path, f"Error. error information is {str(e)}"
+            else:
+                return gr.Image.update(), gr.Video.update(), f"Error. error information is {str(e)}"
 
         # lora part
         if self.lora_model_path != "none":
-            pipeline = unmerge_lora(pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
+            self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
 
-        save_sample_path = os.path.join(self.savedir_sample, f"{sample_idx}.mp4")
-        sample_idx += 1
-        save_videos_grid(sample, save_sample_path, fps=12)
-    
         sample_config = {
             "prompt": prompt_textbox,
             "n_prompt": negative_prompt_textbox,
@@ -217,15 +264,39 @@ class EasyAnimateController:
             "width": width_slider,
             "height": height_slider,
             "video_length": length_slider,
-            "seed": seed
+            "seed_textbox": seed_textbox
         }
         json_str = json.dumps(sample_config, indent=4)
         with open(os.path.join(self.savedir, "logs.json"), "a") as f:
             f.write(json_str)
             f.write("\n\n")
             
-        return gr.Video.update(value=save_sample_path)
+        if not os.path.exists(self.savedir_sample):
+            os.makedirs(self.savedir_sample, exist_ok=True)
+        index = len([path for path in os.listdir(self.savedir_sample)]) + 1
+        prefix = str(index).zfill(3)
 
+        if is_image or length_slider == 1:
+            save_sample_path = os.path.join(self.savedir_sample, prefix + f".png")
+
+            image = sample[0, :, 0]
+            image = image.transpose(0, 1).transpose(1, 2)
+            image = (image * 255).numpy().astype(np.uint8)
+            image = Image.fromarray(image)
+            image.save(save_sample_path)
+
+            if is_api:
+                return save_sample_path, "Success"
+            else:
+                return gr.Image.update(value=save_sample_path, visible=True), gr.Video.update(value=None, visible=False), "Success"
+        else:
+            save_sample_path = os.path.join(self.savedir_sample, prefix + f".mp4")
+            save_videos_grid(sample, save_sample_path, fps=12 if self.edition == "v1" else 24)
+
+            if is_api:
+                return save_sample_path, "Success"
+            else:
+                return gr.Image.update(visible=False, value=None), gr.Video.update(value=save_sample_path, visible=True), "Success"
 
 def ui():
     controller = EasyAnimateController()
@@ -233,14 +304,27 @@ def ui():
     with gr.Blocks(css=css) as demo:
         gr.Markdown(
             """
-            # EasyAnimate: Generate your animation easily
+            # EasyAnimate: Integrated generation of baseline scheme for videos and images.
+            Generate your videos easily
             [Github](https://github.com/aigc-apps/EasyAnimate/)
             """
         )
         with gr.Column(variant="panel"):
             gr.Markdown(
                 """
-                ### 1. Model checkpoints (select pretrained model path first).
+                ### 1. EasyAnimate Edition (select easyanimate edition first).
+                """
+            )
+            with gr.Row():
+                easyanimate_edition_dropdown = gr.Dropdown(
+                    label="The config of EasyAnimate Edition",
+                    choices=["v1", "v2"],
+                    value="v2",
+                    interactive=True,
+                )
+            gr.Markdown(
+                """
+                ### 2. Model checkpoints (select pretrained model path).
                 """
             )
             with gr.Row():
@@ -268,10 +352,10 @@ def ui():
                     choices=controller.motion_module_list,
                     value="none",
                     interactive=True,
+                    visible=False
                 )
-                motion_module_dropdown.change(fn=controller.update_motion_module, inputs=[motion_module_dropdown], outputs=[motion_module_dropdown])
-                
-                motion_module_refresh_button = gr.Button(value="\U0001F503", elem_classes="toolbutton")
+
+                motion_module_refresh_button = gr.Button(value="\U0001F503", elem_classes="toolbutton", visible=False)
                 def update_motion_module():
                     controller.refresh_motion_module()
                     return gr.Dropdown.update(choices=controller.motion_module_list)
@@ -283,7 +367,6 @@ def ui():
                     value="none",
                     interactive=True,
                 )
-                base_model_dropdown.change(fn=controller.update_base_model, inputs=[base_model_dropdown], outputs=[base_model_dropdown])
                 
                 lora_model_dropdown = gr.Dropdown(
                     label="Select LoRA model (optional)",
@@ -291,8 +374,7 @@ def ui():
                     value="none",
                     interactive=True,
                 )
-                lora_model_dropdown.change(fn=controller.update_lora_model, inputs=[lora_model_dropdown], outputs=[lora_model_dropdown])
-                
+
                 lora_alpha_slider = gr.Slider(label="LoRA alpha", value=0.55, minimum=0, maximum=2, interactive=True)
                 
                 personalized_refresh_button = gr.Button(value="\U0001F503", elem_classes="toolbutton")
@@ -307,50 +389,257 @@ def ui():
         with gr.Column(variant="panel"):
             gr.Markdown(
                 """
-                ### 2. Configs for Generation.
+                ### 3. Configs for Generation.
                 """
             )
             
-            prompt_textbox = gr.Textbox(label="Prompt", lines=2)
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="Strange motion trajectory, a poor composition and deformed video, worst quality, normal quality, low quality, low resolution, duplicate and ugly" )
+            prompt_textbox = gr.Textbox(label="Prompt", lines=2, value="This video shows the majestic beauty of a waterfall cascading down a cliff into a serene lake. The waterfall, with its powerful flow, is the central focus of the video. The surrounding landscape is lush and green, with trees and foliage adding to the natural beauty of the scene")
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="Strange motion trajectory, a poor composition and deformed video, worst quality, normal quality, low quality, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera" )
                 
-            with gr.Row().style(equal_height=False):
+            with gr.Row():
                 with gr.Column():
                     with gr.Row():
                         sampler_dropdown   = gr.Dropdown(label="Sampling method", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
                         sample_step_slider = gr.Slider(label="Sampling steps", value=30, minimum=10, maximum=100, step=1)
                         
-                    width_slider     = gr.Slider(label="Width",            value=512, minimum=256, maximum=1024, step=64)
-                    height_slider    = gr.Slider(label="Height",           value=512, minimum=256, maximum=1024, step=64)
-                    length_slider    = gr.Slider(label="Animation length", value=80,  minimum=16,   maximum=96,   step=1)
+                    width_slider     = gr.Slider(label="Width",            value=672, minimum=128, maximum=1280, step=16)
+                    height_slider    = gr.Slider(label="Height",           value=384, minimum=128, maximum=1280, step=16)
+                    with gr.Row():
+                        is_image      = gr.Checkbox(False, label="Generate Image")
+                        length_slider = gr.Slider(label="Animation length", value=144, minimum=9,   maximum=144,  step=9)
                     cfg_scale_slider = gr.Slider(label="CFG Scale",        value=6.0, minimum=0,   maximum=20)
                     
                     with gr.Row():
-                        seed_textbox = gr.Textbox(label="Seed", value=-1)
+                        seed_textbox = gr.Textbox(label="Seed", value=43)
                         seed_button  = gr.Button(value="\U0001F3B2", elem_classes="toolbutton")
                         seed_button.click(fn=lambda: gr.Textbox.update(value=random.randint(1, 1e8)), inputs=[], outputs=[seed_textbox])
 
                     generate_button = gr.Button(value="Generate", variant='primary')
                     
-                result_video = gr.Video(label="Generated Animation", interactive=False)
+                with gr.Column():
+                    result_image = gr.Image(label="Generated Image", interactive=False, visible=False)
+                    result_video = gr.Video(label="Generated Animation", interactive=False)
+                    infer_progress = gr.Textbox(
+                        label="Generation Info",
+                        value="No task currently",
+                        interactive=False
+                    )
 
+            is_image.change(
+                lambda x: gr.update(visible=not x),
+                inputs=[is_image],
+                outputs=[length_slider],
+            )
+            easyanimate_edition_dropdown.change(
+                fn=controller.update_edition, 
+                inputs=[easyanimate_edition_dropdown], 
+                outputs=[
+                    easyanimate_edition_dropdown, 
+                    diffusion_transformer_dropdown, 
+                    motion_module_dropdown, 
+                    motion_module_refresh_button, 
+                    is_image, 
+                    width_slider, 
+                    height_slider, 
+                    length_slider, 
+                ]
+            )
             generate_button.click(
                 fn=controller.generate,
                 inputs=[
                     diffusion_transformer_dropdown,
                     motion_module_dropdown,
                     base_model_dropdown,
+                    lora_model_dropdown,
                     lora_alpha_slider,
                     prompt_textbox, 
                     negative_prompt_textbox, 
                     sampler_dropdown, 
                     sample_step_slider, 
                     width_slider, 
-                    length_slider, 
                     height_slider, 
+                    is_image, 
+                    length_slider, 
                     cfg_scale_slider, 
                     seed_textbox,
                 ],
-                outputs=[result_video]
+                outputs=[result_image, result_video, infer_progress]
             )
-    return demo
+    return demo, controller
+
+
+class EasyAnimateController_Modelscope:
+    def __init__(self, edition, config_path, model_name, savedir_sample):
+        # Config and model path
+        weight_dtype = torch.bfloat16
+        self.savedir_sample = savedir_sample
+        os.makedirs(self.savedir_sample, exist_ok=True)
+
+        self.edition = edition
+        self.inference_config = OmegaConf.load(config_path)
+        # Get Transformer
+        self.transformer = Transformer3DModel.from_pretrained_2d(
+            model_name, 
+            subfolder="transformer",
+            transformer_additional_kwargs=OmegaConf.to_container(self.inference_config['transformer_additional_kwargs'])
+        ).to(weight_dtype)
+        if OmegaConf.to_container(self.inference_config['vae_kwargs'])['enable_magvit']:
+            Choosen_AutoencoderKL = AutoencoderKLMagvit
+        else:
+            Choosen_AutoencoderKL = AutoencoderKL
+        self.vae = Choosen_AutoencoderKL.from_pretrained(
+            model_name, 
+            subfolder="vae"
+        ).to(weight_dtype)
+        self.tokenizer = T5Tokenizer.from_pretrained(
+            model_name, 
+            subfolder="tokenizer"
+        )
+        self.text_encoder = T5EncoderModel.from_pretrained(
+            model_name, 
+            subfolder="text_encoder", 
+            torch_dtype=weight_dtype
+        )
+        self.pipeline = EasyAnimatePipeline(
+            vae=self.vae, 
+            text_encoder=self.text_encoder, 
+            tokenizer=self.tokenizer, 
+            transformer=self.transformer,
+            scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
+        )
+        self.pipeline.enable_model_cpu_offload()
+        print("Update diffusion transformer done")
+
+    def generate(
+        self,
+        prompt_textbox, 
+        negative_prompt_textbox, 
+        sampler_dropdown, 
+        sample_step_slider, 
+        width_slider, 
+        height_slider, 
+        is_image, 
+        length_slider, 
+        cfg_scale_slider, 
+        seed_textbox
+    ):    
+        if is_xformers_available(): self.transformer.enable_xformers_memory_efficient_attention()
+
+        self.pipeline.scheduler = scheduler_dict[sampler_dropdown](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
+        self.pipeline.to("cuda")
+
+        if int(seed_textbox) != -1 and seed_textbox != "": torch.manual_seed(int(seed_textbox))
+        else: seed_textbox = np.random.randint(0, 1e10)
+        generator = torch.Generator(device="cuda").manual_seed(int(seed_textbox))
+        
+        try:
+            sample = self.pipeline(
+                prompt_textbox,
+                negative_prompt = negative_prompt_textbox,
+                num_inference_steps = sample_step_slider,
+                guidance_scale = cfg_scale_slider,
+                width = width_slider,
+                height = height_slider,
+                video_length = length_slider if not is_image else 1,
+                generator = generator
+            ).videos
+        except Exception as e:
+            gc.collect()
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+            return gr.Image.update(), gr.Video.update(), f"Error. error information is {str(e)}"
+
+        if not os.path.exists(self.savedir_sample):
+            os.makedirs(self.savedir_sample, exist_ok=True)
+        index = len([path for path in os.listdir(self.savedir_sample)]) + 1
+        prefix = str(index).zfill(3)
+        
+        if is_image or length_slider == 1:
+            save_sample_path = os.path.join(self.savedir_sample, prefix + f".png")
+
+            image = sample[0, :, 0]
+            image = image.transpose(0, 1).transpose(1, 2)
+            image = (image * 255).numpy().astype(np.uint8)
+            image = Image.fromarray(image)
+            image.save(save_sample_path)
+            return gr.Image.update(value=save_sample_path, visible=True), gr.Video.update(value=None, visible=False), "Success"
+        else:
+            save_sample_path = os.path.join(self.savedir_sample, prefix + f".mp4")
+            save_videos_grid(sample, save_sample_path, fps=12 if self.edition == "v1" else 24)
+            return gr.Image.update(visible=False, value=None), gr.Video.update(value=save_sample_path, visible=True), "Success"
+
+def ui_modelscope(edition, config_path, model_name, savedir_sample):
+    controller = EasyAnimateController_Modelscope(edition, config_path, model_name, savedir_sample)
+
+    with gr.Blocks(css=css) as demo:
+        gr.Markdown(
+            """
+            # EasyAnimate: Integrated generation of baseline scheme for videos and images.
+            Generate your videos easily
+            [Github](https://github.com/aigc-apps/EasyAnimate/)
+            """
+        )
+        with gr.Column(variant="panel"):
+            prompt_textbox = gr.Textbox(label="Prompt", lines=2, value="This video shows the majestic beauty of a waterfall cascading down a cliff into a serene lake. The waterfall, with its powerful flow, is the central focus of the video. The surrounding landscape is lush and green, with trees and foliage adding to the natural beauty of the scene")
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="Strange motion trajectory, a poor composition and deformed video, worst quality, normal quality, low quality, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera" )
+                
+            with gr.Row():
+                with gr.Column():
+                    with gr.Row():
+                        sampler_dropdown   = gr.Dropdown(label="Sampling method", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
+                        sample_step_slider = gr.Slider(label="Sampling steps", value=30, minimum=10, maximum=100, step=1)
+                    
+                    if edition == "v1":
+                        width_slider     = gr.Slider(label="Width",            value=512, minimum=384, maximum=704, step=32)
+                        height_slider    = gr.Slider(label="Height",           value=512, minimum=384, maximum=704, step=32)
+                        with gr.Row():
+                            is_image      = gr.Checkbox(False, label="Generate Image", visible=False)
+                        length_slider    = gr.Slider(label="Animation length", value=80,  minimum=40,  maximum=96,   step=1)
+                        cfg_scale_slider = gr.Slider(label="CFG Scale",        value=6.0, minimum=0,   maximum=20)
+                    else:
+                        width_slider     = gr.Slider(label="Width",            value=672, minimum=256, maximum=704, step=16)
+                        height_slider    = gr.Slider(label="Height",           value=384, minimum=256, maximum=704, step=16)
+                        with gr.Row():
+                            is_image      = gr.Checkbox(False, label="Generate Image")
+                            length_slider = gr.Slider(label="Animation length", value=144, minimum=9,   maximum=144,  step=9)
+                        cfg_scale_slider = gr.Slider(label="CFG Scale",        value=6.0, minimum=0,   maximum=20)
+                    
+                    with gr.Row():
+                        seed_textbox = gr.Textbox(label="Seed", value=43)
+                        seed_button  = gr.Button(value="\U0001F3B2", elem_classes="toolbutton")
+                        seed_button.click(fn=lambda: gr.Textbox.update(value=random.randint(1, 1e8)), inputs=[], outputs=[seed_textbox])
+
+                    generate_button = gr.Button(value="Generate", variant='primary')
+                    
+                with gr.Column():
+                    result_image = gr.Image(label="Generated Image", interactive=False, visible=False)
+                    result_video = gr.Video(label="Generated Animation", interactive=False)
+                    infer_progress = gr.Textbox(
+                        label="Generation Info",
+                        value="No task currently",
+                        interactive=False
+                    )
+
+            is_image.change(
+                lambda x: gr.update(visible=not x),
+                inputs=[is_image],
+                outputs=[length_slider],
+            )
+
+            generate_button.click(
+                fn=controller.generate,
+                inputs=[
+                    prompt_textbox, 
+                    negative_prompt_textbox, 
+                    sampler_dropdown, 
+                    sample_step_slider, 
+                    width_slider, 
+                    height_slider, 
+                    is_image, 
+                    length_slider, 
+                    cfg_scale_slider, 
+                    seed_textbox,
+                ],
+                outputs=[result_image, result_video, infer_progress]
+            )
+    return demo, controller

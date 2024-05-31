@@ -14,24 +14,27 @@ from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import save_videos_grid
 
 # Config and model path
-config_path         = "config/easyanimate_video_motion_module_v1.yaml"
-model_name          = "models/Diffusion_Transformer/PixArt-XL-2-512x512"
+config_path         = "config/easyanimate_video_magvit_motion_module_v2.yaml"
+model_name          = "models/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512"
 
 # Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" and "DDIM"
 sampler_name        = "DPM++"
 
 # Load pretrained model if need
 transformer_path    = None
-motion_module_path  = "models/Motion_Module/easyanimate_v1_mm.safetensors" 
+# V2 does not need a motion module
+motion_module_path  = None 
 vae_path            = None
 lora_path           = None
 
-# other params
-sample_size         = [512, 512]
-video_length        = 80
-fps                 = 12
+# Other params
+sample_size         = [384, 672]
+# In EasyAnimateV1, the video_length of video is 40 ~ 80.
+# In EasyAnimateV2, the video_length of video is 1 ~ 144. If u want to generate a image, please set the video_length = 1.
+video_length        = 144
+fps                 = 24
 
-weight_dtype        = torch.float16
+weight_dtype        = torch.bfloat16
 prompt              = "A snowy forest landscape with a dirt road running through it. The road is flanked by trees covered in snow, and the ground is also covered in snow. The sun is shining, creating a bright and serene atmosphere. The road appears to be empty, and there are no people or animals visible in the video. The style of the video is a natural landscape shot, with a focus on the beauty of the snowy forest and the peacefulness of the road."
 negative_prompt     = "Strange motion trajectory, a poor composition and deformed video, worst quality, normal quality, low quality, low resolution, duplicate and ugly" 
 guidance_scale      = 6.0
@@ -80,9 +83,8 @@ else:
     Choosen_AutoencoderKL = AutoencoderKL
 vae = Choosen_AutoencoderKL.from_pretrained(
     model_name, 
-    subfolder="vae", 
-    torch_dtype=weight_dtype
-)
+    subfolder="vae"
+).to(weight_dtype)
 
 if vae_path is not None:
     print(f"From checkpoint: {vae_path}")

@@ -23,23 +23,101 @@ import torch.nn.functional as F
 import torch.nn.init as init
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.attention import BasicTransformerBlock
-from diffusers.models.embeddings import PatchEmbed
+from diffusers.models.embeddings import PatchEmbed, Timesteps, TimestepEmbedding
 from diffusers.models.lora import LoRACompatibleConv, LoRACompatibleLinear
 from diffusers.models.modeling_utils import ModelMixin
 from diffusers.models.normalization import AdaLayerNormSingle
 from diffusers.utils import USE_PEFT_BACKEND, BaseOutput, is_torch_version
 from einops import rearrange
 from torch import nn
+from typing import Dict, Optional, Tuple
 
 from .attention import (SelfAttentionTemporalTransformerBlock,
                         TemporalTransformerBlock)
-from .patch import Patch1D, PatchEmbed3D, PatchEmbedF3D, UnPatch1D
+from .patch import Patch1D, PatchEmbed3D, PatchEmbedF3D, UnPatch1D, TemporalUpsampler3D, CasualPatchEmbed3D
 
 try:
     from diffusers.models.embeddings import PixArtAlphaTextProjection
 except:
     from diffusers.models.embeddings import \
         CaptionProjection as PixArtAlphaTextProjection
+
+def zero_module(module):
+    # Zero out the parameters of a module and return it.
+    for p in module.parameters():
+        p.detach().zero_()
+    return module
+
+class PixArtAlphaCombinedTimestepSizeEmbeddings(nn.Module):
+    """
+    For PixArt-Alpha.
+
+    Reference:
+    https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L164C9-L168C29
+    """
+
+    def __init__(self, embedding_dim, size_emb_dim, use_additional_conditions: bool = False):
+        super().__init__()
+
+        self.outdim = size_emb_dim
+        self.time_proj = Timesteps(num_channels=256, flip_sin_to_cos=True, downscale_freq_shift=0)
+        self.timestep_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=embedding_dim)
+
+        self.use_additional_conditions = use_additional_conditions
+        if use_additional_conditions:
+            self.additional_condition_proj = Timesteps(num_channels=256, flip_sin_to_cos=True, downscale_freq_shift=0)
+            self.resolution_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=size_emb_dim)
+            self.aspect_ratio_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=size_emb_dim)
+            
+            self.resolution_embedder.linear_2 = zero_module(self.resolution_embedder.linear_2)
+            self.aspect_ratio_embedder.linear_2 = zero_module(self.aspect_ratio_embedder.linear_2)
+
+    def forward(self, timestep, resolution, aspect_ratio, batch_size, hidden_dtype):
+        timesteps_proj = self.time_proj(timestep)
+        timesteps_emb = self.timestep_embedder(timesteps_proj.to(dtype=hidden_dtype))  # (N, D)
+
+        if self.use_additional_conditions:
+            resolution_emb = self.additional_condition_proj(resolution.flatten()).to(hidden_dtype)
+            resolution_emb = self.resolution_embedder(resolution_emb).reshape(batch_size, -1)
+            aspect_ratio_emb = self.additional_condition_proj(aspect_ratio.flatten()).to(hidden_dtype)
+            aspect_ratio_emb = self.aspect_ratio_embedder(aspect_ratio_emb).reshape(batch_size, -1)
+            conditioning = timesteps_emb + torch.cat([resolution_emb, aspect_ratio_emb], dim=1)
+        else:
+            conditioning = timesteps_emb
+
+        return conditioning
+
+class AdaLayerNormSingle(nn.Module):
+    r"""
+    Norm layer adaptive layer norm single (adaLN-single).
+
+    As proposed in PixArt-Alpha (see: https://arxiv.org/abs/2310.00426; Section 2.3).
+
+    Parameters:
+        embedding_dim (`int`): The size of each embedding vector.
+        use_additional_conditions (`bool`): To use additional conditions for normalization or not.
+    """
+
+    def __init__(self, embedding_dim: int, use_additional_conditions: bool = False):
+        super().__init__()
+
+        self.emb = PixArtAlphaCombinedTimestepSizeEmbeddings(
+            embedding_dim, size_emb_dim=embedding_dim // 3, use_additional_conditions=use_additional_conditions
+        )
+
+        self.silu = nn.SiLU()
+        self.linear = nn.Linear(embedding_dim, 6 * embedding_dim, bias=True)
+
+    def forward(
+        self,
+        timestep: torch.Tensor,
+        added_cond_kwargs: Optional[Dict[str, torch.Tensor]] = None,
+        batch_size: Optional[int] = None,
+        hidden_dtype: Optional[torch.dtype] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        # No modulation happening here.
+        embedded_timestep = self.emb(timestep, **added_cond_kwargs, batch_size=batch_size, hidden_dtype=hidden_dtype)
+        return self.linear(self.silu(embedded_timestep)), embedded_timestep
 
 
 class TimePositionalEncoding(nn.Module):
@@ -137,11 +215,16 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
         caption_channels: int = None,
         # block type
         basic_block_type: str = "motionmodule",
+        # enable_uvit
+        enable_uvit: bool = False,
 
         # 3d patch params
         patch_3d: bool = False,
         fake_3d: bool = False,
         time_patch_size: Optional[int] = None,
+
+        casual_3d: bool = False,
+        casual_3d_upsampler_index: Optional[list] = None,
 
         # motion module kwargs
         motion_module_type = "VanillaGrid",
@@ -154,10 +237,13 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
         self.use_linear_projection = use_linear_projection
         self.num_attention_heads = num_attention_heads
         self.attention_head_dim = attention_head_dim
+        self.enable_uvit = enable_uvit
         inner_dim = num_attention_heads * attention_head_dim
         self.basic_block_type = basic_block_type
         self.patch_3d = patch_3d
         self.fake_3d = fake_3d
+        self.casual_3d = casual_3d
+        self.casual_3d_upsampler_index = casual_3d_upsampler_index
 
         conv_cls = nn.Conv2d if USE_PEFT_BACKEND else LoRACompatibleConv
         linear_cls = nn.Linear if USE_PEFT_BACKEND else LoRACompatibleLinear
@@ -172,7 +258,17 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
         interpolation_scale = self.config.sample_size // 64  # => 64 (= 512 pixart) has interpolation scale 1
         interpolation_scale = max(interpolation_scale, 1)
         
-        if self.patch_3d:
+        if self.casual_3d:
+            self.pos_embed = CasualPatchEmbed3D(
+                height=sample_size,
+                width=sample_size,
+                patch_size=patch_size,
+                time_patch_size=self.time_patch_size,
+                in_channels=in_channels,
+                embed_dim=inner_dim,
+                interpolation_scale=interpolation_scale,
+            )
+        elif self.patch_3d:
             if self.fake_3d:
                 self.pos_embed = PatchEmbedF3D(
                     height=sample_size,
@@ -228,6 +324,32 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
                     for d in range(num_layers)
                 ]
             )
+        elif self.basic_block_type == "kvcompression_motionmodule":
+            self.transformer_blocks = nn.ModuleList(
+                [
+                    TemporalTransformerBlock(
+                        inner_dim,
+                        num_attention_heads,
+                        attention_head_dim,
+                        dropout=dropout,
+                        cross_attention_dim=cross_attention_dim,
+                        activation_fn=activation_fn,
+                        num_embeds_ada_norm=num_embeds_ada_norm,
+                        attention_bias=attention_bias,
+                        only_cross_attention=only_cross_attention,
+                        double_self_attention=double_self_attention,
+                        upcast_attention=upcast_attention,
+                        norm_type=norm_type,
+                        norm_elementwise_affine=norm_elementwise_affine,
+                        norm_eps=norm_eps,
+                        attention_type=attention_type,
+                        kvcompression=False if d < 14 else True,
+                        motion_module_type=motion_module_type,
+                        motion_module_kwargs=motion_module_kwargs,
+                    )
+                    for d in range(num_layers)
+                ]
+            )
         elif self.basic_block_type == "selfattentiontemporal":
             self.transformer_blocks = nn.ModuleList(
                 [
@@ -274,9 +396,20 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
                     for d in range(num_layers)
                 ]
             )
-
-        if self.patch_3d and self.fake_3d:
+        
+        if self.casual_3d:
+            self.unpatch1d = TemporalUpsampler3D()
+        elif self.patch_3d and self.fake_3d:
             self.unpatch1d = UnPatch1D(inner_dim, True)
+
+        if self.enable_uvit:
+            self.long_connect_fc = nn.ModuleList(
+                [
+                    nn.Linear(inner_dim, inner_dim, True) for d in range(13)
+                ]
+            )
+            for index in range(13):
+                self.long_connect_fc[index] = zero_module(self.long_connect_fc[index])
 
         # 4. Define output layers
         self.out_channels = in_channels if out_channels is None else out_channels
@@ -395,7 +528,9 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
         if inpaint_latents is not None:
             hidden_states = torch.concat([hidden_states, inpaint_latents], 1)
         # 1. Input
-        if self.patch_3d:
+        if self.casual_3d:
+            video_length, height, width = (hidden_states.shape[-3] - 1) // self.time_patch_size + 1, hidden_states.shape[-2] // self.patch_size, hidden_states.shape[-1] // self.patch_size
+        elif self.patch_3d:
             video_length, height, width = hidden_states.shape[-3] // self.time_patch_size, hidden_states.shape[-2] // self.patch_size, hidden_states.shape[-1] // self.patch_size
         else:
             video_length, height, width = hidden_states.shape[-3], hidden_states.shape[-2] // self.patch_size, hidden_states.shape[-1] // self.patch_size
@@ -407,7 +542,7 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
                 raise ValueError(
                     "`added_cond_kwargs` cannot be None when using additional conditions for `adaln_single`."
                 )
-            batch_size = hidden_states.shape[0]
+            batch_size = hidden_states.shape[0] // video_length
             timestep, embedded_timestep = self.adaln_single(
                 timestep, added_cond_kwargs, batch_size=batch_size, hidden_dtype=hidden_states.dtype
             )
@@ -425,7 +560,21 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
             encoder_hidden_states = self.caption_projection(encoder_hidden_states)
             encoder_hidden_states = encoder_hidden_states.view(batch_size, -1, hidden_states.shape[-1])
 
-        for block in self.transformer_blocks:
+        skips = []
+        skip_index = 0
+        for index, block in enumerate(self.transformer_blocks):
+            if self.enable_uvit:
+                if index >= 15:
+                    long_connect = self.long_connect_fc[skip_index](skips.pop())
+                    hidden_states = hidden_states + long_connect
+                    skip_index += 1
+
+            if self.casual_3d_upsampler_index is not None and index in self.casual_3d_upsampler_index:
+                hidden_states = rearrange(hidden_states, "b (f h w) c -> b c f h w", f=video_length, h=height, w=width)
+                hidden_states = self.unpatch1d(hidden_states)
+                video_length = (video_length - 1) * 2 + 1
+                hidden_states = rearrange(hidden_states, "b c f h w -> b (f h w) c", f=video_length, h=height, w=width)
+
             if self.training and self.gradient_checkpointing:
 
                 def create_custom_forward(module, return_dict=None):
@@ -442,6 +591,7 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
                     "basic": [],
                     "motionmodule": [video_length, height, width],
                     "selfattentiontemporal": [video_length, height, width],
+                    "kvcompression_motionmodule": [video_length, height, width],
                 }[self.basic_block_type]
                 hidden_states = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
@@ -460,6 +610,7 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
                     "basic": {},
                     "motionmodule": {"num_frames":video_length, "height":height, "width":width},
                     "selfattentiontemporal": {"num_frames":video_length, "height":height, "width":width},
+                    "kvcompression_motionmodule": {"num_frames":video_length, "height":height, "width":width},
                 }[self.basic_block_type]
                 hidden_states = block(
                     hidden_states,
@@ -471,6 +622,10 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
                     class_labels=class_labels,
                     **kwargs
                 )
+
+            if self.enable_uvit:
+                if index < 13:
+                    skips.append(hidden_states)
 
         if self.fake_3d and self.patch_3d:
             hidden_states = rearrange(hidden_states, "b (f h w) c -> (b h w) c f", f=video_length, w=width, h=height)
@@ -551,7 +706,8 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
         if model.state_dict()['pos_embed.proj.weight'].size() != state_dict['pos_embed.proj.weight'].size():
             new_shape   = model.state_dict()['pos_embed.proj.weight'].size()
             if len(new_shape) == 5:
-                state_dict['pos_embed.proj.weight'] = state_dict['pos_embed.proj.weight'].unsqueeze(2).expand(new_shape) / patch_size
+                state_dict['pos_embed.proj.weight'] = state_dict['pos_embed.proj.weight'].unsqueeze(2).expand(new_shape).clone()
+                state_dict['pos_embed.proj.weight'][:, :, :-1] = 0
             else:
                 model.state_dict()['pos_embed.proj.weight'][:, :4, :, :] = state_dict['pos_embed.proj.weight']
                 model.state_dict()['pos_embed.proj.weight'][:, 4:, :, :] = 0

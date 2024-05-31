@@ -1,17 +1,26 @@
 import csv
+import gc
 import io
 import json
 import math
 import os
 import random
+from contextlib import contextmanager
+from threading import Thread
 
+import albumentations
+import cv2
 import numpy as np
 import torch
 import torchvision.transforms as transforms
 from decord import VideoReader
 from einops import rearrange
+from func_timeout import FunctionTimedOut, func_timeout
+from PIL import Image
+from torch.utils.data import BatchSampler, Sampler
 from torch.utils.data.dataset import Dataset
 
+VIDEO_READER_TIMEOUT = 20
 
 def get_random_mask(shape):
     f, c, h, w = shape
@@ -51,6 +60,21 @@ def get_random_mask(shape):
     else:
         raise ValueError(f"The mask_index {mask_index} is not define")
     return mask
+
+
+@contextmanager
+def VideoReader_contextmanager(*args, **kwargs):
+    vr = VideoReader(*args, **kwargs)
+    try:
+        yield vr
+    finally:
+        del vr
+        gc.collect()
+
+
+def get_video_reader_batch(video_reader, batch_index):
+    frames = video_reader.get_batch(batch_index).asnumpy()
+    return frames
 
 
 class WebVid10M(Dataset):
@@ -165,21 +189,32 @@ class VideoDataset(Dataset):
             video_dir = video_id
         else:
             video_dir = os.path.join(self.video_folder, video_id)
-        video_reader = VideoReader(video_dir)
-        video_length = len(video_reader)
-    
-        clip_length = min(video_length, (self.sample_n_frames - 1) * self.sample_stride + 1)
-        start_idx   = random.randint(0, video_length - clip_length)
-        batch_index = np.linspace(start_idx, start_idx + clip_length - 1, self.sample_n_frames, dtype=int)
 
-        if not self.enable_bucket:
-            pixel_values = torch.from_numpy(video_reader.get_batch(batch_index).asnumpy()).permute(0, 3, 1, 2).contiguous()
-            pixel_values = pixel_values / 255.
-            del video_reader
-        else:
-            pixel_values = video_reader.get_batch(batch_index).asnumpy()
+        with VideoReader_contextmanager(video_dir, num_threads=2) as video_reader:
+            video_length = len(video_reader)
+        
+            clip_length = min(video_length, (self.sample_n_frames - 1) * self.sample_stride + 1)
+            start_idx   = random.randint(0, video_length - clip_length)
+            batch_index = np.linspace(start_idx, start_idx + clip_length - 1, self.sample_n_frames, dtype=int)
 
-        return pixel_values, name
+            try:
+                sample_args = (video_reader, batch_index)
+                pixel_values = func_timeout(
+                    VIDEO_READER_TIMEOUT, get_video_reader_batch, args=sample_args
+                )
+            except FunctionTimedOut:
+                raise ValueError(f"Read {idx} timeout.")
+            except Exception as e:
+                raise ValueError(f"Failed to extract frames from video. Error is {e}.")
+
+            if not self.enable_bucket:
+                pixel_values = torch.from_numpy(pixel_values).permute(0, 3, 1, 2).contiguous()
+                pixel_values = pixel_values / 255.
+                del video_reader
+            else:
+                pixel_values = pixel_values
+
+            return pixel_values, name
 
     def __len__(self):
         return self.length

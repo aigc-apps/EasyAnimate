@@ -25,7 +25,7 @@ lora_path           = None
 
 # Other params
 sample_size     = [512, 512]
-weight_dtype    = torch.float16
+weight_dtype    = torch.bfloat16
 prompt          = "1girl, bangs, blue eyes, blunt bangs, blurry, blurry background, bob cut, depth of field, lips, looking at viewer, motion blur, nose, realistic, red lips, shirt, short hair, solo, white shirt."
 negative_prompt = "bad detailed"
 guidance_scale  = 6.0
