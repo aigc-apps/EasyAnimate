@@ -7,3 +7,5 @@ easyocr==1.7.1
 git+https://github.com/openai/CLIP.git
 natsort
 joblib
+scenedetect
+av
