@@ -5,7 +5,7 @@
 
 😊 Welcome!
  
-[![Arxiv Page](https://img.shields.io/badge/Arxiv-Page-red)](https://arxiv.org/pdf/2405.18991v1/)
+[![Arxiv Page](https://img.shields.io/badge/Arxiv-Page-red)](https://arxiv.org/abs/2405.18991)
 [![Project Page](https://img.shields.io/badge/Project-Website-green)](https://easyanimate.github.io/)
 [![Modelscope Studio](https://img.shields.io/badge/Modelscope-Studio-blue)](https://modelscope.cn/studios/PAI/EasyAnimate/summary)
 
@@ -285,7 +285,7 @@ sh scripts/train_t2iv.sh
 
 同时，其提出了Slice VAE，用于解决MagViT在面对长、大视频时编解码上的显存困难，同时相比于MagViT在视频编解码阶段进行了时间维度更大的压缩。
 
-更多细节可以看查看[arxiv](https://arxiv.org/pdf/2405.18991v1)。
+更多细节可以看查看[arxiv](https://arxiv.org/abs/2405.18991)。
 
 
 # TODO List
