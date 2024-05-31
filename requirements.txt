@@ -4,7 +4,7 @@ safetensors
 timm
 tomesd
 accelerate
-torch
+torch>=2.2.0
 torchdiffeq
 torchsde
 xformers
