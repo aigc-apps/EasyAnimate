@@ -9,7 +9,6 @@ from natsort import natsorted
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 
-from utils.image_captioner import QwenVLChat, InternLMXComposer2, LLaVASRT
 from utils.logger import logger
 from utils.video_dataset import VideoDataset, collate_fn
 from utils.video_utils import get_video_path_list, extract_frames
@@ -78,6 +77,8 @@ def parse_args():
 
 
 def accelerate_inference(args, video_path_list):
+    from utils.image_captioner_awq import QwenVLChat, InternLMXComposer2
+
     state = PartialState()
     device = state.device
     if state.num_processes == 1:
@@ -162,6 +163,8 @@ def accelerate_inference(args, video_path_list):
 
 
 def sglang_inference(args, video_path_list):
+    from utils.image_captioner_sglang import LLaVASRT
+
     if args.image_caption_model_name == "llava-v1.6-vicuna-7b":
         image_caption_model = LLaVASRT()
     
