@@ -1,8 +1,8 @@
-## VAE Training
+## VAE 训练
 
-English | [简体中文](./README_zh-CN.md)
+[English](./README.md) | 简体中文
 
-After completing data preprocessing, we can obtain the following dataset:
+在完成数据预处理后，你可以获得这样的数据格式:
 
 ```
 📦 project/
@@ -15,7 +15,7 @@ After completing data preprocessing, we can obtain the following dataset:
 │       └── 📄 json_of_internal_datasets.json
 ```
 
-The json_of_internal_datasets.json is a standard JSON file. The file_path in the json can to be set as relative path, as shown in below:
+json_of_internal_datasets.json是一个标准的json文件。json中的file_path可以被设置为相对路径，如下所示：
 ```json
 [
     {
@@ -32,7 +32,7 @@ The json_of_internal_datasets.json is a standard JSON file. The file_path in the
 ]
 ```
 
-You can also set the path as absolute path as follow:
+你也可以将路径设置为绝对路径：
 ```json
 [
     {
@@ -49,15 +49,15 @@ You can also set the path as absolute path as follow:
 ]
 ```
 
-## Train Video VAE
-We need to set config in ```easyanimate/vae/configs/autoencoder``` at first. The default config is ```autoencoder_kl_32x32x4_slice.yaml```. We need to set the some params in yaml file. 
+## 训练 Video VAE
+我们首先需要修改 ```easyanimate/vae/configs/autoencoder``` 中的配置文件。默认的配置文件是 ```autoencoder_kl_32x32x4_slice.yaml```。你需要修改以下参数： 
 
-- ```data_json_path``` corresponds to the JSON file of the dataset. 
-- ```data_root``` corresponds to the root path of the dataset. If you want to use absolute path in json file, please delete this line.
-- ```ckpt_path``` corresponds to the pretrained weights of the vae. 
-- ```gpus``` and num_nodes need to be set as the actual situation of your machine. 
+- ```data_json_path``` json file 所在的目录。 
+- ```data_root``` 数据的根目录。如果你在json file中使用了绝对路径，请设置为空。
+- ```ckpt_path``` 预训练的vae模型。 
+- ```gpus``` 以及 ```num_nodes``` 需要设置为你机器的实际gpu数目。 
 
-The we run shell file as follow: 
+运行以下的脚本来训练vae: 
 ```
 sh scripts/train_vae.sh
 ```
