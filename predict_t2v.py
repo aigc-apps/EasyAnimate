@@ -35,11 +35,11 @@ video_length        = 144
 fps                 = 24
 
 weight_dtype        = torch.bfloat16
-prompt              = "A snowy forest landscape with a dirt road running through it. The road is flanked by trees covered in snow, and the ground is also covered in snow. The sun is shining, creating a bright and serene atmosphere. The road appears to be empty, and there are no people or animals visible in the video. The style of the video is a natural landscape shot, with a focus on the beauty of the snowy forest and the peacefulness of the road."
-negative_prompt     = "Strange motion trajectory, a poor composition and deformed video, worst quality, normal quality, low quality, low resolution, duplicate and ugly" 
+prompt              = "The video features a young woman with with black eyes and blonde hair standing in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The atmosphere is serene, and the shot is in slow motion. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic. "
+negative_prompt     = "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion. " 
 guidance_scale      = 6.0
 seed                = 43
-num_inference_steps = 30
+num_inference_steps = 50
 lora_weight         = 0.55
 save_path           = "samples/easyanimate-videos"
 

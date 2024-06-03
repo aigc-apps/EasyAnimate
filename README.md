@@ -45,7 +45,6 @@ These are our generated results [GALLERY](scripts/Result_Gallery.md):
 Our UI interface is as follows:
 ![ui](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/ui.png)
 
-
 # Quick Start
 ### 1. Cloud usage: AliyunDSW/Docker
 #### a. From AliyunDSW
@@ -264,8 +263,8 @@ EasyAnimateV2:
 | Name | Type | Storage Space | Url | Description |
 |--|--|--|--|--| 
 | EasyAnimateV2-XL-2-512x512.tar | EasyAnimateV2 | 16.2GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512.tar)| EasyAnimateV2 official weights for 512x512 resolution. Training with 144 frames and fps 24 |
-| EasyAnimateV2-XL-2-768x768.tar | EasyAnimateV2 | 16.2GB | Coming soon | EasyAnimateV2 official weights for 768x768 resolution. Training with 144 frames and fps 24 |
-| easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors)| A lora training with a specifial type images. Images can be downloaded from [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/webui/Minimalism.zip). |
+| EasyAnimateV2-XL-2-768x768.tar | EasyAnimateV2 | 16.2GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-768x768.tar) | EasyAnimateV2 official weights for 768x768 resolution. Training with 144 frames and fps 24 |
+| easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 485.1MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors)| A lora training with a specifial type images. Images can be downloaded from [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/webui/Minimalism.zip). |
 
 <details>
   <summary>(Obsolete) EasyAnimateV1:</summary>
@@ -280,7 +279,7 @@ EasyAnimateV2:
 |--|--|--|--|--| 
 | PixArt-XL-2-512x512.tar | Pixart | 11.4GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/PixArt-XL-2-512x512.tar)| Pixart-Alpha official weights |
 | easyanimate_portrait.safetensors | Checkpoint of Pixart | 2.3GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait.safetensors) | Training with internal portrait datasets |
-| easyanimate_portrait_lora.safetensors | Lora of Pixart | 485.11MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait_lora.safetensors)| Training with internal portrait datasets |
+| easyanimate_portrait_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait_lora.safetensors)| Training with internal portrait datasets |
 </details>
 
 
