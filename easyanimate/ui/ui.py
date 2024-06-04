@@ -304,7 +304,7 @@ def ui():
     with gr.Blocks(css=css) as demo:
         gr.Markdown(
             """
-            # EasyAnimate: Integrated generation of baseline scheme for videos and images.
+            # EasyAnimate: An End-to-End Solution for High-Resolution and Long Video Generation.
             Generate your videos easily
             [Github](https://github.com/aigc-apps/EasyAnimate/)
             """
@@ -312,24 +312,24 @@ def ui():
         with gr.Column(variant="panel"):
             gr.Markdown(
                 """
-                ### 1. EasyAnimate Edition (select easyanimate edition first).
+                ### 1. EasyAnimate Edition (EasyAnimate版本).
                 """
             )
             with gr.Row():
                 easyanimate_edition_dropdown = gr.Dropdown(
-                    label="The config of EasyAnimate Edition",
+                    label="The config of EasyAnimate Edition (EasyAnimate版本配置)",
                     choices=["v1", "v2"],
                     value="v2",
                     interactive=True,
                 )
             gr.Markdown(
                 """
-                ### 2. Model checkpoints (select pretrained model path).
+                ### 2. Model checkpoints (模型路径).
                 """
             )
             with gr.Row():
                 diffusion_transformer_dropdown = gr.Dropdown(
-                    label="Pretrained Model Path",
+                    label="Pretrained Model Path (预训练模型路径)",
                     choices=controller.diffusion_transformer_list,
                     value="none",
                     interactive=True,
@@ -348,7 +348,7 @@ def ui():
 
             with gr.Row():
                 motion_module_dropdown = gr.Dropdown(
-                    label="Select motion module",
+                    label="Select motion module (选择运动模块[非必需])",
                     choices=controller.motion_module_list,
                     value="none",
                     interactive=True,
@@ -362,20 +362,20 @@ def ui():
                 motion_module_refresh_button.click(fn=update_motion_module, inputs=[], outputs=[motion_module_dropdown])
                 
                 base_model_dropdown = gr.Dropdown(
-                    label="Select base Dreambooth model (optional)",
+                    label="Select base Dreambooth model (选择基模型[非必需])",
                     choices=controller.personalized_model_list,
                     value="none",
                     interactive=True,
                 )
                 
                 lora_model_dropdown = gr.Dropdown(
-                    label="Select LoRA model (optional)",
+                    label="Select LoRA model (选择LoRA模型[非必需])",
                     choices=["none"] + controller.personalized_model_list,
                     value="none",
                     interactive=True,
                 )
 
-                lora_alpha_slider = gr.Slider(label="LoRA alpha", value=0.55, minimum=0, maximum=2, interactive=True)
+                lora_alpha_slider = gr.Slider(label="LoRA alpha (LoRA权重)", value=0.55, minimum=0, maximum=2, interactive=True)
                 
                 personalized_refresh_button = gr.Button(value="\U0001F503", elem_classes="toolbutton")
                 def update_personalized_model():
@@ -389,38 +389,38 @@ def ui():
         with gr.Column(variant="panel"):
             gr.Markdown(
                 """
-                ### 3. Configs for Generation.
+                ### 3. Configs for Generation (生成参数配置).
                 """
             )
             
-            prompt_textbox = gr.Textbox(label="Prompt", lines=2, value="This video shows the majestic beauty of a waterfall cascading down a cliff into a serene lake. The waterfall, with its powerful flow, is the central focus of the video. The surrounding landscape is lush and green, with trees and foliage adding to the natural beauty of the scene")
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion. " )
+            prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="This video shows the majestic beauty of a waterfall cascading down a cliff into a serene lake. The waterfall, with its powerful flow, is the central focus of the video. The surrounding landscape is lush and green, with trees and foliage adding to the natural beauty of the scene")
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion." )
                 
             with gr.Row():
                 with gr.Column():
                     with gr.Row():
-                        sampler_dropdown   = gr.Dropdown(label="Sampling method", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
-                        sample_step_slider = gr.Slider(label="Sampling steps", value=50, minimum=10, maximum=100, step=1)
+                        sampler_dropdown   = gr.Dropdown(label="Sampling method (采样器种类)", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
+                        sample_step_slider = gr.Slider(label="Sampling steps (生成步数)", value=50, minimum=10, maximum=100, step=1)
                         
-                    width_slider     = gr.Slider(label="Width",            value=672, minimum=128, maximum=1280, step=16)
-                    height_slider    = gr.Slider(label="Height",           value=384, minimum=128, maximum=1280, step=16)
+                    width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=128, maximum=1280, step=16)
+                    height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=128, maximum=1280, step=16)
                     with gr.Row():
-                        is_image      = gr.Checkbox(False, label="Generate Image")
-                        length_slider = gr.Slider(label="Animation length", value=144, minimum=9,   maximum=144,  step=9)
-                    cfg_scale_slider = gr.Slider(label="CFG Scale",        value=7.0, minimum=0,   maximum=20)
+                        is_image      = gr.Checkbox(False, label="Generate Image (是否生成图片)")
+                        length_slider = gr.Slider(label="Animation length (视频帧数)", value=144, minimum=9,   maximum=144,  step=9)
+                    cfg_scale_slider = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
                     
                     with gr.Row():
-                        seed_textbox = gr.Textbox(label="Seed", value=43)
+                        seed_textbox = gr.Textbox(label="Seed (随机种子)", value=43)
                         seed_button  = gr.Button(value="\U0001F3B2", elem_classes="toolbutton")
                         seed_button.click(fn=lambda: gr.Textbox.update(value=random.randint(1, 1e8)), inputs=[], outputs=[seed_textbox])
 
-                    generate_button = gr.Button(value="Generate", variant='primary')
+                    generate_button = gr.Button(value="Generate (生成)", variant='primary')
                     
                 with gr.Column():
-                    result_image = gr.Image(label="Generated Image", interactive=False, visible=False)
-                    result_video = gr.Video(label="Generated Animation", interactive=False)
+                    result_image = gr.Image(label="Generated Image (生成图片)", interactive=False, visible=False)
+                    result_video = gr.Video(label="Generated Animation (生成视频)", interactive=False)
                     infer_progress = gr.Textbox(
-                        label="Generation Info",
+                        label="Generation Info (生成信息)",
                         value="No task currently",
                         interactive=False
                     )
