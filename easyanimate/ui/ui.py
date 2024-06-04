@@ -317,7 +317,7 @@ def ui():
             )
             with gr.Row():
                 easyanimate_edition_dropdown = gr.Dropdown(
-                    label="The config of EasyAnimate Edition",
+                    label="The config of EasyAnimate Edition (EasyAnimate版本配置)",
                     choices=["v1", "v2"],
                     value="v2",
                     interactive=True,
