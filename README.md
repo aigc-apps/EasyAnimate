@@ -42,7 +42,8 @@ Function：
 - [Video Generation](#video-gen)
 
 These are our generated results [GALLERY](scripts/Result_Gallery.md):
-![Combine_512](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Combine_512.jpg)
+
+<video controls src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mp4" title="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mov" style="width: 80%;"></video>
 
 Our UI interface is as follows:
 ![ui](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/ui.png)
