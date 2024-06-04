@@ -1,6 +1,8 @@
 import os
 
 import torch
+import numpy as np
+from PIL import Image
 from diffusers import (AutoencoderKL, DDIMScheduler,
                        DPMSolverMultistepScheduler,
                        EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
@@ -140,5 +142,15 @@ if not os.path.exists(save_path):
 
 index = len([path for path in os.listdir(save_path)]) + 1
 prefix = str(index).zfill(8)
-video_path = os.path.join(save_path, prefix + ".gif")
-save_videos_grid(sample, video_path, fps=fps)
+
+if video_length == 1:
+    video_path = os.path.join(save_path, prefix + ".png")
+
+    image = sample[0, :, 0]
+    image = image.transpose(0, 1).transpose(1, 2)
+    image = (image * 255).numpy().astype(np.uint8)
+    image = Image.fromarray(image)
+    image.save(video_path)
+else:
+    video_path = os.path.join(save_path, prefix + ".gif")
+    save_videos_grid(sample, video_path, fps=fps)

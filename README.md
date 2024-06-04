@@ -8,6 +8,7 @@
 [![Arxiv Page](https://img.shields.io/badge/Arxiv-Page-red)](https://arxiv.org/abs/2405.18991)
 [![Project Page](https://img.shields.io/badge/Project-Website-green)](https://easyanimate.github.io/)
 [![Modelscope Studio](https://img.shields.io/badge/Modelscope-Studio-blue)](https://modelscope.cn/studios/PAI/EasyAnimate/summary)
+[![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-yellow)](https://huggingface.co/spaces/alibaba-pai/EasyAnimate)
 
 
 
@@ -40,8 +41,11 @@ Function：
 - [Train DiT](#dit-train)
 - [Video Generation](#video-gen)
 
-These are our generated results [GALLERY](scripts/Result_Gallery.md):
-![Combine_512](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Combine_512.jpg)
+These are our generated results [GALLERY](scripts/Result_Gallery.md) (Click the image below to see the video):
+
+
+[![Watch the video](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Combine_512.jpg)](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mp4)
+
 
 Our UI interface is as follows:
 ![ui](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/ui.png)
@@ -53,7 +57,7 @@ DSW has free GPU time, which can be applied once by a user and is valid for 3 mo
 
 Aliyun provide free GPU time in [Freetier](https://free.aliyun.com/?product=9602825&crowd=enterprise&spm=5176.28055625.J_5831864660.1.e939154aRgha4e&scm=20140722.M_9974135.P_110.MO_1806-ID_9974135-MID_9974135-CID_30683-ST_8512-V_1), get it and use in Aliyun PAI-DSW to start EasyAnimate within 5min!
 
-[![DSW Notebook](images/dsw.png)](https://gallery.pai-ml.com/#/preview/deepLearning/cv/easyanimate)
+[![DSW Notebook](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/dsw.png)](https://gallery.pai-ml.com/#/preview/deepLearning/cv/easyanimate)
 
 #### b. From docker
 If you are using docker, please make sure that the graphics card driver and CUDA environment have been installed correctly in your machine.
