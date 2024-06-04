@@ -54,7 +54,7 @@ json_of_internal_datasets.json是一个标准的json文件。json中的file_path
 
 - ```data_json_path``` json file 所在的目录。 
 - ```data_root``` 数据的根目录。如果你在json file中使用了绝对路径，请设置为空。
-- ```ckpt_path``` 预训练的vae模型。 
+- ```ckpt_path``` 预训练的vae模型路径。 
 - ```gpus``` 以及 ```num_nodes``` 需要设置为你机器的实际gpu数目。 
 
 运行以下的脚本来训练vae: 

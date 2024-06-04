@@ -17,9 +17,10 @@
 - [简介](#简介)
 - [快速启动](#快速启动)
 - [如何使用](#如何使用)
-- [模型地址](#model-zoo)
+- [模型地址](#模型地址)
 - [算法细节](#算法细节)
-- [未来计划](#todo-list)
+- [未来计划](#未来计划)
+- [联系我们](#联系我们)
 - [参考文献](#参考文献)
 - [许可证](#许可证)
 
@@ -137,6 +138,8 @@ EasyAnimateV2:
 📦 models/
 ├── 📂 Diffusion_Transformer/
 │   └── 📂 EasyAnimateV2-XL-2-512x512/
+├── 📂 Personalized_Model/
+│   └── your trained trainformer model / your trained lora model (for UI load)
 ```
 
 <details>
@@ -148,7 +151,7 @@ EasyAnimateV2:
   │   └── 📂 PixArt-XL-2-512x512/
   ├── 📂 Motion_Module/
   │   └── 📄 easyanimate_v1_mm.safetensors
-  ├── 📂 Motion_Module/
+  ├── 📂 Personalized_Model/
   │   ├── 📄 easyanimate_portrait.safetensors
   │   └── 📄 easyanimate_portrait_lora.safetensors
   ```
@@ -256,6 +259,31 @@ sh scripts/train_t2iv.sh
   如果你想训练EasyAnimateV1。请切换到git分支v1。
 </details>
 
+
+# 模型地址
+EasyAnimateV2:
+| 名称 | 种类 | 存储空间 | 下载地址 | Hugging Face | 描述 |
+|--|--|--|--|--|--|
+| EasyAnimateV2-XL-2-512x512.tar | EasyAnimateV2 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV2-XL-2-512x512)| 官方的512x512分辨率的重量。以144帧、每秒24帧进行训练 |
+| EasyAnimateV2-XL-2-768x768.tar | EasyAnimateV2 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV2-XL-2-768x768) | 官方的768x768分辨率的重量。以144帧、每秒24帧进行训练 |
+| easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 485.1MB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors)| - | 使用特定类型的图像进行lora训练的结果。图片可从这里[下载](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/webui/Minimalism.zip). |
+
+<details>
+  <summary>(Obsolete) EasyAnimateV1:</summary>
+
+### 1、运动权重
+| 名称 | 种类 | 存储空间 | 下载地址 | 描述 |
+|--|--|--|--|--|  
+| easyanimate_v1_mm.safetensors | Motion Module | 4.1GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Motion_Module/easyanimate_v1_mm.safetensors) | Training with 80 frames and fps 12 |
+
+### 2、其他权重
+| 名称 | 种类 | 存储空间 | 下载地址 | 描述 |
+|--|--|--|--|--| 
+| PixArt-XL-2-512x512.tar | Pixart | 11.4GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/PixArt-XL-2-512x512.tar)| Pixart-Alpha official weights |
+| easyanimate_portrait.safetensors | Checkpoint of Pixart | 2.3GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait.safetensors) | Training with internal portrait datasets |
+| easyanimate_portrait_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait_lora.safetensors)| Training with internal portrait datasets |
+</details>
+
 # 算法细节
 ### 1. 数据预处理
 **视频分割**
@@ -287,34 +315,18 @@ sh scripts/train_t2iv.sh
 
 更多细节可以看查看[arxiv](https://arxiv.org/abs/2405.18991)。
 
-
-# TODO List
+# 未来计划
 - 支持更大分辨率的文视频生成模型。
 - 支持视频inpaint模型。
 
-# Model zoo
-EasyAnimateV2:
-| 名称 | 种类 | 存储空间 | 下载地址 | 描述 |
-|--|--|--|--|--| 
-| EasyAnimateV2-XL-2-512x512.tar | EasyAnimateV2 | 16.2GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512.tar)| EasyAnimateV2 official weights for 512x512 resolution. Training with 144 frames and fps 24 |
-| EasyAnimateV2-XL-2-768x768.tar | EasyAnimateV2 | 16.2GB | Coming soon | EasyAnimateV2 official weights for 768x768 resolution. Training with 144 frames and fps 24 |
-| easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors)| A lora training with a specifial type images. Images can be downloaded from [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/webui/Minimalism.zip). |
+# 联系我们
+1. 扫描下方二维码或搜索群号：77450006752 来加入钉钉群。
+2. 扫描下方二维码来加入微信群（如果二维码失效，可扫描最右边同学的微信，邀请您入群）
 
-<details>
-  <summary>(Obsolete) EasyAnimateV1:</summary>
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/group/dd.png" alt="ding group" width="30%"/>
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/group/wechat.jpg" alt="Wechat group" width="30%"/>
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/group/person.jpg" alt="Person" width="30%"/>
 
-### 1、运动权重
-| 名称 | 种类 | 存储空间 | 下载地址 | 描述 |
-|--|--|--|--|--|  
-| easyanimate_v1_mm.safetensors | Motion Module | 4.1GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Motion_Module/easyanimate_v1_mm.safetensors) | Training with 80 frames and fps 12 |
-
-### 2、其他权重
-| 名称 | 种类 | 存储空间 | 下载地址 | 描述 |
-|--|--|--|--|--| 
-| PixArt-XL-2-512x512.tar | Pixart | 11.4GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/PixArt-XL-2-512x512.tar)| Pixart-Alpha official weights |
-| easyanimate_portrait.safetensors | Checkpoint of Pixart | 2.3GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait.safetensors) | Training with internal portrait datasets |
-| easyanimate_portrait_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait_lora.safetensors)| Training with internal portrait datasets |
-</details>
 
 
 # 参考文献

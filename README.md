@@ -19,8 +19,9 @@ English | [简体中文](./README_zh-CN.md)
 - [Quick Start](#quick-start)
 - [How to use](#how-to-use)
 - [Model zoo](#model-zoo)
-- [TODO List](#todo-list)
 - [Algorithm Detailed](#algorithm-detailed)
+- [TODO List](#todo-list)
+- [Contact Us](#contact-us)
 - [Reference](#reference)
 - [License](#license)
 
@@ -44,7 +45,6 @@ These are our generated results [GALLERY](scripts/Result_Gallery.md):
 
 Our UI interface is as follows:
 ![ui](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/ui.png)
-
 
 # Quick Start
 ### 1. Cloud usage: AliyunDSW/Docker
@@ -140,6 +140,8 @@ EasyAnimateV2:
 📦 models/
 ├── 📂 Diffusion_Transformer/
 │   └── 📂 EasyAnimateV2-XL-2-512x512/
+├── 📂 Personalized_Model/
+│   └── your trained trainformer model / your trained lora model (for UI load)
 ```
 
 <details>
@@ -151,7 +153,7 @@ EasyAnimateV2:
   │   └── 📂 PixArt-XL-2-512x512/
   ├── 📂 Motion_Module/
   │   └── 📄 easyanimate_v1_mm.safetensors
-  ├── 📂 Motion_Module/
+  ├── 📂 Personalized_Model/
   │   ├── 📄 easyanimate_portrait.safetensors
   │   └── 📄 easyanimate_portrait_lora.safetensors
   ```
@@ -261,11 +263,11 @@ sh scripts/train_t2iv.sh
 # Model zoo
 
 EasyAnimateV2:
-| Name | Type | Storage Space | Url | Description |
-|--|--|--|--|--| 
-| EasyAnimateV2-XL-2-512x512.tar | EasyAnimateV2 | 16.2GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512.tar)| EasyAnimateV2 official weights for 512x512 resolution. Training with 144 frames and fps 24 |
-| EasyAnimateV2-XL-2-768x768.tar | EasyAnimateV2 | 16.2GB | Coming soon | EasyAnimateV2 official weights for 768x768 resolution. Training with 144 frames and fps 24 |
-| easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors)| A lora training with a specifial type images. Images can be downloaded from [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/webui/Minimalism.zip). |
+| Name | Type | Storage Space | Url | Hugging Face | Description |
+|--|--|--|--|--|--|
+| EasyAnimateV2-XL-2-512x512.tar | EasyAnimateV2 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV2-XL-2-512x512) | EasyAnimateV2 official weights for 512x512 resolution. Training with 144 frames and fps 24 |
+| EasyAnimateV2-XL-2-768x768.tar | EasyAnimateV2 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV2-XL-2-768x768) | EasyAnimateV2 official weights for 768x768 resolution. Training with 144 frames and fps 24 |
+| easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 485.1MB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors) | - | A lora training with a specifial type images. Images can be downloaded from [Url](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/webui/Minimalism.zip). |
 
 <details>
   <summary>(Obsolete) EasyAnimateV1:</summary>
@@ -280,7 +282,7 @@ EasyAnimateV2:
 |--|--|--|--|--| 
 | PixArt-XL-2-512x512.tar | Pixart | 11.4GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/PixArt-XL-2-512x512.tar)| Pixart-Alpha official weights |
 | easyanimate_portrait.safetensors | Checkpoint of Pixart | 2.3GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait.safetensors) | Training with internal portrait datasets |
-| easyanimate_portrait_lora.safetensors | Lora of Pixart | 485.11MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait_lora.safetensors)| Training with internal portrait datasets |
+| easyanimate_portrait_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait_lora.safetensors)| Training with internal portrait datasets |
 </details>
 
 
@@ -319,6 +321,16 @@ For more details, please refer to [arxiv](https://arxiv.org/abs/2405.18991).
 # TODO List
 - Support model with larger resolution.
 - Support video inpaint model.
+
+# Contact Us
+1. Use Dingding to search group 77450006752 or Scan to join
+2. You need to scan the image to join the WeChat group or if it is expired, add this student as a friend first to invite you.
+
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/group/dd.png" alt="ding group" width="30%"/>
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/group/wechat.jpg" alt="Wechat group" width="30%"/>
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/group/person.jpg" alt="Person" width="30%"/>
+
+
 
 # Reference
 - magvit: https://github.com/google-research/magvit
