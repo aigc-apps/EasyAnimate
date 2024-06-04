@@ -19,8 +19,9 @@ English | [简体中文](./README_zh-CN.md)
 - [Quick Start](#quick-start)
 - [How to use](#how-to-use)
 - [Model zoo](#model-zoo)
-- [TODO List](#todo-list)
 - [Algorithm Detailed](#algorithm-detailed)
+- [TODO List](#todo-list)
+- [Contact Us](#contact-us)
 - [Reference](#reference)
 - [License](#license)
 
@@ -139,6 +140,8 @@ EasyAnimateV2:
 📦 models/
 ├── 📂 Diffusion_Transformer/
 │   └── 📂 EasyAnimateV2-XL-2-512x512/
+├── 📂 Personalized_Model/
+│   └── your trained trainformer model / your trained lora model (for UI load)
 ```
 
 <details>
@@ -150,7 +153,7 @@ EasyAnimateV2:
   │   └── 📂 PixArt-XL-2-512x512/
   ├── 📂 Motion_Module/
   │   └── 📄 easyanimate_v1_mm.safetensors
-  ├── 📂 Motion_Module/
+  ├── 📂 Personalized_Model/
   │   ├── 📄 easyanimate_portrait.safetensors
   │   └── 📄 easyanimate_portrait_lora.safetensors
   ```
@@ -318,6 +321,16 @@ For more details, please refer to [arxiv](https://arxiv.org/abs/2405.18991).
 # TODO List
 - Support model with larger resolution.
 - Support video inpaint model.
+
+# Contact Us
+1. Use Dingding to search group 77450006752 or Scan to join
+2. You need to scan the image to join the WeChat group or if it is expired, add this student as a friend first to invite you.
+
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/group/dd.png" alt="ding group" width="30%"/>
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/group/wechat.jpg" alt="Wechat group" width="30%"/>
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/group/person.jpg" alt="Person" width="30%"/>
+
+
 
 # Reference
 - magvit: https://github.com/google-research/magvit
