@@ -41,7 +41,9 @@ EasyAnimate是一个基于transformer结构的pipeline，可用于生成AI图片
 
 这些是我们的生成结果 [GALLERY](scripts/Result_Gallery.md):
 
-<video controls src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mp4" title="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mov" style="width: 80%;"></video>
+<video controls style="width: 70%;">
+  <source src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mp4" type="video/mp4">
+</video>
 
 我们的ui界面如下:
 ![ui](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/ui.png)

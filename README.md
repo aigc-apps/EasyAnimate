@@ -43,7 +43,9 @@ Function：
 
 These are our generated results [GALLERY](scripts/Result_Gallery.md):
 
-<video controls src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mp4" title="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mov" style="width: 80%;"></video>
+<video controls style="width: 70%;">
+  <source src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mp4" type="video/mp4">
+</video>
 
 Our UI interface is as follows:
 ![ui](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/ui.png)
