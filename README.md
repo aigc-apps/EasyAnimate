@@ -41,11 +41,11 @@ Function：
 - [Train DiT](#dit-train)
 - [Video Generation](#video-gen)
 
-These are our generated results [GALLERY](scripts/Result_Gallery.md):
+These are our generated results [GALLERY](scripts/Result_Gallery.md) (Click the image below to see the video):
 
-<video controls style="width: 70%;">
-  <source src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mp4" type="video/mp4">
-</video>
+
+[![Watch the video](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Combine_512.jpg)](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mp4)
+
 
 Our UI interface is as follows:
 ![ui](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/ui.png)
