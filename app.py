@@ -1,11 +1,11 @@
 import time 
 
 from easyanimate.api.api import infer_forward_api, update_diffusion_transformer_api, update_edition_api
-from easyanimate.ui.ui import ui_modelscope, ui
+from easyanimate.ui.ui import ui_modelscope, ui_eas, ui
 
 if __name__ == "__main__":
     # Choose the ui mode  
-    ui_mode = "normal"
+    ui_mode = "modelscope"
     # Server ip
     server_name = "0.0.0.0"
     server_port = 7860
@@ -16,10 +16,12 @@ if __name__ == "__main__":
     model_name = "models/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512"
     savedir_sample = "samples"
 
-    if ui_mode != "modelscope":
-        demo, controller = ui()
-    else:
+    if ui_mode == "modelscope":
         demo, controller = ui_modelscope(edition, config_path, model_name, savedir_sample)
+    elif ui_mode == "eas":
+        demo, controller = ui_eas(edition, config_path, model_name, savedir_sample)
+    else:
+        demo, controller = ui()
 
     # launch gradio
     app, _, _ = demo.queue(status_update_rate=1).launch(
