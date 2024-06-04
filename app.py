@@ -5,7 +5,7 @@ from easyanimate.ui.ui import ui_modelscope, ui_eas, ui
 
 if __name__ == "__main__":
     # Choose the ui mode  
-    ui_mode = "modelscope"
+    ui_mode = "normal"
     # Server ip
     server_name = "0.0.0.0"
     server_port = 7860
