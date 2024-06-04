@@ -304,7 +304,7 @@ def ui():
     with gr.Blocks(css=css) as demo:
         gr.Markdown(
             """
-            # EasyAnimate: Integrated generation of baseline scheme for videos and images.
+            # EasyAnimate: An End-to-End Solution for High-Resolution and Long Video Generation.
             Generate your videos easily
             [Github](https://github.com/aigc-apps/EasyAnimate/)
             """
