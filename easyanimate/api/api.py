@@ -59,7 +59,7 @@ def infer_forward_api(_: gr.Blocks, app: FastAPI, controller):
         lora_model_path = datas.get('lora_model_path', 'none')
         lora_alpha_slider = datas.get('lora_alpha_slider', 0.55)
         prompt_textbox = datas.get('prompt_textbox', None)
-        negative_prompt_textbox = datas.get('negative_prompt_textbox', '')
+        negative_prompt_textbox = datas.get('negative_prompt_textbox', 'The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion.')
         sampler_dropdown = datas.get('sampler_dropdown', 'Euler')
         sample_step_slider = datas.get('sample_step_slider', 30)
         width_slider = datas.get('width_slider', 672)
