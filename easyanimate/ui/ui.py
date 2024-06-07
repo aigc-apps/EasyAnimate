@@ -29,7 +29,6 @@ from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import save_videos_grid
 from PIL import Image
 
-sample_idx = 0
 scheduler_dict = {
     "Euler": EulerDiscreteScheduler,
     "Euler A": EulerAncestralDiscreteScheduler,
@@ -208,7 +207,6 @@ class EasyAnimateController:
         seed_textbox,
         is_api = False,
     ):
-        global sample_idx
         if self.transformer is None:
             raise gr.Error(f"Please select a pretrained model path.")
 
@@ -493,11 +491,18 @@ def ui():
 
 class EasyAnimateController_Modelscope:
     def __init__(self, edition, config_path, model_name, savedir_sample):
-        # Config and model path
-        weight_dtype = torch.bfloat16
-        self.savedir_sample = savedir_sample
+        # Weight Dtype
+        weight_dtype                    = torch.bfloat16
+
+        # Basic dir
+        self.basedir                    = os.getcwd()
+        self.personalized_model_dir     = os.path.join(self.basedir, "models", "Personalized_Model")
+        self.lora_model_path            = "none"
+        self.savedir_sample             = savedir_sample
+        self.refresh_personalized_model()
         os.makedirs(self.savedir_sample, exist_ok=True)
 
+        # Config and model path
         self.edition = edition
         self.inference_config = OmegaConf.load(config_path)
         # Get Transformer
@@ -533,8 +538,29 @@ class EasyAnimateController_Modelscope:
         self.pipeline.enable_model_cpu_offload()
         print("Update diffusion transformer done")
 
+
+    def refresh_personalized_model(self):
+        personalized_model_list = glob(os.path.join(self.personalized_model_dir, "*.safetensors"))
+        self.personalized_model_list = [os.path.basename(p) for p in personalized_model_list]
+
+
+    def update_lora_model(self, lora_model_dropdown):
+        print("Update lora model")
+        if lora_model_dropdown == "none":
+            self.lora_model_path = "none"
+            return gr.update()
+        lora_model_dropdown = os.path.join(self.personalized_model_dir, lora_model_dropdown)
+        self.lora_model_path = lora_model_dropdown
+        return gr.update()
+
+    
     def generate(
         self,
+        diffusion_transformer_dropdown,
+        motion_module_dropdown,
+        base_model_dropdown,
+        lora_model_dropdown, 
+        lora_alpha_slider,
         prompt_textbox, 
         negative_prompt_textbox, 
         sampler_dropdown, 
@@ -544,11 +570,22 @@ class EasyAnimateController_Modelscope:
         is_image, 
         length_slider, 
         cfg_scale_slider, 
-        seed_textbox
+        seed_textbox,
+        is_api = False,
     ):    
+        if self.transformer is None:
+            raise gr.Error(f"Please select a pretrained model path.")
+
+        if self.lora_model_path != lora_model_dropdown:
+            print("Update lora model")
+            self.update_lora_model(lora_model_dropdown)
+
         if is_xformers_available(): self.transformer.enable_xformers_memory_efficient_attention()
 
         self.pipeline.scheduler = scheduler_dict[sampler_dropdown](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
+        if self.lora_model_path != "none":
+            # lora part
+            self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
         self.pipeline.to("cuda")
 
         if int(seed_textbox) != -1 and seed_textbox != "": torch.manual_seed(int(seed_textbox))
@@ -570,7 +607,16 @@ class EasyAnimateController_Modelscope:
             gc.collect()
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
-            return gr.update(), gr.update(), f"Error. error information is {str(e)}"
+            if self.lora_model_path != "none":
+                self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
+            if is_api:
+                return "", f"Error. error information is {str(e)}"
+            else:
+                return gr.update(), gr.update(), f"Error. error information is {str(e)}"
+
+        # lora part
+        if self.lora_model_path != "none":
+            self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
 
         if not os.path.exists(self.savedir_sample):
             os.makedirs(self.savedir_sample, exist_ok=True)
@@ -588,17 +634,23 @@ class EasyAnimateController_Modelscope:
             image = (image * 255).numpy().astype(np.uint8)
             image = Image.fromarray(image)
             image.save(save_sample_path)
-            if gradio_version_is_above_4:
-                return gr.Image(value=save_sample_path, visible=True), gr.Video(value=None, visible=False), "Success"
+            if is_api:
+                return save_sample_path, "Success"
             else:
-                return gr.Image.update(value=save_sample_path, visible=True), gr.Video.update(value=None, visible=False), "Success"
+                if gradio_version_is_above_4:
+                    return gr.Image(value=save_sample_path, visible=True), gr.Video(value=None, visible=False), "Success"
+                else:
+                    return gr.Image.update(value=save_sample_path, visible=True), gr.Video.update(value=None, visible=False), "Success"
         else:
             save_sample_path = os.path.join(self.savedir_sample, prefix + f".mp4")
             save_videos_grid(sample, save_sample_path, fps=12 if self.edition == "v1" else 24)
-            if gradio_version_is_above_4:
-                return gr.Image(visible=False, value=None), gr.Video(value=save_sample_path, visible=True), "Success"
+            if is_api:
+                return save_sample_path, "Success"
             else:
-                return gr.Image.update(visible=False, value=None), gr.Video.update(value=save_sample_path, visible=True), "Success"
+                if gradio_version_is_above_4:
+                    return gr.Image(visible=False, value=None), gr.Video(value=save_sample_path, visible=True), "Success"
+                else:
+                    return gr.Image.update(visible=False, value=None), gr.Video.update(value=save_sample_path, visible=True), "Success"
 
 
 def ui_modelscope(edition, config_path, model_name, savedir_sample):
@@ -617,25 +669,75 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
             """
         )
         with gr.Column(variant="panel"):
-            prompt_textbox = gr.Textbox(label="Prompt", lines=2, value="This video shows the majestic beauty of a waterfall cascading down a cliff into a serene lake. The waterfall, with its powerful flow, is the central focus of the video. The surrounding landscape is lush and green, with trees and foliage adding to the natural beauty of the scene")
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion. " )
+            gr.Markdown(
+                """
+                ### 1. Model checkpoints (模型路径).
+                """
+            )
+            with gr.Row():
+                diffusion_transformer_dropdown = gr.Dropdown(
+                    label="Pretrained Model Path (预训练模型路径)",
+                    choices=[model_name],
+                    value=model_name,
+                    interactive=False,
+                )
+            with gr.Row():
+                motion_module_dropdown = gr.Dropdown(
+                    label="Select motion module (选择运动模块[非必需])",
+                    choices=["none"],
+                    value="none",
+                    interactive=False,
+                    visible=False
+                )
+                base_model_dropdown = gr.Dropdown(
+                    label="Select base Dreambooth model (选择基模型[非必需])",
+                    choices=["none"],
+                    value="none",
+                    interactive=False,
+                    visible=False
+                )
+                with gr.Column():
+                    gr.Markdown(
+                        """
+                        ### Minimalism is an example portrait of Lora, triggered by specific prompt words. More details can be found on [Wiki](https://github.com/aigc-apps/EasyAnimate/wiki/Training-Lora).
+                        """
+                    )
+                    with gr.Row():
+                        lora_model_dropdown = gr.Dropdown(
+                            label="Select LoRA model",
+                            choices=["none", "easyanimatev2_minimalism_lora.safetensors"],
+                            value="none",
+                            interactive=True,
+                        )
+
+                        lora_alpha_slider = gr.Slider(label="LoRA alpha (LoRA权重)", value=0.55, minimum=0, maximum=2, interactive=True)
+                
+        with gr.Column(variant="panel"):
+            gr.Markdown(
+                """
+                ### 2. Configs for Generation (生成参数配置).
+                """
+            )
+
+            prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="This video shows the majestic beauty of a waterfall cascading down a cliff into a serene lake. The waterfall, with its powerful flow, is the central focus of the video. The surrounding landscape is lush and green, with trees and foliage adding to the natural beauty of the scene")
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion." )
                 
             with gr.Row():
                 with gr.Column():
                     with gr.Row():
-                        sampler_dropdown   = gr.Dropdown(label="Sampling method", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
-                        sample_step_slider = gr.Slider(label="Sampling steps", value=50, minimum=10, maximum=100, step=1)
+                        sampler_dropdown   = gr.Dropdown(label="Sampling method (采样器种类)", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
+                        sample_step_slider = gr.Slider(label="Sampling steps (生成步数)", value=50, minimum=10, maximum=100, step=1)
                     
                     if edition == "v1":
-                        width_slider     = gr.Slider(label="Width",            value=512, minimum=384, maximum=704, step=32)
-                        height_slider    = gr.Slider(label="Height",           value=512, minimum=384, maximum=704, step=32)
+                        width_slider     = gr.Slider(label="Width (视频宽度)",            value=512, minimum=384, maximum=704, step=32)
+                        height_slider    = gr.Slider(label="Height (视频高度)",           value=512, minimum=384, maximum=704, step=32)
                         with gr.Row():
-                            is_image      = gr.Checkbox(False, label="Generate Image", visible=False)
-                        length_slider    = gr.Slider(label="Animation length", value=80,  minimum=40,  maximum=96,   step=1)
-                        cfg_scale_slider = gr.Slider(label="CFG Scale",        value=6.0, minimum=0,   maximum=20)
+                            is_image      = gr.Checkbox(False, label="Generate Image (是否生成图片)", visible=False)
+                        length_slider    = gr.Slider(label="Animation length (视频帧数)", value=80,  minimum=40,  maximum=96,   step=1)
+                        cfg_scale_slider = gr.Slider(label="CFG Scale (引导系数)",        value=6.0, minimum=0,   maximum=20)
                     else:
-                        width_slider     = gr.Slider(label="Width",            value=672, minimum=256, maximum=704, step=16)
-                        height_slider    = gr.Slider(label="Height",           value=384, minimum=256, maximum=704, step=16)
+                        width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=256, maximum=704, step=16)
+                        height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=256, maximum=704, step=16)
                         with gr.Column():
                             gr.Markdown(
                                 """                    
@@ -644,12 +746,12 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
                                 """
                             )
                             with gr.Row():
-                                is_image      = gr.Checkbox(False, label="Generate Image")
-                                length_slider = gr.Slider(label="Animation length", value=72, minimum=9,   maximum=81,  step=9)
-                        cfg_scale_slider = gr.Slider(label="CFG Scale",        value=7.0, minimum=0,   maximum=20)
+                                is_image      = gr.Checkbox(False, label="Generate Image (是否生成图片)")
+                                length_slider = gr.Slider(label="Animation length (视频帧数)", value=72, minimum=9,   maximum=81,  step=9)
+                        cfg_scale_slider = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
                     
                     with gr.Row():
-                        seed_textbox = gr.Textbox(label="Seed", value=43)
+                        seed_textbox = gr.Textbox(label="Seed (随机种子)", value=43)
                         seed_button  = gr.Button(value="\U0001F3B2", elem_classes="toolbutton")
                         seed_button.click(
                             fn=lambda: gr.Textbox(value=random.randint(1, 1e8)) if gradio_version_is_above_4 else gr.Textbox.update(value=random.randint(1, 1e8)), 
@@ -657,13 +759,13 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
                             outputs=[seed_textbox]
                         )
 
-                    generate_button = gr.Button(value="Generate", variant='primary')
+                    generate_button = gr.Button(value="Generate (生成)", variant='primary')
                     
                 with gr.Column():
-                    result_image = gr.Image(label="Generated Image", interactive=False, visible=False)
-                    result_video = gr.Video(label="Generated Animation", interactive=False)
+                    result_image = gr.Image(label="Generated Image (生成图片)", interactive=False, visible=False)
+                    result_video = gr.Video(label="Generated Animation (生成视频)", interactive=False)
                     infer_progress = gr.Textbox(
-                        label="Generation Info",
+                        label="Generation Info (生成信息)",
                         value="No task currently",
                         interactive=False
                     )
@@ -677,6 +779,11 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
             generate_button.click(
                 fn=controller.generate,
                 inputs=[
+                    diffusion_transformer_dropdown,
+                    motion_module_dropdown,
+                    base_model_dropdown,
+                    lora_model_dropdown, 
+                    lora_alpha_slider,
                     prompt_textbox, 
                     negative_prompt_textbox, 
                     sampler_dropdown, 
@@ -694,15 +801,17 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
 
 
 def post_eas(
+    diffusion_transformer_dropdown, motion_module_dropdown,
+    base_model_dropdown, lora_model_dropdown, lora_alpha_slider,
     prompt_textbox, negative_prompt_textbox, 
     sampler_dropdown, sample_step_slider, width_slider, height_slider,
     is_image, length_slider, cfg_scale_slider, seed_textbox,
 ):
     datas = {
-        "base_model_path": "none",
-        "motion_module_path": "none",
-        "lora_model_path": "none", 
-        "lora_alpha_slider": 0.55, 
+        "base_model_path": base_model_dropdown,
+        "motion_module_path": motion_module_dropdown,
+        "lora_model_path": lora_model_dropdown, 
+        "lora_alpha_slider": lora_alpha_slider, 
         "prompt_textbox": prompt_textbox, 
         "negative_prompt_textbox": negative_prompt_textbox, 
         "sampler_dropdown": sampler_dropdown, 
@@ -730,6 +839,11 @@ class EasyAnimateController_EAS:
 
     def generate(
         self,
+        diffusion_transformer_dropdown,
+        motion_module_dropdown,
+        base_model_dropdown,
+        lora_model_dropdown, 
+        lora_alpha_slider,
         prompt_textbox, 
         negative_prompt_textbox, 
         sampler_dropdown, 
@@ -742,6 +856,8 @@ class EasyAnimateController_EAS:
         seed_textbox
     ):
         outputs = post_eas(
+            diffusion_transformer_dropdown, motion_module_dropdown,
+            base_model_dropdown, lora_model_dropdown, lora_alpha_slider,
             prompt_textbox, negative_prompt_textbox, 
             sampler_dropdown, sample_step_slider, width_slider, height_slider,
             is_image, length_slider, cfg_scale_slider, seed_textbox
@@ -788,6 +904,56 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
             """
         )
         with gr.Column(variant="panel"):
+            gr.Markdown(
+                """
+                ### 1. Model checkpoints.
+                """
+            )
+            with gr.Row():
+                diffusion_transformer_dropdown = gr.Dropdown(
+                    label="Pretrained Model Path",
+                    choices=[model_name],
+                    value=model_name,
+                    interactive=False,
+                )
+            with gr.Row():
+                motion_module_dropdown = gr.Dropdown(
+                    label="Select motion module",
+                    choices=["none"],
+                    value="none",
+                    interactive=False,
+                    visible=False
+                )
+                base_model_dropdown = gr.Dropdown(
+                    label="Select base Dreambooth model",
+                    choices=["none"],
+                    value="none",
+                    interactive=False,
+                    visible=False
+                )
+                with gr.Column():
+                    gr.Markdown(
+                        """
+                        ### Minimalism is an example portrait of Lora, triggered by specific prompt words. More details can be found on [Wiki](https://github.com/aigc-apps/EasyAnimate/wiki/Training-Lora).
+                        """
+                    )
+                    with gr.Row():
+                        lora_model_dropdown = gr.Dropdown(
+                            label="Select LoRA model",
+                            choices=["none", "easyanimatev2_minimalism_lora.safetensors"],
+                            value="none",
+                            interactive=True,
+                        )
+
+                        lora_alpha_slider = gr.Slider(label="LoRA alpha (LoRA权重)", value=0.55, minimum=0, maximum=2, interactive=True)
+                
+        with gr.Column(variant="panel"):
+            gr.Markdown(
+                """
+                ### 2. Configs for Generation.
+                """
+            )
+            
             prompt_textbox = gr.Textbox(label="Prompt", lines=2, value="This video shows the majestic beauty of a waterfall cascading down a cliff into a serene lake. The waterfall, with its powerful flow, is the central focus of the video. The surrounding landscape is lush and green, with trees and foliage adding to the natural beauty of the scene")
             negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion. " )
                 
@@ -848,6 +1014,11 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
             generate_button.click(
                 fn=controller.generate,
                 inputs=[
+                    diffusion_transformer_dropdown,
+                    motion_module_dropdown,
+                    base_model_dropdown,
+                    lora_model_dropdown, 
+                    lora_alpha_slider,
                     prompt_textbox, 
                     negative_prompt_textbox, 
                     sampler_dropdown, 

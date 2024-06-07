@@ -108,12 +108,16 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         text_encoder: T5EncoderModel,
         vae: AutoencoderKL,
         transformer: Transformer3DModel,
+        image_processor,
+        image_encoder,
         scheduler: DPMSolverMultistepScheduler,
     ):
         super().__init__()
 
         self.register_modules(
-            tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, scheduler=scheduler
+            tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, 
+            image_processor=image_processor, image_encoder=image_encoder,
+            scheduler=scheduler
         )
 
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
@@ -503,26 +507,52 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         return_video_latents=False,
     ):
         if self.vae.quant_conv.weight.ndim==5:
-            shape = (batch_size, num_channels_latents, int(video_length // 5 * 2) if video_length != 1 else 1, height // self.vae_scale_factor, width // self.vae_scale_factor)
+            mini_batch_encoder = self.vae.mini_batch_encoder
+            mini_batch_decoder = self.vae.mini_batch_decoder
+            shape = (batch_size, num_channels_latents, int(video_length // mini_batch_encoder * mini_batch_decoder) if video_length != 1 else 1, height // self.vae_scale_factor, width // self.vae_scale_factor)
         else:
             shape = (batch_size, num_channels_latents, video_length, height // self.vae_scale_factor, width // self.vae_scale_factor)
+
         if isinstance(generator, list) and len(generator) != batch_size:
             raise ValueError(
                 f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
                 f" size of {batch_size}. Make sure the batch size matches the length of the generators."
             )
-        
-        if return_video_latents or (latents is None and not is_strength_max):
-            video = video.to(device=device, dtype=dtype)
 
-            if video.shape[1] == 4:
-                video_latents = video
+        if return_video_latents or (latents is None and not is_strength_max):
+            video = video.to(device=device, dtype=self.vae.dtype)
+            if self.vae.quant_conv.weight.ndim==5:
+                bs = 1
+                mini_batch_encoder = self.vae.mini_batch_encoder
+                new_video = []
+                if self.vae.slice_compression_vae:
+                    for i in range(0, video.shape[0], bs):
+                        video_bs = video[i : i + bs]
+                        video_bs = self.vae.encode(video_bs)[0]
+                        video_bs = video_bs.sample()
+                        new_video.append(video_bs)
+                else:
+                    for i in range(0, video.shape[0], bs):
+                        new_video_mini_batch = []
+                        for j in range(0, video.shape[2], mini_batch_encoder):
+                            video_bs = video[i : i + bs, :, j: j + mini_batch_encoder, :, :]
+                            video_bs = self.vae.encode(video_bs)[0]
+                            video_bs = video_bs.sample()
+                            new_video_mini_batch.append(video_bs)
+                        new_video_mini_batch = torch.cat(new_video_mini_batch, dim = 2)
+                        new_video.append(new_video_mini_batch)
+                video = torch.cat(new_video, dim = 0)
+                video = video * 0.1825
+
             else:
-                video_length = video.shape[2]
-                video = rearrange(video, "b c f h w -> (b f) c h w")
-                video_latents = self._encode_vae_image(image=video, generator=generator)
-                video_latents = rearrange(video_latents, "(b f) c h w -> b c f h w", f=video_length)
-            video_latents = video_latents.repeat(batch_size // video_latents.shape[0], 1, 1, 1, 1)
+                if video.shape[1] == 4:
+                    video = video
+                else:
+                    video_length = video.shape[2]
+                    video = rearrange(video, "b c f h w -> (b f) c h w")
+                    video = self._encode_vae_image(video, generator=generator)
+                    video = rearrange(video, "(b f) c h w -> b c f h w", f=video_length)
+            video_latents = video.repeat(batch_size // video.shape[0], 1, 1, 1, 1)
 
         if latents is None:
             rand_device = "cpu" if device.type == "mps" else device
@@ -548,33 +578,61 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
 
         return outputs
 
-    def decode_latents(self, latents):
-        video_length = latents.shape[2]
-        latents = 1 / 0.18215 * latents
-        if self.vae.quant_conv.weight.ndim==5:
-            mini_batch_decoder = 2
-            # Decoder
-            video = []
+    def smooth_output(self, video, mini_batch_encoder, mini_batch_decoder):
+        if video.size()[2] <= mini_batch_encoder:
+            return video
+        prefix_index_before = mini_batch_encoder // 2
+        prefix_index_after = mini_batch_encoder - prefix_index_before
+        pixel_values = video[:, :, prefix_index_before:-prefix_index_after]
+        
+        if self.vae.slice_compression_vae:
+            latents = self.vae.encode(pixel_values)[0]
+            latents = latents.sample()
+        else:
+            new_pixel_values = []
+            for i in range(0, pixel_values.shape[2], mini_batch_encoder):
+                with torch.no_grad():
+                    pixel_values_bs = pixel_values[:, :, i: i + mini_batch_encoder, :, :]
+                    pixel_values_bs = self.vae.encode(pixel_values_bs)[0]
+                    pixel_values_bs = pixel_values_bs.sample()
+                    new_pixel_values.append(pixel_values_bs)
+            latents = torch.cat(new_pixel_values, dim = 2)
+                
+        if self.vae.slice_compression_vae:
+            middle_video = self.vae.decode(latents)[0]
+        else:
+            middle_video = []
             for i in range(0, latents.shape[2], mini_batch_decoder):
                 with torch.no_grad():
                     start_index = i
                     end_index = i + mini_batch_decoder
                     latents_bs = self.vae.decode(latents[:, :, start_index:end_index, :, :])[0]
-                    video.append(latents_bs)
-
-            # Smooth
-            mini_batch_encoder = 5
-            video = torch.cat(video, 2).cpu()
-            for i in range(mini_batch_encoder, video.shape[2], mini_batch_encoder):
-                origin_before = copy.deepcopy(video[:, :, i - 1, :, :])
-                origin_after = copy.deepcopy(video[:, :, i, :, :])
-
-                video[:, :, i - 1, :, :] = origin_before * 0.75 + origin_after * 0.25
-                video[:, :, i, :, :] = origin_before * 0.25 + origin_after * 0.75
+                    middle_video.append(latents_bs)
+            middle_video = torch.cat(middle_video, 2)
+        video[:, :, prefix_index_before:-prefix_index_after] = (video[:, :, prefix_index_before:-prefix_index_after] + middle_video) / 2
+        return video
+    
+    def decode_latents(self, latents):
+        video_length = latents.shape[2]
+        latents = 1 / 0.18215 * latents
+        if self.vae.quant_conv.weight.ndim==5:
+            mini_batch_encoder = self.vae.mini_batch_encoder
+            mini_batch_decoder = self.vae.mini_batch_decoder
+            if self.vae.slice_compression_vae:
+                video = self.vae.decode(latents)[0]
+            else:
+                video = []
+                for i in range(0, latents.shape[2], mini_batch_decoder):
+                    with torch.no_grad():
+                        start_index = i
+                        end_index = i + mini_batch_decoder
+                        latents_bs = self.vae.decode(latents[:, :, start_index:end_index, :, :])[0]
+                        video.append(latents_bs)
+                video = torch.cat(video, 2)
             video = video.clamp(-1, 1)
+            video = self.smooth_output(video, mini_batch_encoder, mini_batch_decoder).cpu().clamp(-1, 1)
         else:
             latents = rearrange(latents, "b c f h w -> (b f) c h w")
-            # video = self.vae.decode(latents).sample
             video = []
             for frame_idx in tqdm(range(latents.shape[0])):
                 video.append(self.vae.decode(latents[frame_idx:frame_idx+1]).sample)
@@ -610,17 +668,24 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         mask = mask.to(device=device, dtype=self.vae.dtype)
         if self.vae.quant_conv.weight.ndim==5:
             bs = 1
+            mini_batch_encoder = self.vae.mini_batch_encoder
             new_mask = []
-            for i in range(0, mask.shape[0], bs):
-                mini_batch = 5
-                new_mask_mini_batch = []
-                for j in range(0, mask.shape[2], mini_batch):
-                    mask_bs = mask[i : i + bs, :, j: j + mini_batch, :, :]
+            if self.vae.slice_compression_vae:
+                for i in range(0, mask.shape[0], bs):
+                    mask_bs = mask[i : i + bs]
                     mask_bs = self.vae.encode(mask_bs)[0]
                     mask_bs = mask_bs.sample()
-                    new_mask_mini_batch.append(mask_bs)
-                new_mask_mini_batch = torch.cat(new_mask_mini_batch, dim = 2)
-                new_mask.append(new_mask_mini_batch)
+                    new_mask.append(mask_bs)
+            else:
+                for i in range(0, mask.shape[0], bs):
+                    new_mask_mini_batch = []
+                    for j in range(0, mask.shape[2], mini_batch_encoder):
+                        mask_bs = mask[i : i + bs, :, j: j + mini_batch_encoder, :, :]
+                        mask_bs = self.vae.encode(mask_bs)[0]
+                        mask_bs = mask_bs.sample()
+                        new_mask_mini_batch.append(mask_bs)
+                    new_mask_mini_batch = torch.cat(new_mask_mini_batch, dim = 2)
+                    new_mask.append(new_mask_mini_batch)
             mask = torch.cat(new_mask, dim = 0)
             mask = mask * 0.1825
 
@@ -636,17 +701,24 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         masked_image = masked_image.to(device=device, dtype=self.vae.dtype)
         if self.vae.quant_conv.weight.ndim==5:
             bs = 1
+            mini_batch_encoder = self.vae.mini_batch_encoder
             new_mask_pixel_values = []
-            for i in range(0, masked_image.shape[0], bs):
-                mini_batch = 5
-                new_mask_pixel_values_mini_batch = []
-                for j in range(0, masked_image.shape[2], mini_batch):
-                    mask_pixel_values_bs = masked_image[i : i + bs, :, j: j + mini_batch, :, :]
+            if self.vae.slice_compression_vae:
+                for i in range(0, masked_image.shape[0], bs):
+                    mask_pixel_values_bs = masked_image[i : i + bs]
                     mask_pixel_values_bs = self.vae.encode(mask_pixel_values_bs)[0]
                     mask_pixel_values_bs = mask_pixel_values_bs.sample()
-                    new_mask_pixel_values_mini_batch.append(mask_pixel_values_bs)
-                new_mask_pixel_values_mini_batch = torch.cat(new_mask_pixel_values_mini_batch, dim = 2)
-                new_mask_pixel_values.append(new_mask_pixel_values_mini_batch)
+                    new_mask_pixel_values.append(mask_pixel_values_bs)
+            else:
+                for i in range(0, masked_image.shape[0], bs):
+                    new_mask_pixel_values_mini_batch = []
+                    for j in range(0, masked_image.shape[2], mini_batch_encoder):
+                        mask_pixel_values_bs = masked_image[i : i + bs, :, j: j + mini_batch_encoder, :, :]
+                        mask_pixel_values_bs = self.vae.encode(mask_pixel_values_bs)[0]
+                        mask_pixel_values_bs = mask_pixel_values_bs.sample()
+                        new_mask_pixel_values_mini_batch.append(mask_pixel_values_bs)
+                    new_mask_pixel_values_mini_batch = torch.cat(new_mask_pixel_values_mini_batch, dim = 2)
+                    new_mask_pixel_values.append(new_mask_pixel_values_mini_batch)
             masked_image_latents = torch.cat(new_mask_pixel_values, dim = 0)
             masked_image_latents = masked_image_latents * 0.1825
 
@@ -857,22 +929,26 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
             mask_condition = mask_condition.to(dtype=torch.float32)
             mask_condition = rearrange(mask_condition, "(b f) c h w -> b c f h w", f=video_length)
 
-            if masked_video_latents is None:
-                masked_video = init_video * (mask_condition < 0.5) + torch.ones_like(init_video) * (mask_condition > 0.5) * -1
-            else:
-                masked_video = masked_video_latents
+            if num_channels_transformer == 12:
+                if masked_video_latents is None:
+                    masked_video = init_video * (mask_condition < 0.5) + torch.ones_like(init_video) * (mask_condition > 0.5) * -1
+                else:
+                    masked_video = masked_video_latents
 
-            mask, masked_video_latents = self.prepare_mask_latents(
-                mask_condition,
-                masked_video,
-                batch_size,
-                height,
-                width,
-                prompt_embeds.dtype,
-                device,
-                generator,
-                do_classifier_free_guidance,
-            )
+                mask, masked_video_latents = self.prepare_mask_latents(
+                    mask_condition,
+                    masked_video,
+                    batch_size,
+                    height,
+                    width,
+                    prompt_embeds.dtype,
+                    device,
+                    generator,
+                    do_classifier_free_guidance,
+                )
+            else:
+                mask = mask_condition
+                masked_video_latents = torch.zeros_like(latents).to(latents.device, latents.dtype)
         else:
             mask = torch.zeros_like(latents).to(latents.device, latents.dtype)
             masked_video_latents = torch.zeros_like(latents).to(latents.device, latents.dtype)
@@ -890,7 +966,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
                     f" = {num_channels_latents+num_channels_masked_image+num_channels_mask}. Please verify the config of"
                     " `pipeline.transformer` or your `mask_image` or `image` input."
                 )
-        elif num_channels_transformer == 4:
+        elif num_channels_transformer != 4:
             raise ValueError(
                 f"The transformer {self.transformer.__class__} should have 9 input channels, not {self.transformer.config.in_channels}."
             )
@@ -963,6 +1039,16 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
 
                 # compute previous image: x_t -> x_t-1
                 latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
+
+                if num_channels_transformer == 4:
+                    init_latents_proper = image_latents
+                    init_mask = F.interpolate(mask, size=init_latents_proper.size(), mode='trilinear', align_corners=True)
+                    if i < len(timesteps) - 1:
+                        noise_timestep = timesteps[i + 1]
+                        init_latents_proper = self.scheduler.add_noise(
+                            init_latents_proper, noise, torch.tensor([noise_timestep])
+                        )
+                    latents = (1 - init_mask) * init_latents_proper + init_mask * latents
 
                 # call the callback, if provided
                 if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
