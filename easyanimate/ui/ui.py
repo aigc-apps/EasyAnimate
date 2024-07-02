@@ -22,11 +22,13 @@ from diffusers.utils.import_utils import is_xformers_available
 from omegaconf import OmegaConf
 from safetensors import safe_open
 from transformers import T5EncoderModel, T5Tokenizer
+from transformers import CLIPVisionModelWithProjection,  CLIPImageProcessor
 
 from easyanimate.models.transformer3d import Transformer3DModel
 from easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
+from easyanimate.pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaintPipeline
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
-from easyanimate.utils.utils import save_videos_grid
+from easyanimate.utils.utils import save_videos_grid, get_image_to_video_latent
 from PIL import Image
 
 scheduler_dict = {
@@ -59,8 +61,8 @@ class EasyAnimateController:
         self.personalized_model_dir     = os.path.join(self.basedir, "models", "Personalized_Model")
         self.savedir                    = os.path.join(self.basedir, "samples", datetime.now().strftime("Gradio-%Y-%m-%dT%H-%M-%S"))
         self.savedir_sample             = os.path.join(self.savedir, "sample")
-        self.edition                    = "v2"
-        self.inference_config           = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_magvit_motion_module_v2.yaml"))
+        self.edition                    = "v3"
+        self.inference_config           = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_slicevae_motion_module_v3.yaml"))
         os.makedirs(self.savedir, exist_ok=True)
 
         self.diffusion_transformer_list = []
@@ -84,14 +86,14 @@ class EasyAnimateController:
         self.weight_dtype = torch.bfloat16
 
     def refresh_diffusion_transformer(self):
-        self.diffusion_transformer_list = glob(os.path.join(self.diffusion_transformer_dir, "*/"))
+        self.diffusion_transformer_list = sorted(glob(os.path.join(self.diffusion_transformer_dir, "*/")))
 
     def refresh_motion_module(self):
-        motion_module_list = glob(os.path.join(self.motion_module_dir, "*.safetensors"))
+        motion_module_list = sorted(glob(os.path.join(self.motion_module_dir, "*.safetensors")))
         self.motion_module_list = [os.path.basename(p) for p in motion_module_list]
 
     def refresh_personalized_model(self):
-        personalized_model_list = glob(os.path.join(self.personalized_model_dir, "*.safetensors"))
+        personalized_model_list = sorted(glob(os.path.join(self.personalized_model_dir, "*.safetensors")))
         self.personalized_model_list = [os.path.basename(p) for p in personalized_model_list]
     
     def update_edition(self, edition):
@@ -100,13 +102,18 @@ class EasyAnimateController:
         if edition == "v1":
             self.inference_config = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_motion_module_v1.yaml"))
             return gr.update(), gr.update(value="none"), gr.update(visible=True), gr.update(visible=True), \
-                gr.update(visible=False), gr.update(value=512, minimum=384, maximum=704, step=32), \
+                gr.update(value=512, minimum=384, maximum=704, step=32), \
                 gr.update(value=512, minimum=384, maximum=704, step=32), gr.update(value=80, minimum=40, maximum=80, step=1)
-        else:
+        elif edition == "v2":
             self.inference_config = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_magvit_motion_module_v2.yaml"))
             return gr.update(), gr.update(value="none"), gr.update(visible=False), gr.update(visible=False), \
-                gr.update(visible=True), gr.update(value=672, minimum=128, maximum=1280, step=16), \
+                gr.update(value=672, minimum=128, maximum=1280, step=16), \
                 gr.update(value=384, minimum=128, maximum=1280, step=16), gr.update(value=144, minimum=9, maximum=144, step=9)
+        else:
+            self.inference_config = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_slicevae_motion_module_v3.yaml"))
+            return gr.update(), gr.update(value="none"), gr.update(visible=False), gr.update(visible=False), \
+                gr.update(value=672, minimum=128, maximum=1280, step=16), \
+                gr.update(value=384, minimum=128, maximum=1280, step=16), gr.update(value=144, minimum=8, maximum=144, step=8)
 
     def update_diffusion_transformer(self, diffusion_transformer_dropdown):
         print("Update diffusion transformer")
@@ -129,13 +136,30 @@ class EasyAnimateController:
         self.text_encoder = T5EncoderModel.from_pretrained(diffusion_transformer_dropdown, subfolder="text_encoder", torch_dtype=self.weight_dtype)
 
         # Get pipeline
-        self.pipeline = EasyAnimatePipeline(
-            vae=self.vae, 
-            text_encoder=self.text_encoder, 
-            tokenizer=self.tokenizer, 
-            transformer=self.transformer,
-            scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
-        )
+        if self.transformer.config.in_channels != 12:
+            self.pipeline = EasyAnimatePipeline(
+                vae=self.vae, 
+                text_encoder=self.text_encoder, 
+                tokenizer=self.tokenizer, 
+                transformer=self.transformer,
+                scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
+            )
+        else:
+            clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+                diffusion_transformer_dropdown, subfolder="image_encoder"
+            ).to("cuda", self.weight_dtype)
+            clip_image_processor = CLIPImageProcessor.from_pretrained(
+                diffusion_transformer_dropdown, subfolder="image_encoder"
+            )
+            self.pipeline = EasyAnimateInpaintPipeline(
+                vae=self.vae, 
+                text_encoder=self.text_encoder, 
+                tokenizer=self.tokenizer, 
+                transformer=self.transformer,
+                scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs)),
+                clip_image_encoder=clip_image_encoder,
+                clip_image_processor=clip_image_processor,
+            )
         self.pipeline.enable_model_cpu_offload()
         print("Update diffusion transformer done")
         return gr.update()
@@ -201,9 +225,13 @@ class EasyAnimateController:
         sample_step_slider, 
         width_slider, 
         height_slider, 
-        is_image,
+        generation_method, 
         length_slider, 
+        overlap_video_length, 
+        partial_video_length, 
         cfg_scale_slider, 
+        start_image, 
+        end_image, 
         seed_textbox,
         is_api = False,
     ):
@@ -220,6 +248,17 @@ class EasyAnimateController:
             print("Update lora model")
             self.update_lora_model(lora_model_dropdown)
 
+        if self.transformer.config.in_channels != 12 and start_image is not None:
+            raise gr.Error(f"Please select an image to video pretrained model while using image to video.")
+
+        if self.transformer.config.in_channels != 12 and generation_method == "Long Video Generation":
+            raise gr.Error(f"Please select an image to video pretrained model while using long video generation.")
+        
+        if start_image is None and end_image is not None:
+            raise gr.Error(f"If specifying the ending image of the video, please specify a starting image of the video.")
+
+        is_image = True if generation_method == "Image Generation" else False
+
         if is_xformers_available(): self.transformer.enable_xformers_memory_efficient_attention()
 
         self.pipeline.scheduler = scheduler_dict[sampler_dropdown](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
@@ -233,16 +272,98 @@ class EasyAnimateController:
         generator = torch.Generator(device="cuda").manual_seed(int(seed_textbox))
         
         try:
-            sample = self.pipeline(
-                prompt_textbox,
-                negative_prompt     = negative_prompt_textbox,
-                num_inference_steps = sample_step_slider,
-                guidance_scale      = cfg_scale_slider,
-                width               = width_slider,
-                height              = height_slider,
-                video_length        = length_slider if not is_image else 1,
-                generator           = generator
-            ).videos
+            if self.transformer.config.in_channels == 12:
+                if generation_method == "Long Video Generation":
+                    init_frames = 0
+                    last_frames = init_frames + partial_video_length
+                    while init_frames < length_slider:
+                        if last_frames >= length_slider:
+                            if self.pipeline.vae.quant_conv.weight.ndim==5:
+                                mini_batch_encoder = self.pipeline.vae.mini_batch_encoder
+                                _partial_video_length = length_slider - init_frames
+                                _partial_video_length = int(_partial_video_length // mini_batch_encoder * mini_batch_encoder)
+                            else:
+                                _partial_video_length = length_slider - init_frames
+                            
+                            if _partial_video_length <= 0:
+                                break
+                        else:
+                            _partial_video_length = partial_video_length
+
+                        if last_frames >= length_slider:
+                            input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, video_length=_partial_video_length, sample_size=(height_slider, width_slider))
+                        else:
+                            input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, None, video_length=_partial_video_length, sample_size=(height_slider, width_slider))
+
+                        with torch.no_grad():
+                            sample = self.pipeline(
+                                prompt_textbox, 
+                                negative_prompt     = negative_prompt_textbox,
+                                num_inference_steps = sample_step_slider,
+                                guidance_scale      = cfg_scale_slider,
+                                width               = width_slider,
+                                height              = height_slider,
+                                video_length        = _partial_video_length,
+                                generator           = generator,
+
+                                video        = input_video,
+                                mask_video   = input_video_mask,
+                                clip_image   = clip_image, 
+                                strength     = 1,
+                            ).videos
+                        
+                        if init_frames != 0:
+                            mix_ratio = torch.from_numpy(
+                                np.array([float(_index) / float(overlap_video_length) for _index in range(overlap_video_length)], np.float32)
+                            ).unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+                            
+                            new_sample[:, :, -overlap_video_length:] = new_sample[:, :, -overlap_video_length:] * (1 - mix_ratio) + \
+                                sample[:, :, :overlap_video_length] * mix_ratio
+                            new_sample = torch.cat([new_sample, sample[:, :, overlap_video_length:]], dim = 2)
+
+                            sample = new_sample
+                        else:
+                            new_sample = sample
+
+                        if last_frames >= length_slider:
+                            break
+
+                        start_image = [
+                            Image.fromarray(
+                                (sample[0, :, _index].transpose(0, 1).transpose(1, 2) * 255).numpy().astype(np.uint8)
+                            ) for _index in range(-overlap_video_length, 0)
+                        ]
+
+                        init_frames = init_frames + _partial_video_length - overlap_video_length
+                        last_frames = init_frames + _partial_video_length
+                else:
+                    input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
+
+                    sample = self.pipeline(
+                        prompt_textbox,
+                        negative_prompt     = negative_prompt_textbox,
+                        num_inference_steps = sample_step_slider,
+                        guidance_scale      = cfg_scale_slider,
+                        width               = width_slider,
+                        height              = height_slider,
+                        video_length        = length_slider if not is_image else 1,
+                        generator           = generator,
+
+                        video        = input_video,
+                        mask_video   = input_video_mask,
+                        clip_image   = clip_image, 
+                    ).videos
+            else:
+                sample = self.pipeline(
+                    prompt_textbox,
+                    negative_prompt     = negative_prompt_textbox,
+                    num_inference_steps = sample_step_slider,
+                    guidance_scale      = cfg_scale_slider,
+                    width               = width_slider,
+                    height              = height_slider,
+                    video_length        = length_slider if not is_image else 1,
+                    generator           = generator
+                ).videos
         except Exception as e:
             gc.collect()
             torch.cuda.empty_cache()
@@ -335,8 +456,8 @@ def ui():
             with gr.Row():
                 easyanimate_edition_dropdown = gr.Dropdown(
                     label="The config of EasyAnimate Edition (EasyAnimate版本配置)",
-                    choices=["v1", "v2"],
-                    value="v2",
+                    choices=["v1", "v2", "v3"],
+                    value="v3",
                     interactive=True,
                 )
             gr.Markdown(
@@ -417,14 +538,28 @@ def ui():
                 with gr.Column():
                     with gr.Row():
                         sampler_dropdown   = gr.Dropdown(label="Sampling method (采样器种类)", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
-                        sample_step_slider = gr.Slider(label="Sampling steps (生成步数)", value=50, minimum=10, maximum=100, step=1)
+                        sample_step_slider = gr.Slider(label="Sampling steps (生成步数)", value=25, minimum=10, maximum=100, step=1)
                         
                     width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=128, maximum=1280, step=16)
                     height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=128, maximum=1280, step=16)
-                    with gr.Row():
-                        is_image      = gr.Checkbox(False, label="Generate Image (是否生成图片)")
-                        length_slider = gr.Slider(label="Animation length (视频帧数)", value=144, minimum=9,   maximum=144,  step=9)
-                    cfg_scale_slider = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
+
+                    with gr.Group():
+                        generation_method = gr.Radio(
+                            ["Video Generation", "Image Generation", "Long Video Generation"],
+                            value="Video Generation",
+                            show_label=False,
+                        )
+                        with gr.Row():
+                            length_slider = gr.Slider(label="Animation length (视频帧数)", value=144, minimum=8,   maximum=144,  step=8)
+                            overlap_video_length = gr.Slider(label="Overlap length (视频续写的重叠帧数)", value=4, minimum=1,   maximum=4,  step=1, visible=False)
+                            partial_video_length = gr.Slider(label="Partial video generation length (每个部分的视频生成帧数)", value=72, minimum=8,   maximum=144,  step=8, visible=False)
+                    
+                    with gr.Accordion("Image to Video (图片到视频)", open=False):
+                        start_image = gr.Image(label="The image at the beginning of the video (图片到视频的开始图片)", show_label=True, elem_id="i2v_start", sources="upload", type="filepath")
+                        with gr.Accordion("The image at the ending of the video (图片到视频的结束图片[非必需, Optional])", open=False):
+                            end_image   = gr.Image(label="The image at the ending of the video (图片到视频的结束图片[非必需, Optional])", show_label=False, elem_id="i2v_end", sources="upload", type="filepath")
+
+                    cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
                     
                     with gr.Row():
                         seed_textbox = gr.Textbox(label="Seed (随机种子)", value=43)
@@ -446,11 +581,17 @@ def ui():
                         interactive=False
                     )
 
-            is_image.change(
-                lambda x: gr.update(visible=not x),
-                inputs=[is_image],
-                outputs=[length_slider],
+            def upload_generation_method(generation_method):
+                if generation_method == "Video Generation":
+                    return [gr.update(visible=True, maximum=144, value=144), gr.update(visible=False), gr.update(visible=False)]
+                elif generation_method == "Image Generation":
+                    return [gr.update(visible=False), gr.update(visible=False), gr.update(visible=False)]
+                else:
+                    return [gr.update(visible=True, maximum=1440), gr.update(visible=True), gr.update(visible=True)]
+            generation_method.change(
+                upload_generation_method, generation_method, [length_slider, overlap_video_length, partial_video_length]
             )
+
             easyanimate_edition_dropdown.change(
                 fn=controller.update_edition, 
                 inputs=[easyanimate_edition_dropdown], 
@@ -459,7 +600,6 @@ def ui():
                     diffusion_transformer_dropdown, 
                     motion_module_dropdown, 
                     motion_module_refresh_button, 
-                    is_image, 
                     width_slider, 
                     height_slider, 
                     length_slider, 
@@ -479,9 +619,13 @@ def ui():
                     sample_step_slider, 
                     width_slider, 
                     height_slider, 
-                    is_image, 
+                    generation_method, 
                     length_slider, 
+                    overlap_video_length, 
+                    partial_video_length, 
                     cfg_scale_slider, 
+                    start_image, 
+                    end_image, 
                     seed_textbox,
                 ],
                 outputs=[result_image, result_video, infer_progress]
@@ -528,19 +672,37 @@ class EasyAnimateController_Modelscope:
             subfolder="text_encoder", 
             torch_dtype=weight_dtype
         )
-        self.pipeline = EasyAnimatePipeline(
-            vae=self.vae, 
-            text_encoder=self.text_encoder, 
-            tokenizer=self.tokenizer, 
-            transformer=self.transformer,
-            scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
-        )
+        # Get pipeline
+        if self.transformer.config.in_channels != 12:
+            self.pipeline = EasyAnimatePipeline(
+                vae=self.vae, 
+                text_encoder=self.text_encoder, 
+                tokenizer=self.tokenizer, 
+                transformer=self.transformer,
+                scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
+            )
+        else:
+            clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+                model_name, subfolder="image_encoder"
+            ).to("cuda", weight_dtype)
+            clip_image_processor = CLIPImageProcessor.from_pretrained(
+                model_name, subfolder="image_encoder"
+            )
+            self.pipeline = EasyAnimateInpaintPipeline(
+                vae=self.vae, 
+                text_encoder=self.text_encoder, 
+                tokenizer=self.tokenizer, 
+                transformer=self.transformer,
+                scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs)),
+                clip_image_encoder=clip_image_encoder,
+                clip_image_processor=clip_image_processor,
+            )
         self.pipeline.enable_model_cpu_offload()
         print("Update diffusion transformer done")
 
 
     def refresh_personalized_model(self):
-        personalized_model_list = glob(os.path.join(self.personalized_model_dir, "*.safetensors"))
+        personalized_model_list = sorted(glob(os.path.join(self.personalized_model_dir, "*.safetensors")))
         self.personalized_model_list = [os.path.basename(p) for p in personalized_model_list]
 
 
@@ -567,9 +729,11 @@ class EasyAnimateController_Modelscope:
         sample_step_slider, 
         width_slider, 
         height_slider, 
-        is_image, 
+        generation_method, 
         length_slider, 
         cfg_scale_slider, 
+        start_image, 
+        end_image, 
         seed_textbox,
         is_api = False,
     ):    
@@ -579,6 +743,14 @@ class EasyAnimateController_Modelscope:
         if self.lora_model_path != lora_model_dropdown:
             print("Update lora model")
             self.update_lora_model(lora_model_dropdown)
+
+        if self.transformer.config.in_channels != 12 and start_image is not None:
+            raise gr.Error(f"Please select an image to video pretrained model while using image to video.")
+        
+        if start_image is None and end_image is not None:
+            raise gr.Error(f"If specifying the ending image of the video, please specify a starting image of the video.")
+
+        is_image = True if generation_method == "Image Generation" else False
 
         if is_xformers_available(): self.transformer.enable_xformers_memory_efficient_attention()
 
@@ -593,16 +765,34 @@ class EasyAnimateController_Modelscope:
         generator = torch.Generator(device="cuda").manual_seed(int(seed_textbox))
         
         try:
-            sample = self.pipeline(
-                prompt_textbox,
-                negative_prompt = negative_prompt_textbox,
-                num_inference_steps = sample_step_slider,
-                guidance_scale = cfg_scale_slider,
-                width = width_slider,
-                height = height_slider,
-                video_length = length_slider if not is_image else 1,
-                generator = generator
-            ).videos
+            if self.transformer.config.in_channels == 12:
+                input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
+
+                sample = self.pipeline(
+                    prompt_textbox,
+                    negative_prompt     = negative_prompt_textbox,
+                    num_inference_steps = sample_step_slider,
+                    guidance_scale      = cfg_scale_slider,
+                    width               = width_slider,
+                    height              = height_slider,
+                    video_length        = length_slider if not is_image else 1,
+                    generator           = generator,
+
+                    video        = input_video,
+                    mask_video   = input_video_mask,
+                    clip_image   = clip_image, 
+                ).videos
+            else:
+                sample = self.pipeline(
+                    prompt_textbox,
+                    negative_prompt     = negative_prompt_textbox,
+                    num_inference_steps = sample_step_slider,
+                    guidance_scale      = cfg_scale_slider,
+                    width               = width_slider,
+                    height              = height_slider,
+                    video_length        = length_slider if not is_image else 1,
+                    generator           = generator
+                ).videos
         except Exception as e:
             gc.collect()
             torch.cuda.empty_cache()
@@ -726,14 +916,20 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
                 with gr.Column():
                     with gr.Row():
                         sampler_dropdown   = gr.Dropdown(label="Sampling method (采样器种类)", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
-                        sample_step_slider = gr.Slider(label="Sampling steps (生成步数)", value=50, minimum=10, maximum=100, step=1)
+                        sample_step_slider = gr.Slider(label="Sampling steps (生成步数)", value=25, minimum=10, maximum=100, step=1)
                     
                     if edition == "v1":
                         width_slider     = gr.Slider(label="Width (视频宽度)",            value=512, minimum=384, maximum=704, step=32)
                         height_slider    = gr.Slider(label="Height (视频高度)",           value=512, minimum=384, maximum=704, step=32)
-                        with gr.Row():
-                            is_image      = gr.Checkbox(False, label="Generate Image (是否生成图片)", visible=False)
-                        length_slider    = gr.Slider(label="Animation length (视频帧数)", value=80,  minimum=40,  maximum=96,   step=1)
+
+                        with gr.Group():
+                            generation_method = gr.Radio(
+                                ["Video Generation", "Image Generation"],
+                                value="Video Generation",
+                                show_label=False,
+                                visible=False,
+                            )
+                            length_slider = gr.Slider(label="Animation length (视频帧数)", value=80,  minimum=40,  maximum=96,   step=1)
                         cfg_scale_slider = gr.Slider(label="CFG Scale (引导系数)",        value=6.0, minimum=0,   maximum=20)
                     else:
                         width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=256, maximum=704, step=16)
@@ -745,9 +941,20 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
                                 If you want to experience longer video generation, you can go to our [Github](https://github.com/aigc-apps/EasyAnimate/).
                                 """
                             )
-                            with gr.Row():
-                                is_image      = gr.Checkbox(False, label="Generate Image (是否生成图片)")
-                                length_slider = gr.Slider(label="Animation length (视频帧数)", value=72, minimum=9,   maximum=81,  step=9)
+                            with gr.Group():
+                                generation_method = gr.Radio(
+                                    ["Video Generation", "Image Generation"],
+                                    value="Video Generation",
+                                    show_label=False,
+                                    visible=True,
+                                )
+                                length_slider = gr.Slider(label="Animation length (视频帧数)", value=72, minimum=8,   maximum=72,  step=8)
+                        
+                        with gr.Accordion("Image to Video (图片到视频)", open=False):
+                            start_image = gr.Image(label="The image at the beginning of the video (图片到视频的开始图片)", show_label=True, elem_id="i2v_start", sources="upload", type="filepath")
+                            with gr.Accordion("The image at the ending of the video (图片到视频的结束图片[非必需, Optional])", open=False):
+                                end_image   = gr.Image(label="The image at the ending of the video (图片到视频的结束图片[非必需, Optional])", show_label=False, elem_id="i2v_end", sources="upload", type="filepath")
+
                         cfg_scale_slider = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
                     
                     with gr.Row():
@@ -770,10 +977,13 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
                         interactive=False
                     )
 
-            is_image.change(
-                lambda x: gr.update(visible=not x),
-                inputs=[is_image],
-                outputs=[length_slider],
+            def upload_generation_method(generation_method):
+                if generation_method == "Video Generation":
+                    return [gr.update(visible=True, maximum=144, value=144)]
+                elif generation_method == "Image Generation":
+                    return [gr.update(visible=False)]
+            generation_method.change(
+                upload_generation_method, generation_method, [length_slider]
             )
 
             generate_button.click(
@@ -790,9 +1000,11 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
                     sample_step_slider, 
                     width_slider, 
                     height_slider, 
-                    is_image, 
+                    generation_method, 
                     length_slider, 
                     cfg_scale_slider, 
+                    start_image, 
+                    end_image, 
                     seed_textbox,
                 ],
                 outputs=[result_image, result_video, infer_progress]
@@ -805,8 +1017,21 @@ def post_eas(
     base_model_dropdown, lora_model_dropdown, lora_alpha_slider,
     prompt_textbox, negative_prompt_textbox, 
     sampler_dropdown, sample_step_slider, width_slider, height_slider,
-    is_image, length_slider, cfg_scale_slider, seed_textbox,
+    generation_method, length_slider, cfg_scale_slider, 
+    start_image, end_image, seed_textbox,
 ):
+    if start_image is not None:
+        with open(start_image, 'rb') as file:
+            file_content = file.read()
+            start_image_encoded_content = base64.b64encode(file_content)
+            start_image = start_image_encoded_content.decode('utf-8')
+
+    if end_image is not None:
+        with open(end_image, 'rb') as file:
+            file_content = file.read()
+            end_image_encoded_content = base64.b64encode(file_content)
+            end_image = end_image_encoded_content.decode('utf-8')
+
     datas = {
         "base_model_path": base_model_dropdown,
         "motion_module_path": motion_module_dropdown,
@@ -818,12 +1043,14 @@ def post_eas(
         "sample_step_slider": sample_step_slider, 
         "width_slider": width_slider, 
         "height_slider": height_slider, 
-        "is_image": is_image,
+        "generation_method": generation_method,
         "length_slider": length_slider,
         "cfg_scale_slider": cfg_scale_slider,
+        "start_image": start_image,
+        "end_image": end_image,
         "seed_textbox": seed_textbox,
     }
-    # Token可以在公网地址调用信息中获取，详情请参见通用公网调用部分。
+
     session = requests.session()
     session.headers.update({"Authorization": os.environ.get("EAS_TOKEN")})
 
@@ -850,17 +1077,23 @@ class EasyAnimateController_EAS:
         sample_step_slider, 
         width_slider, 
         height_slider, 
-        is_image, 
+        generation_method, 
         length_slider, 
         cfg_scale_slider, 
+        start_image, 
+        end_image, 
         seed_textbox
     ):
+        is_image = True if generation_method == "Image Generation" else False
+
         outputs = post_eas(
             diffusion_transformer_dropdown, motion_module_dropdown,
             base_model_dropdown, lora_model_dropdown, lora_alpha_slider,
             prompt_textbox, negative_prompt_textbox, 
             sampler_dropdown, sample_step_slider, width_slider, height_slider,
-            is_image, length_slider, cfg_scale_slider, seed_textbox
+            generation_method, length_slider, cfg_scale_slider, 
+            start_image, end_image, 
+            seed_textbox
         )
         base64_encoding = outputs["base64_encoding"]
         decoded_data = base64.b64decode(base64_encoding)
@@ -961,14 +1194,20 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                 with gr.Column():
                     with gr.Row():
                         sampler_dropdown   = gr.Dropdown(label="Sampling method", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
-                        sample_step_slider = gr.Slider(label="Sampling steps", value=30, minimum=10, maximum=100, step=1)
+                        sample_step_slider = gr.Slider(label="Sampling steps", value=25, minimum=10, maximum=100, step=1)
                     
                     if edition == "v1":
                         width_slider     = gr.Slider(label="Width",            value=512, minimum=384, maximum=704, step=32)
                         height_slider    = gr.Slider(label="Height",           value=512, minimum=384, maximum=704, step=32)
-                        with gr.Row():
-                            is_image      = gr.Checkbox(False, label="Generate Image", visible=False)
-                        length_slider    = gr.Slider(label="Animation length", value=80,  minimum=40,  maximum=96,   step=1)
+
+                        with gr.Group():
+                            generation_method = gr.Radio(
+                                ["Video Generation", "Image Generation"],
+                                value="Video Generation",
+                                show_label=False,
+                                visible=False,
+                            )
+                            length_slider    = gr.Slider(label="Animation length", value=80,  minimum=40,  maximum=96,   step=1)
                         cfg_scale_slider = gr.Slider(label="CFG Scale",        value=6.0, minimum=0,   maximum=20)
                     else:
                         width_slider     = gr.Slider(label="Width",            value=672, minimum=256, maximum=704, step=16)
@@ -980,9 +1219,20 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                                 If you want to experience longer video generation, you can go to our [Github](https://github.com/aigc-apps/EasyAnimate/).
                                 """
                             )
-                            with gr.Row():
-                                is_image      = gr.Checkbox(False, label="Generate Image")
-                                length_slider = gr.Slider(label="Animation length", value=72, minimum=9,   maximum=81,  step=9)
+                            with gr.Group():
+                                generation_method = gr.Radio(
+                                    ["Video Generation", "Image Generation"],
+                                    value="Video Generation",
+                                    show_label=False,
+                                    visible=True,
+                                )
+                                length_slider = gr.Slider(label="Animation length", value=72, minimum=8,   maximum=72,  step=8)
+                
+                        with gr.Accordion("Image to Video", open=False):
+                            start_image = gr.Image(label="The image at the beginning of the video", show_label=True, elem_id="i2v_start", sources="upload", type="filepath")
+                            with gr.Accordion("The image at the ending of the video", open=False):
+                                end_image   = gr.Image(label="The image at the ending of the video", show_label=True, elem_id="i2v_end", sources="upload", type="filepath")
+                        
                         cfg_scale_slider = gr.Slider(label="CFG Scale",        value=7.0, minimum=0,   maximum=20)
                     
                     with gr.Row():
@@ -1005,10 +1255,13 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                         interactive=False
                     )
 
-            is_image.change(
-                lambda x: gr.update(visible=not x),
-                inputs=[is_image],
-                outputs=[length_slider],
+            def upload_generation_method(generation_method):
+                if generation_method == "Video Generation":
+                    return [gr.update(visible=True, maximum=144, value=144)]
+                elif generation_method == "Image Generation":
+                    return [gr.update(visible=False)]
+            generation_method.change(
+                upload_generation_method, generation_method, [length_slider]
             )
 
             generate_button.click(
@@ -1025,9 +1278,11 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                     sample_step_slider, 
                     width_slider, 
                     height_slider, 
-                    is_image, 
+                    generation_method, 
                     length_slider, 
                     cfg_scale_slider, 
+                    start_image, 
+                    end_image, 
                     seed_textbox,
                 ],
                 outputs=[result_image, result_video, infer_progress]

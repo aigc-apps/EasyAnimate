@@ -18,6 +18,7 @@ import re
 import copy
 import urllib.parse as ul
 from dataclasses import dataclass
+from PIL import Image
 from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -34,6 +35,7 @@ from diffusers.utils.torch_utils import randn_tensor
 from einops import rearrange
 from tqdm import tqdm
 from transformers import T5EncoderModel, T5Tokenizer
+from transformers import CLIPVisionModelWithProjection,  CLIPImageProcessor
 
 from ..models.transformer3d import Transformer3DModel
 
@@ -110,15 +112,15 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         vae: AutoencoderKL,
         transformer: Transformer3DModel,
         scheduler: DPMSolverMultistepScheduler,
-        # image_processor,
-        # image_encoder,
+        clip_image_processor:CLIPImageProcessor = None,
+        clip_image_encoder:CLIPVisionModelWithProjection = None,
     ):
         super().__init__()
 
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae, transformer=transformer, 
             scheduler=scheduler,
-            # image_processor=image_processor, image_encoder=image_encoder,
+            clip_image_processor=clip_image_processor, clip_image_encoder=clip_image_encoder,
         )
 
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
@@ -543,7 +545,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
                         new_video_mini_batch = torch.cat(new_video_mini_batch, dim = 2)
                         new_video.append(new_video_mini_batch)
                 video = torch.cat(new_video, dim = 0)
-                video = video * 0.1825
+                video = video * self.vae.config.scaling_factor
 
             else:
                 if video.shape[1] == 4:
@@ -556,19 +558,16 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
             video_latents = video.repeat(batch_size // video.shape[0], 1, 1, 1, 1)
 
         if latents is None:
-            rand_device = "cpu" if device.type == "mps" else device
-
-            noise = torch.randn(shape, generator=generator, device=rand_device, dtype=dtype).to(device)
+            noise = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
             # if strength is 1. then initialise the latents to noise, else initial to image + noise
             latents = noise if is_strength_max else self.scheduler.add_noise(video_latents, noise, timestep)
+            # if pure noise then scale the initial latents by the  Scheduler's init sigma
+            latents = latents * self.scheduler.init_noise_sigma if is_strength_max else latents
         else:
             noise = latents.to(device)
-            if latents.shape != shape:
-                raise ValueError(f"Unexpected latents shape, got {latents.shape}, expected {shape}")
-            latents = latents.to(device)
+            latents = noise * self.scheduler.init_noise_sigma
 
         # scale the initial noise by the standard deviation required by the scheduler
-        latents = latents * self.scheduler.init_noise_sigma
         outputs = (latents,)
 
         if return_noise:
@@ -615,7 +614,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
     
     def decode_latents(self, latents):
         video_length = latents.shape[2]
-        latents = 1 / 0.18215 * latents
+        latents = 1 / self.vae.config.scaling_factor * latents
         if self.vae.quant_conv.weight.ndim==5:
             mini_batch_encoder = self.vae.mini_batch_encoder
             mini_batch_decoder = self.vae.mini_batch_decoder
@@ -631,7 +630,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
                         video.append(latents_bs)
                 video = torch.cat(video, 2)
             video = video.clamp(-1, 1)
-            # video = self.smooth_output(video, mini_batch_encoder, mini_batch_decoder).cpu().clamp(-1, 1)
+            video = self.smooth_output(video, mini_batch_encoder, mini_batch_decoder).cpu().clamp(-1, 1)
         else:
             latents = rearrange(latents, "b c f h w -> (b f) c h w")
             video = []
@@ -698,7 +697,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
                     new_mask_mini_batch = torch.cat(new_mask_mini_batch, dim = 2)
                     new_mask.append(new_mask_mini_batch)
             mask = torch.cat(new_mask, dim = 0)
-            mask = mask * 0.1825
+            mask = mask * self.vae.config.scaling_factor
 
         else:
             if mask.shape[1] == 4:
@@ -731,7 +730,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
                     new_mask_pixel_values_mini_batch = torch.cat(new_mask_pixel_values_mini_batch, dim = 2)
                     new_mask_pixel_values.append(new_mask_pixel_values_mini_batch)
             masked_image_latents = torch.cat(new_mask_pixel_values, dim = 0)
-            masked_image_latents = masked_image_latents * 0.1825
+            masked_image_latents = masked_image_latents * self.vae.config.scaling_factor
 
         else:
             if masked_image.shape[1] == 4:
@@ -776,7 +775,9 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         callback_steps: int = 1,
         clean_caption: bool = True,
         mask_feature: bool = True,
-        max_sequence_length: int = 120
+        max_sequence_length: int = 120,
+        clip_image: Image = None,
+        clip_apply_ratio: float = 0.70,
     ) -> Union[EasyAnimatePipelineOutput, Tuple]:
         """
         Function invoked when calling the pipeline for generation.
@@ -910,7 +911,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         # Prepare latent variables
         num_channels_latents = self.vae.config.latent_channels
         num_channels_transformer = self.transformer.config.in_channels
-        return_image_latents = num_channels_transformer == 4
+        return_image_latents = True # num_channels_transformer == 4
 
         # 5. Prepare latents.
         latents_outputs = self.prepare_latents(
@@ -943,14 +944,15 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
             mask_condition = rearrange(mask_condition, "(b f) c h w -> b c f h w", f=video_length)
 
             if num_channels_transformer == 12:
-                mask_condition = torch.tile(mask_condition, [1, 3, 1, 1, 1])
+                mask_condition_tile = torch.tile(mask_condition, [1, 3, 1, 1, 1])
+                mask_condition_tile[:,:,4:] = 1
                 if masked_video_latents is None:
-                    masked_video = init_video * (mask_condition < 0.5) + torch.ones_like(init_video) * (mask_condition > 0.5) * -1
+                    masked_video = init_video * (mask_condition_tile < 0.5) + torch.ones_like(init_video) * (mask_condition_tile > 0.5) * -1
                 else:
                     masked_video = masked_video_latents
 
-                mask, masked_video_latents = self.prepare_mask_latents(
-                    mask_condition,
+                mask_latents, masked_video_latents = self.prepare_mask_latents(
+                    mask_condition_tile,
                     masked_video,
                     batch_size,
                     height,
@@ -960,25 +962,65 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
                     generator,
                     do_classifier_free_guidance,
                 )
+                mask = torch.tile(mask_condition, [1, num_channels_transformer // 3, 1, 1, 1])
+                mask = F.interpolate(mask, size=latents.size()[-3:], mode='trilinear', align_corners=True).to(latents.device, latents.dtype)
+                
+                mask_input = torch.cat([mask_latents] * 2) if do_classifier_free_guidance else mask_latents
+                masked_video_latents_input = (
+                    torch.cat([masked_video_latents] * 2) if do_classifier_free_guidance else masked_video_latents
+                )
+                inpaint_latents = torch.cat([mask_input, masked_video_latents_input], dim=1).to(latents.dtype)
             else:
                 mask = torch.tile(mask_condition, [1, num_channels_transformer, 1, 1, 1])
                 mask = F.interpolate(mask, size=latents.size()[-3:], mode='trilinear', align_corners=True).to(latents.device, latents.dtype)
                 
-                masked_video_latents = torch.zeros_like(latents).to(latents.device, latents.dtype)
+                inpaint_latents = None
         else:
             if num_channels_transformer == 12:
                 mask = torch.zeros_like(latents).to(latents.device, latents.dtype)
+                masked_video_latents = torch.zeros_like(latents).to(latents.device, latents.dtype)
+
+                mask_input = torch.cat([mask] * 2) if do_classifier_free_guidance else mask
+                masked_video_latents_input = (
+                    torch.cat([masked_video_latents] * 2) if do_classifier_free_guidance else masked_video_latents
+                )
+                inpaint_latents = torch.cat([mask_input, masked_video_latents_input], dim=1).to(latents.dtype)
             else:
                 mask = torch.zeros_like(init_video[:, :1])
                 mask = torch.tile(mask, [1, num_channels_transformer, 1, 1, 1])
                 mask = F.interpolate(mask, size=latents.size()[-3:], mode='trilinear', align_corners=True).to(latents.device, latents.dtype)
 
-            masked_video_latents = torch.zeros_like(latents).to(latents.device, latents.dtype)
+                inpaint_latents = None
+    
+        if clip_image is not None:
+            inputs = self.clip_image_processor(images=clip_image, return_tensors="pt")
+            inputs["pixel_values"] = inputs["pixel_values"].to(latents.device, dtype=latents.dtype)
+            clip_encoder_hidden_states = self.clip_image_encoder(**inputs).image_embeds
+            clip_encoder_hidden_states_neg = torch.zeros([batch_size, 768]).to(latents.device, dtype=latents.dtype)
+
+            clip_attention_mask = torch.ones([batch_size, 8]).to(latents.device, dtype=latents.dtype)
+            clip_attention_mask_neg = torch.zeros([batch_size, 8]).to(latents.device, dtype=latents.dtype)
+
+            clip_encoder_hidden_states_input = torch.cat([clip_encoder_hidden_states_neg, clip_encoder_hidden_states]) if do_classifier_free_guidance else clip_encoder_hidden_states
+            clip_attention_mask_input = torch.cat([clip_attention_mask_neg, clip_attention_mask]) if do_classifier_free_guidance else clip_attention_mask
+
+        elif clip_image is None and num_channels_transformer == 12:
+            clip_encoder_hidden_states = torch.zeros([batch_size, 768]).to(latents.device, dtype=latents.dtype)
+
+            clip_attention_mask = torch.zeros([batch_size, 8])
+            clip_attention_mask = clip_attention_mask.to(latents.device, dtype=latents.dtype)
+
+            clip_encoder_hidden_states_input = torch.cat([clip_encoder_hidden_states] * 2) if do_classifier_free_guidance else clip_encoder_hidden_states
+            clip_attention_mask_input = torch.cat([clip_attention_mask] * 2) if do_classifier_free_guidance else clip_attention_mask
+
+        else:
+            clip_encoder_hidden_states_input = None
+            clip_attention_mask_input = None
 
         # Check that sizes of mask, masked image and latents match
         if num_channels_transformer == 12:
             # default case for runwayml/stable-diffusion-inpainting
-            num_channels_mask = mask.shape[1]
+            num_channels_mask = mask_latents.shape[1]
             num_channels_masked_image = masked_video_latents.shape[1]
             if num_channels_latents + num_channels_mask + num_channels_masked_image != self.transformer.config.in_channels:
                 raise ValueError(
@@ -1018,15 +1060,13 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
-                if num_channels_transformer == 12:
-                    mask_input = torch.cat([mask] * 2) if do_classifier_free_guidance else mask
-                    masked_video_latents_input = (
-                        torch.cat([masked_video_latents] * 2) if do_classifier_free_guidance else masked_video_latents
-                    )
-                    inpaint_latents = torch.cat([mask_input, masked_video_latents_input], dim=1).to(latent_model_input.dtype)
+                if i < len(timesteps) * (1 - clip_apply_ratio) and clip_encoder_hidden_states_input is not None:
+                    clip_encoder_hidden_states_actual_input = torch.zeros_like(clip_encoder_hidden_states_input)
+                    clip_attention_mask_actual_input = torch.zeros_like(clip_attention_mask_input)
                 else:
-                    inpaint_latents = None
-    
+                    clip_encoder_hidden_states_actual_input = clip_encoder_hidden_states_input
+                    clip_attention_mask_actual_input = clip_attention_mask_input
+
                 current_timestep = t
                 if not torch.is_tensor(current_timestep):
                     # TODO: this requires sync between CPU and GPU. So try to pass timesteps as tensors if you can
@@ -1050,6 +1090,8 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
                     timestep=current_timestep,
                     added_cond_kwargs=added_cond_kwargs,
                     inpaint_latents=inpaint_latents,
+                    clip_encoder_hidden_states=clip_encoder_hidden_states_actual_input,
+                    clip_attention_mask=clip_attention_mask_actual_input,
                     return_dict=False,
                 )[0]
 
@@ -1072,6 +1114,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
                         init_latents_proper = self.scheduler.add_noise(
                             init_latents_proper, noise, torch.tensor([noise_timestep])
                         )
+                    
                     latents = (1 - init_mask) * init_latents_proper + init_mask * latents
 
                 # call the callback, if provided

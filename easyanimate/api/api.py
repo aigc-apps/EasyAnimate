@@ -3,9 +3,12 @@ import gc
 import base64
 import torch
 import gradio as gr
+import tempfile
+import hashlib
 
 from fastapi import FastAPI
 from io import BytesIO
+from PIL import Image
 
 # Function to encode a file to Base64
 def encode_file_to_base64(file_path):
@@ -66,9 +69,25 @@ def infer_forward_api(_: gr.Blocks, app: FastAPI, controller):
         width_slider = datas.get('width_slider', 672)
         height_slider = datas.get('height_slider', 384)
         is_image = datas.get('is_image', False)
+        generation_method = datas.get('generation_method', False)
         length_slider = datas.get('length_slider', 144)
+        overlap_video_length = datas.get('overlap_video_length', 4)
+        partial_video_length = datas.get('partial_video_length', 72)
         cfg_scale_slider = datas.get('cfg_scale_slider', 6)
+        start_image = datas.get('start_image', None)
+        end_image = datas.get('end_image', None)
         seed_textbox = datas.get("seed_textbox", 43)
+
+        generation_method = "Image Generation" if is_image else generation_method
+
+        temp_directory = tempfile.gettempdir()
+        if start_image is not None:
+            start_image = base64.b64decode(start_image)
+            start_image = [Image.open(BytesIO(start_image))]
+        
+        if end_image is not None:
+            end_image = base64.b64decode(end_image)
+            end_image = [Image.open(BytesIO(end_image))]
 
         try:
             save_sample_path, comment = controller.generate(
@@ -83,9 +102,13 @@ def infer_forward_api(_: gr.Blocks, app: FastAPI, controller):
                 sample_step_slider, 
                 width_slider, 
                 height_slider, 
-                is_image,
+                generation_method,
                 length_slider, 
+                overlap_video_length, 
+                partial_video_length, 
                 cfg_scale_slider, 
+                start_image,
+                end_image,
                 seed_textbox,
                 is_api = True,
             )

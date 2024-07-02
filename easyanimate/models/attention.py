@@ -19,7 +19,8 @@ import torch.nn.functional as F
 import torch.nn.init as init
 from diffusers.models.activations import GEGLU, GELU, ApproximateGELU
 from diffusers.models.attention import AdaLayerNorm, FeedForward
-from diffusers.models.attention_processor import Attention
+from diffusers.models.attention_processor import (Attention, AttnProcessor2_0,
+                                                  HunyuanAttnProcessor2_0)
 from diffusers.models.embeddings import SinusoidalPositionalEmbedding
 from diffusers.models.lora import LoRACompatibleLinear
 from diffusers.models.normalization import AdaLayerNorm, AdaLayerNormZero
@@ -29,13 +30,21 @@ from diffusers.utils.torch_utils import maybe_allow_in_graph
 from einops import rearrange, repeat
 from torch import nn
 
-from .motion_module import get_motion_module
+from .motion_module import PositionalEncoding, get_motion_module
+from .norm import FP32LayerNorm
 
 if is_xformers_available():
     import xformers
     import xformers.ops
 else:
     xformers = None
+
+
+def zero_module(module):
+    # Zero out the parameters of a module and return it.
+    for p in module.parameters():
+        p.detach().zero_()
+    return module
 
 
 @maybe_allow_in_graph
@@ -59,8 +68,8 @@ class GatedSelfAttentionDense(nn.Module):
         self.attn = Attention(query_dim=query_dim, heads=n_heads, dim_head=d_head)
         self.ff = FeedForward(query_dim, activation_fn="geglu")
 
-        self.norm1 = nn.LayerNorm(query_dim)
-        self.norm2 = nn.LayerNorm(query_dim)
+        self.norm1 = FP32LayerNorm(query_dim)
+        self.norm2 = FP32LayerNorm(query_dim)
 
         self.register_parameter("alpha_attn", nn.Parameter(torch.tensor(0.0)))
         self.register_parameter("alpha_dense", nn.Parameter(torch.tensor(0.0)))
@@ -78,14 +87,6 @@ class GatedSelfAttentionDense(nn.Module):
         x = x + self.alpha_dense.tanh() * self.ff(self.norm2(x))
 
         return x
-
-
-def zero_module(module):
-    # Zero out the parameters of a module and return it.
-    for p in module.parameters():
-        p.detach().zero_()
-    return module
-
 
 
 class KVCompressionCrossAttention(nn.Module):
@@ -154,7 +155,7 @@ class KVCompressionCrossAttention(nn.Module):
             stride=2,
             bias=True
         )
-        self.kv_compression_norm = nn.LayerNorm(query_dim)
+        self.kv_compression_norm = FP32LayerNorm(query_dim)
         init.constant_(self.kv_compression.weight, 1 / 4)
         if self.kv_compression.bias is not None:
             init.constant_(self.kv_compression.bias, 0)
@@ -410,6 +411,8 @@ class TemporalTransformerBlock(nn.Module):
         # motion module kwargs
         motion_module_type = "VanillaGrid",
         motion_module_kwargs = None,
+        qk_norm = False,
+        after_norm = False,
     ):
         super().__init__()
         self.only_cross_attention = only_cross_attention
@@ -442,7 +445,7 @@ class TemporalTransformerBlock(nn.Module):
         elif self.use_ada_layer_norm_zero:
             self.norm1 = AdaLayerNormZero(dim, num_embeds_ada_norm)
         else:
-            self.norm1 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+            self.norm1 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
 
         self.kvcompression = kvcompression
         if kvcompression:
@@ -464,8 +467,9 @@ class TemporalTransformerBlock(nn.Module):
                 bias=attention_bias,
                 cross_attention_dim=cross_attention_dim if only_cross_attention else None,
                 upcast_attention=upcast_attention,
+                qk_norm="layer_norm" if qk_norm else None,
+                processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
             )
-        print(self.attn1)
 
         self.attn_temporal = get_motion_module(
             in_channels = dim,
@@ -481,7 +485,7 @@ class TemporalTransformerBlock(nn.Module):
             self.norm2 = (
                 AdaLayerNorm(dim, num_embeds_ada_norm)
                 if self.use_ada_layer_norm
-                else nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+                else FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
             )
             self.attn2 = Attention(
                 query_dim=dim,
@@ -491,6 +495,8 @@ class TemporalTransformerBlock(nn.Module):
                 dropout=dropout,
                 bias=attention_bias,
                 upcast_attention=upcast_attention,
+                qk_norm="layer_norm" if qk_norm else None,
+                processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
             )  # is self-attn if encoder_hidden_states is none
         else:
             self.norm2 = None
@@ -498,9 +504,14 @@ class TemporalTransformerBlock(nn.Module):
 
         # 3. Feed-forward
         if not self.use_ada_layer_norm_single:
-            self.norm3 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+            self.norm3 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
 
         self.ff = FeedForward(dim, dropout=dropout, activation_fn=activation_fn, final_dropout=final_dropout)
+
+        if after_norm:
+            self.norm4 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+        else:
+            self.norm4 = None
 
         # 4. Fuser
         if attention_type == "gated" or attention_type == "gated-text-image":
@@ -654,6 +665,9 @@ class TemporalTransformerBlock(nn.Module):
             )
         else:
             ff_output = self.ff(norm_hidden_states, scale=lora_scale)
+        
+        if self.norm4 is not None:
+            ff_output = self.norm4(ff_output)
 
         if self.use_ada_layer_norm_zero:
             ff_output = gate_mlp.unsqueeze(1) * ff_output
@@ -723,6 +737,8 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
         attention_type: str = "default",
         positional_embeddings: Optional[str] = None,
         num_positional_embeddings: Optional[int] = None,
+        qk_norm = False,
+        after_norm = False,
     ):
         super().__init__()
         self.only_cross_attention = only_cross_attention
@@ -755,7 +771,7 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
         elif self.use_ada_layer_norm_zero:
             self.norm1 = AdaLayerNormZero(dim, num_embeds_ada_norm)
         else:
-            self.norm1 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+            self.norm1 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
             
         self.attn1 = Attention(
             query_dim=dim,
@@ -765,6 +781,8 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
             bias=attention_bias,
             cross_attention_dim=cross_attention_dim if only_cross_attention else None,
             upcast_attention=upcast_attention,
+            qk_norm="layer_norm" if qk_norm else None,
+            processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
         )
 
         # 2. Cross-Attn
@@ -775,7 +793,7 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
             self.norm2 = (
                 AdaLayerNorm(dim, num_embeds_ada_norm)
                 if self.use_ada_layer_norm
-                else nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+                else FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
             )
             self.attn2 = Attention(
                 query_dim=dim,
@@ -785,6 +803,8 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
                 dropout=dropout,
                 bias=attention_bias,
                 upcast_attention=upcast_attention,
+                qk_norm="layer_norm" if qk_norm else None,
+                processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
             )  # is self-attn if encoder_hidden_states is none
         else:
             self.norm2 = None
@@ -792,9 +812,14 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
 
         # 3. Feed-forward
         if not self.use_ada_layer_norm_single:
-            self.norm3 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+            self.norm3 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
 
         self.ff = FeedForward(dim, dropout=dropout, activation_fn=activation_fn, final_dropout=final_dropout)
+
+        if after_norm:
+            self.norm4 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+        else:
+            self.norm4 = None
 
         # 4. Fuser
         if attention_type == "gated" or attention_type == "gated-text-image":
@@ -927,6 +952,9 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
             )
         else:
             ff_output = self.ff(norm_hidden_states, scale=lora_scale)
+        
+        if self.norm4 is not None:
+            ff_output = self.norm4(ff_output)
 
         if self.use_ada_layer_norm_zero:
             ff_output = gate_mlp.unsqueeze(1) * ff_output
@@ -997,6 +1025,8 @@ class KVCompressionTransformerBlock(nn.Module):
         positional_embeddings: Optional[str] = None,
         num_positional_embeddings: Optional[int] = None,
         kvcompression: Optional[bool] = False,
+        qk_norm = False,
+        after_norm = False,
     ):
         super().__init__()
         self.only_cross_attention = only_cross_attention
@@ -1029,7 +1059,7 @@ class KVCompressionTransformerBlock(nn.Module):
         elif self.use_ada_layer_norm_zero:
             self.norm1 = AdaLayerNormZero(dim, num_embeds_ada_norm)
         else:
-            self.norm1 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+            self.norm1 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
 
         self.kvcompression = kvcompression
         if kvcompression:
@@ -1051,8 +1081,9 @@ class KVCompressionTransformerBlock(nn.Module):
                 bias=attention_bias,
                 cross_attention_dim=cross_attention_dim if only_cross_attention else None,
                 upcast_attention=upcast_attention,
+                qk_norm="layer_norm" if qk_norm else None,
+                processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
             )
-        print(self.attn1)
 
         # 2. Cross-Attn
         if cross_attention_dim is not None or double_self_attention:
@@ -1062,7 +1093,7 @@ class KVCompressionTransformerBlock(nn.Module):
             self.norm2 = (
                 AdaLayerNorm(dim, num_embeds_ada_norm)
                 if self.use_ada_layer_norm
-                else nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+                else FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
             )
             self.attn2 = Attention(
                 query_dim=dim,
@@ -1072,6 +1103,8 @@ class KVCompressionTransformerBlock(nn.Module):
                 dropout=dropout,
                 bias=attention_bias,
                 upcast_attention=upcast_attention,
+                qk_norm="layer_norm" if qk_norm else None,
+                processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
             )  # is self-attn if encoder_hidden_states is none
         else:
             self.norm2 = None
@@ -1079,9 +1112,14 @@ class KVCompressionTransformerBlock(nn.Module):
 
         # 3. Feed-forward
         if not self.use_ada_layer_norm_single:
-            self.norm3 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+            self.norm3 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
 
         self.ff = FeedForward(dim, dropout=dropout, activation_fn=activation_fn, final_dropout=final_dropout)
+
+        if after_norm:
+            self.norm4 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+        else:
+            self.norm4 = None
 
         # 4. Fuser
         if attention_type == "gated" or attention_type == "gated-text-image":
@@ -1229,6 +1267,9 @@ class KVCompressionTransformerBlock(nn.Module):
             )
         else:
             ff_output = self.ff(norm_hidden_states, scale=lora_scale)
+        
+        if self.norm4 is not None:
+            ff_output = self.norm4(ff_output)
 
         if self.use_ada_layer_norm_zero:
             ff_output = gate_mlp.unsqueeze(1) * ff_output
@@ -1239,61 +1280,4 @@ class KVCompressionTransformerBlock(nn.Module):
         if hidden_states.ndim == 4:
             hidden_states = hidden_states.squeeze(1)
 
-        return hidden_states
-
-
-class FeedForward(nn.Module):
-    r"""
-    A feed-forward layer.
-
-    Parameters:
-        dim (`int`): The number of channels in the input.
-        dim_out (`int`, *optional*): The number of channels in the output. If not given, defaults to `dim`.
-        mult (`int`, *optional*, defaults to 4): The multiplier to use for the hidden dimension.
-        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
-        activation_fn (`str`, *optional*, defaults to `"geglu"`): Activation function to be used in feed-forward.
-        final_dropout (`bool` *optional*, defaults to False): Apply a final dropout.
-    """
-
-    def __init__(
-        self,
-        dim: int,
-        dim_out: Optional[int] = None,
-        mult: int = 4,
-        dropout: float = 0.0,
-        activation_fn: str = "geglu",
-        final_dropout: bool = False,
-    ):
-        super().__init__()
-        inner_dim = int(dim * mult)
-        dim_out = dim_out if dim_out is not None else dim
-        linear_cls = LoRACompatibleLinear if not USE_PEFT_BACKEND else nn.Linear
-
-        if activation_fn == "gelu":
-            act_fn = GELU(dim, inner_dim)
-        if activation_fn == "gelu-approximate":
-            act_fn = GELU(dim, inner_dim, approximate="tanh")
-        elif activation_fn == "geglu":
-            act_fn = GEGLU(dim, inner_dim)
-        elif activation_fn == "geglu-approximate":
-            act_fn = ApproximateGELU(dim, inner_dim)
-
-        self.net = nn.ModuleList([])
-        # project in
-        self.net.append(act_fn)
-        # project dropout
-        self.net.append(nn.Dropout(dropout))
-        # project out
-        self.net.append(linear_cls(inner_dim, dim_out))
-        # FF as used in Vision Transformer, MLP-Mixer, etc. have a final dropout
-        if final_dropout:
-            self.net.append(nn.Dropout(dropout))
-
-    def forward(self, hidden_states: torch.Tensor, scale: float = 1.0) -> torch.Tensor:
-        compatible_cls = (GEGLU,) if USE_PEFT_BACKEND else (GEGLU, LoRACompatibleLinear)
-        for module in self.net:
-            if isinstance(module, compatible_cls):
-                hidden_states = module(hidden_states, scale)
-            else:
-                hidden_states = module(hidden_states)
         return hidden_states

@@ -16,8 +16,8 @@ from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import save_videos_grid
 
 # Config and model path
-config_path         = "config/easyanimate_video_magvit_motion_module_v2.yaml"
-model_name          = "models/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512"
+config_path         = "config/easyanimate_video_slicevae_motion_module_v3.yaml"
+model_name          = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-512x512"
 
 # Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" and "DDIM"
 sampler_name        = "DPM++"
@@ -32,16 +32,16 @@ lora_path           = None
 # Other params
 sample_size         = [384, 672]
 # In EasyAnimateV1, the video_length of video is 40 ~ 80.
-# In EasyAnimateV2, the video_length of video is 1 ~ 144. If u want to generate a image, please set the video_length = 1.
+# In EasyAnimateV2 and V3, the video_length of video is 1 ~ 144. If u want to generate a image, please set the video_length = 1.
 video_length        = 144
 fps                 = 24
 
 weight_dtype        = torch.bfloat16
-prompt              = "The video features a young woman with with black eyes and blonde hair standing in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The atmosphere is serene, and the shot is in slow motion. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic. "
+prompt              = "A young woman with with black eyes and blonde hair standing in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic. "
 negative_prompt     = "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion. " 
-guidance_scale      = 6.0
+guidance_scale      = 7.0
 seed                = 43
-num_inference_steps = 50
+num_inference_steps = 25
 lora_weight         = 0.55
 save_path           = "samples/easyanimate-videos"
 
@@ -152,5 +152,5 @@ if video_length == 1:
     image = Image.fromarray(image)
     image.save(video_path)
 else:
-    video_path = os.path.join(save_path, prefix + ".gif")
+    video_path = os.path.join(save_path, prefix + ".mp4")
     save_videos_grid(sample, video_path, fps=fps)

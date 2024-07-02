@@ -15,26 +15,31 @@ import json
 import math
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.nn.init as init
 from diffusers.configuration_utils import ConfigMixin, register_to_config
-from diffusers.models.attention import BasicTransformerBlock
-from diffusers.models.embeddings import PatchEmbed, Timesteps, TimestepEmbedding
+from diffusers.models.attention import BasicTransformerBlock, FeedForward
+from diffusers.models.embeddings import (PatchEmbed, PixArtAlphaTextProjection,
+                                         TimestepEmbedding, Timesteps)
 from diffusers.models.lora import LoRACompatibleConv, LoRACompatibleLinear
+from diffusers.models.modeling_outputs import Transformer2DModelOutput
 from diffusers.models.modeling_utils import ModelMixin
-from diffusers.models.normalization import AdaLayerNormSingle
-from diffusers.utils import USE_PEFT_BACKEND, BaseOutput, is_torch_version
+from diffusers.models.normalization import AdaLayerNormContinuous
+from diffusers.utils import (USE_PEFT_BACKEND, BaseOutput, is_torch_version,
+                             logging)
+from diffusers.utils.torch_utils import maybe_allow_in_graph
 from einops import rearrange
 from torch import nn
-from typing import Dict, Optional, Tuple
 
 from .attention import (SelfAttentionTemporalTransformerBlock,
                         TemporalTransformerBlock)
-from .patch import Patch1D, PatchEmbed3D, PatchEmbedF3D, UnPatch1D, TemporalUpsampler3D, CasualPatchEmbed3D
+from .norm import AdaLayerNormSingle
+from .patch import (CasualPatchEmbed3D, Patch1D, PatchEmbed3D, PatchEmbedF3D,
+                    TemporalUpsampler3D, UnPatch1D)
 
 try:
     from diffusers.models.embeddings import PixArtAlphaTextProjection
@@ -48,77 +53,25 @@ def zero_module(module):
         p.detach().zero_()
     return module
 
-class PixArtAlphaCombinedTimestepSizeEmbeddings(nn.Module):
-    """
-    For PixArt-Alpha.
 
-    Reference:
-    https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L164C9-L168C29
+class CLIPProjection(nn.Module):
+    """
+    Projects caption embeddings. Also handles dropout for classifier-free guidance.
+
+    Adapted from https://github.com/PixArt-alpha/PixArt-alpha/blob/master/diffusion/model/nets/PixArt_blocks.py
     """
 
-    def __init__(self, embedding_dim, size_emb_dim, use_additional_conditions: bool = False):
+    def __init__(self, in_features, hidden_size, num_tokens=120):
         super().__init__()
-
-        self.outdim = size_emb_dim
-        self.time_proj = Timesteps(num_channels=256, flip_sin_to_cos=True, downscale_freq_shift=0)
-        self.timestep_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=embedding_dim)
-
-        self.use_additional_conditions = use_additional_conditions
-        if use_additional_conditions:
-            self.additional_condition_proj = Timesteps(num_channels=256, flip_sin_to_cos=True, downscale_freq_shift=0)
-            self.resolution_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=size_emb_dim)
-            self.aspect_ratio_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=size_emb_dim)
-            
-            self.resolution_embedder.linear_2 = zero_module(self.resolution_embedder.linear_2)
-            self.aspect_ratio_embedder.linear_2 = zero_module(self.aspect_ratio_embedder.linear_2)
-
-    def forward(self, timestep, resolution, aspect_ratio, batch_size, hidden_dtype):
-        timesteps_proj = self.time_proj(timestep)
-        timesteps_emb = self.timestep_embedder(timesteps_proj.to(dtype=hidden_dtype))  # (N, D)
-
-        if self.use_additional_conditions:
-            resolution_emb = self.additional_condition_proj(resolution.flatten()).to(hidden_dtype)
-            resolution_emb = self.resolution_embedder(resolution_emb).reshape(batch_size, -1)
-            aspect_ratio_emb = self.additional_condition_proj(aspect_ratio.flatten()).to(hidden_dtype)
-            aspect_ratio_emb = self.aspect_ratio_embedder(aspect_ratio_emb).reshape(batch_size, -1)
-            conditioning = timesteps_emb + torch.cat([resolution_emb, aspect_ratio_emb], dim=1)
-        else:
-            conditioning = timesteps_emb
-
-        return conditioning
-
-class AdaLayerNormSingle(nn.Module):
-    r"""
-    Norm layer adaptive layer norm single (adaLN-single).
-
-    As proposed in PixArt-Alpha (see: https://arxiv.org/abs/2310.00426; Section 2.3).
-
-    Parameters:
-        embedding_dim (`int`): The size of each embedding vector.
-        use_additional_conditions (`bool`): To use additional conditions for normalization or not.
-    """
-
-    def __init__(self, embedding_dim: int, use_additional_conditions: bool = False):
-        super().__init__()
-
-        self.emb = PixArtAlphaCombinedTimestepSizeEmbeddings(
-            embedding_dim, size_emb_dim=embedding_dim // 3, use_additional_conditions=use_additional_conditions
-        )
-
-        self.silu = nn.SiLU()
-        self.linear = nn.Linear(embedding_dim, 6 * embedding_dim, bias=True)
-
-    def forward(
-        self,
-        timestep: torch.Tensor,
-        added_cond_kwargs: Optional[Dict[str, torch.Tensor]] = None,
-        batch_size: Optional[int] = None,
-        hidden_dtype: Optional[torch.dtype] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        # No modulation happening here.
-        embedded_timestep = self.emb(timestep, **added_cond_kwargs, batch_size=batch_size, hidden_dtype=hidden_dtype)
-        return self.linear(self.silu(embedded_timestep)), embedded_timestep
-
+        self.linear_1 = nn.Linear(in_features=in_features, out_features=hidden_size, bias=True)
+        self.act_1 = nn.GELU(approximate="tanh")
+        self.linear_2 = nn.Linear(in_features=hidden_size, out_features=hidden_size, bias=True)
+        self.linear_2 = zero_module(self.linear_2)
+    def forward(self, caption):
+        hidden_states = self.linear_1(caption)
+        hidden_states = self.act_1(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
 
 class TimePositionalEncoding(nn.Module):
     def __init__(
@@ -229,9 +182,14 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
         # motion module kwargs
         motion_module_type = "VanillaGrid",
         motion_module_kwargs = None,
+        motion_module_kwargs_odd = None,
+        motion_module_kwargs_even = None,
 
         # time position encoding
-        time_position_encoding_before_transformer = False
+        time_position_encoding_before_transformer = False,
+
+        qk_norm = False,
+        after_norm = False,
     ):
         super().__init__()
         self.use_linear_projection = use_linear_projection
@@ -320,6 +278,35 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
                         attention_type=attention_type,
                         motion_module_type=motion_module_type,
                         motion_module_kwargs=motion_module_kwargs,
+                        qk_norm=qk_norm,
+                        after_norm=after_norm,
+                    )
+                    for d in range(num_layers)
+                ]
+            )
+        elif self.basic_block_type == "global_motionmodule":
+            self.transformer_blocks = nn.ModuleList(
+                [
+                    TemporalTransformerBlock(
+                        inner_dim,
+                        num_attention_heads,
+                        attention_head_dim,
+                        dropout=dropout,
+                        cross_attention_dim=cross_attention_dim,
+                        activation_fn=activation_fn,
+                        num_embeds_ada_norm=num_embeds_ada_norm,
+                        attention_bias=attention_bias,
+                        only_cross_attention=only_cross_attention,
+                        double_self_attention=double_self_attention,
+                        upcast_attention=upcast_attention,
+                        norm_type=norm_type,
+                        norm_elementwise_affine=norm_elementwise_affine,
+                        norm_eps=norm_eps,
+                        attention_type=attention_type,
+                        motion_module_type=motion_module_type,
+                        motion_module_kwargs=motion_module_kwargs_even if d % 2 == 0 else motion_module_kwargs_odd,
+                        qk_norm=qk_norm,
+                        after_norm=after_norm,
                     )
                     for d in range(num_layers)
                 ]
@@ -346,6 +333,8 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
                         kvcompression=False if d < 14 else True,
                         motion_module_type=motion_module_type,
                         motion_module_kwargs=motion_module_kwargs,
+                        qk_norm=qk_norm,
+                        after_norm=after_norm,
                     )
                     for d in range(num_layers)
                 ]
@@ -369,6 +358,8 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
                         norm_elementwise_affine=norm_elementwise_affine,
                         norm_eps=norm_eps,
                         attention_type=attention_type,
+                        qk_norm=qk_norm,
+                        after_norm=after_norm,
                     )
                     for d in range(num_layers)
                 ]
@@ -438,8 +429,11 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
             self.adaln_single = AdaLayerNormSingle(inner_dim, use_additional_conditions=self.use_additional_conditions)
 
         self.caption_projection = None
+        self.clip_projection = None
         if caption_channels is not None:
             self.caption_projection = PixArtAlphaTextProjection(in_features=caption_channels, hidden_size=inner_dim)
+            if in_channels == 12:
+                self.clip_projection = CLIPProjection(in_features=768, hidden_size=inner_dim * 8)
 
         self.gradient_checkpointing = False
         
@@ -456,12 +450,14 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
         hidden_states: torch.Tensor,
         inpaint_latents: torch.Tensor = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
+        clip_encoder_hidden_states: Optional[torch.Tensor] = None,
         timestep: Optional[torch.LongTensor] = None,
         added_cond_kwargs: Dict[str, torch.Tensor] = None,
         class_labels: Optional[torch.LongTensor] = None,
         cross_attention_kwargs: Dict[str, Any] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
+        clip_attention_mask: Optional[torch.Tensor] = None,
         return_dict: bool = True,
     ):
         """
@@ -520,6 +516,8 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
             attention_mask = (1 - attention_mask.to(hidden_states.dtype)) * -10000.0
             attention_mask = attention_mask.unsqueeze(1)
 
+        if clip_attention_mask is not None:
+            encoder_attention_mask = torch.cat([encoder_attention_mask, clip_attention_mask], dim=1)
         # convert encoder_attention_mask to a bias the same way we do for attention_mask
         if encoder_attention_mask is not None and encoder_attention_mask.ndim == 2:
             encoder_attention_mask = (1 - encoder_attention_mask.to(encoder_hidden_states.dtype)) * -10000.0
@@ -560,6 +558,13 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
             encoder_hidden_states = self.caption_projection(encoder_hidden_states)
             encoder_hidden_states = encoder_hidden_states.view(batch_size, -1, hidden_states.shape[-1])
 
+        if clip_encoder_hidden_states is not None and encoder_hidden_states is not None:
+            batch_size = hidden_states.shape[0]
+            clip_encoder_hidden_states = self.clip_projection(clip_encoder_hidden_states)
+            clip_encoder_hidden_states = clip_encoder_hidden_states.view(batch_size, -1, hidden_states.shape[-1])
+
+            encoder_hidden_states = torch.cat([encoder_hidden_states, clip_encoder_hidden_states], dim = 1)
+
         skips = []
         skip_index = 0
         for index, block in enumerate(self.transformer_blocks):
@@ -590,7 +595,8 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
                 args = {
                     "basic": [],
                     "motionmodule": [video_length, height, width],
-                    "selfattentiontemporal": [video_length, height, width],
+                    "global_motionmodule": [video_length, height, width],
+                    "selfattentiontemporal": [],
                     "kvcompression_motionmodule": [video_length, height, width],
                 }[self.basic_block_type]
                 hidden_states = torch.utils.checkpoint.checkpoint(
@@ -609,7 +615,8 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
                 kwargs = {
                     "basic": {},
                     "motionmodule": {"num_frames":video_length, "height":height, "width":width},
-                    "selfattentiontemporal": {"num_frames":video_length, "height":height, "width":width},
+                    "global_motionmodule": {"num_frames":video_length, "height":height, "width":width},
+                    "selfattentiontemporal": {},
                     "kvcompression_motionmodule": {"num_frames":video_length, "height":height, "width":width},
                 }[self.basic_block_type]
                 hidden_states = block(

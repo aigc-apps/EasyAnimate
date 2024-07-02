@@ -12,6 +12,7 @@ import gc
 import numpy as np
 import torch
 import torchvision.transforms as transforms
+
 from func_timeout import func_timeout, FunctionTimedOut
 from decord import VideoReader
 from PIL import Image
@@ -20,6 +21,52 @@ from torch.utils.data.dataset import Dataset
 from contextlib import contextmanager
 
 VIDEO_READER_TIMEOUT = 20
+
+def get_random_mask(shape):
+    f, c, h, w = shape
+    
+    if f != 1:
+        mask_index = np.random.randint(1, 4)
+    else:
+        mask_index = np.random.randint(1, 2)
+    mask = torch.zeros((f, 1, h, w), dtype=torch.uint8)
+
+    if mask_index == 0:
+        center_x = torch.randint(0, w, (1,)).item()
+        center_y = torch.randint(0, h, (1,)).item()
+        block_size_x = torch.randint(w // 4, w // 4 * 3, (1,)).item()  # 方块的宽度范围
+        block_size_y = torch.randint(h // 4, h // 4 * 3, (1,)).item()  # 方块的高度范围
+
+        start_x = max(center_x - block_size_x // 2, 0)
+        end_x = min(center_x + block_size_x // 2, w)
+        start_y = max(center_y - block_size_y // 2, 0)
+        end_y = min(center_y + block_size_y // 2, h)
+        mask[:, :, start_y:end_y, start_x:end_x] = 1
+    elif mask_index == 1:
+        mask[:, :, :, :] = 1
+    elif mask_index == 2:
+        mask_frame_index = np.random.randint(1, 5)
+        mask[mask_frame_index:, :, :, :] = 1
+    elif mask_index == 3:
+        mask_frame_index = np.random.randint(1, 5)
+        mask[mask_frame_index:-mask_frame_index, :, :, :] = 1
+    elif mask_index == 4:
+        center_x = torch.randint(0, w, (1,)).item()
+        center_y = torch.randint(0, h, (1,)).item()
+        block_size_x = torch.randint(w // 4, w // 4 * 3, (1,)).item()  # 方块的宽度范围
+        block_size_y = torch.randint(h // 4, h // 4 * 3, (1,)).item()  # 方块的高度范围
+
+        start_x = max(center_x - block_size_x // 2, 0)
+        end_x = min(center_x + block_size_x // 2, w)
+        start_y = max(center_y - block_size_y // 2, 0)
+        end_y = min(center_y + block_size_y // 2, h)
+
+        mask_frame_before = np.random.randint(0, f // 2)
+        mask_frame_after = np.random.randint(f // 2, f)
+        mask[mask_frame_before:mask_frame_after, :, start_y:end_y, start_x:end_x] = 1
+    else:
+        raise ValueError(f"The mask_index {mask_index} is not define")
+    return mask
 
 class ImageVideoSampler(BatchSampler):
     """A sampler wrapper for grouping images with similar aspect ratio into a same batch.
@@ -88,10 +135,11 @@ class ImageVideoDataset(Dataset):
             video_sample_size=512, video_sample_stride=4, video_sample_n_frames=16,
             image_sample_size=512,
             video_repeat=0,
-            text_drop_ratio=0.001,
+            text_drop_ratio=-1,
             enable_bucket=False,
             video_length_drop_start=0.1, 
             video_length_drop_end=0.9,
+            enable_inpaint=False,
         ):
         # Loading annotations from files
         print(f"loading annotations from {ann_path} ...")
@@ -120,6 +168,8 @@ class ImageVideoDataset(Dataset):
         # TODO: enable bucket training
         self.enable_bucket = enable_bucket
         self.text_drop_ratio = text_drop_ratio
+        self.enable_inpaint  = enable_inpaint
+
         self.video_length_drop_start = video_length_drop_start
         self.video_length_drop_end = video_length_drop_end
 
@@ -230,6 +280,17 @@ class ImageVideoDataset(Dataset):
             except Exception as e:
                 print(e, self.dataset[idx % len(self.dataset)])
                 idx = random.randint(0, self.length-1)
+
+        if self.enable_inpaint and not self.enable_bucket:
+            mask = get_random_mask(pixel_values.size())
+            mask_pixel_values = pixel_values * (1 - mask) + torch.ones_like(pixel_values) * -1 * mask
+            sample["mask_pixel_values"] = mask_pixel_values
+            sample["mask"] = mask
+
+            clip_pixel_values = sample["pixel_values"][0].permute(1, 2, 0).contiguous()
+            clip_pixel_values = (clip_pixel_values * 0.5 + 0.5) * 255
+            sample["clip_pixel_values"] = clip_pixel_values
+
         return sample
 
 if __name__ == "__main__":

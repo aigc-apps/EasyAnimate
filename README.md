@@ -32,6 +32,7 @@ EasyAnimate is a pipeline based on the transformer architecture that can be used
 We will support quick pull-ups from different platforms, refer to [Quick Start](#quick-start).
 
 What's New:
+- Updated to v3, supports up to 720p 144 frames (960x960, 6s, 24fps) video generation, and supports image generated video models. [ 2024.07.01 ]
 - ModelScope-Sora "Data Directors" creative sprint has been annouced using EasyAnimate as the training backbone to investigate the influence of data preprocessing. Please visit the competition's [official website](https://tianchi.aliyun.com/competition/entrance/532219) for more information. [ 2024.06.17 ]
 - Updated to v2, supports a maximum of 144 frames (768x768, 6s, 24fps) for generation. [ 2024.05.26 ]
 - Create Code! Support for Windows and Linux Now. [ 2024.04.12 ]
@@ -65,7 +66,37 @@ If you are using docker, please make sure that the graphics card driver and CUDA
 
 Then execute the following commands in this way:
 
-EasyAnimateV2: 
+EasyAnimateV3:
+```
+# pull image
+docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
+
+# enter image
+docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
+
+# clone code
+git clone https://github.com/aigc-apps/EasyAnimate.git
+
+# enter EasyAnimate's dir
+cd EasyAnimate
+
+# download weights
+mkdir models/Diffusion_Transformer
+mkdir models/Motion_Module
+mkdir models/Personalized_Model
+
+wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-512x512.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-512x512.tar
+wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar
+
+cd models/Diffusion_Transformer/
+tar -xvf EasyAnimateV3-XL-2-512x512.tar
+tar -xvf EasyAnimateV3-XL-2-InP-512x512.tar
+cd ../../
+```
+
+<details>
+  <summary>(Obsolete) EasyAnimateV2:</summary>
+
 ```
 # pull image
 docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
@@ -90,6 +121,7 @@ cd models/Diffusion_Transformer/
 tar -xvf EasyAnimateV2-XL-2-512x512.tar
 cd ../../
 ```
+</details>
 
 <details>
   <summary>(Obsolete) EasyAnimateV1:</summary>
@@ -140,7 +172,18 @@ We need about 60GB available on disk (for saving weights), please check!
 #### b. Weights
 We'd better place the [weights](#model-zoo) along the specified path:
 
-EasyAnimateV2: 
+EasyAnimateV3:
+```
+📦 models/
+├── 📂 Diffusion_Transformer/
+│   ├── 📂 EasyAnimateV3-XL-2-512x512/
+│   └── 📂 EasyAnimateV3-XL-2-InP-512x512/
+├── 📂 Personalized_Model/
+│   └── your trained trainformer model / your trained lora model (for UI load)
+```
+
+<details>
+  <summary>(Obsolete) EasyAnimateV2:</summary>
 ```
 📦 models/
 ├── 📂 Diffusion_Transformer/
@@ -148,6 +191,7 @@ EasyAnimateV2:
 ├── 📂 Personalized_Model/
 │   └── your trained trainformer model / your trained lora model (for UI load)
 ```
+</details>
 
 <details>
   <summary>(Obsolete) EasyAnimateV1:</summary>
@@ -267,12 +311,25 @@ sh scripts/train_t2iv.sh
 
 # Model zoo
 
-EasyAnimateV2:
+EasyAnimateV3:
+| Name | Type | Storage Space | Url | Hugging Face | Description |
+|--|--|--|--|--|--|
+| EasyAnimateV3-XL-2-512x512.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-512x512) | EasyAnimateV3 official weights for 512x512 text to video resolution. Training with 144 frames and fps 24 |
+| EasyAnimateV3-XL-2-InP-512x512.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-512x512) | EasyAnimateV3 official weights for 512x512 image to video resolution. Training with 144 frames and fps 24 |
+| EasyAnimateV3-XL-2-768x768.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-768x768) | EasyAnimateV3 official weights for 768x768 text to video resolution. Training with 144 frames and fps 24 |
+| EasyAnimateV3-XL-2-InP-768x768.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-768x768) | EasyAnimateV3 official weights for 768x768 image to video resolution. Training with 144 frames and fps 24 |
+| EasyAnimateV3-XL-2-960x960.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-960x960.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-960x960) | EasyAnimateV3 official weights for 960x960 text to video resolution. Training with 144 frames and fps 24 |
+| EasyAnimateV3-XL-2-InP-960x960.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-960x960) | EasyAnimateV3 official weights for 960x960 image to video resolution. Training with 144 frames and fps 24 |
+| easyanimatev3_minimalism_lora.safetensors | Lora of Pixart | 485.1MB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors) | - | A lora training with a specifial type images. Images can be downloaded from [Url](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Minimalism.zip). |
+
+<details>
+  <summary>(Obsolete) EasyAnimateV2:</summary>
 | Name | Type | Storage Space | Url | Hugging Face | Description |
 |--|--|--|--|--|--|
 | EasyAnimateV2-XL-2-512x512.tar | EasyAnimateV2 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV2-XL-2-512x512) | EasyAnimateV2 official weights for 512x512 resolution. Training with 144 frames and fps 24 |
 | EasyAnimateV2-XL-2-768x768.tar | EasyAnimateV2 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV2-XL-2-768x768) | EasyAnimateV2 official weights for 768x768 resolution. Training with 144 frames and fps 24 |
-| easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 485.1MB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors) | - | A lora training with a specifial type images. Images can be downloaded from [Url](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/webui/Minimalism.zip). |
+| easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 485.1MB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors) | - | A lora training with a specifial type images. Images can be downloaded from [Url](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Minimalism.zip). |
+</details>
 
 <details>
   <summary>(Obsolete) EasyAnimateV1:</summary>
@@ -334,7 +391,6 @@ For more details, please refer to [arxiv](https://arxiv.org/abs/2405.18991).
 <img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/group/dd.png" alt="ding group" width="30%"/>
 <img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/group/wechat.jpg" alt="Wechat group" width="30%"/>
 <img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/group/person.jpg" alt="Person" width="30%"/>
-
 
 
 # Reference
