@@ -545,14 +545,14 @@ def ui():
                 """
             )
             
-            prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="A young woman with with black eyes and blonde hair standing in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
+            prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
             negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion." )
                 
             with gr.Row():
                 with gr.Column():
                     with gr.Row():
                         sampler_dropdown   = gr.Dropdown(label="Sampling method (采样器种类)", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
-                        sample_step_slider = gr.Slider(label="Sampling steps (生成步数)", value=25, minimum=10, maximum=100, step=1)
+                        sample_step_slider = gr.Slider(label="Sampling steps (生成步数)", value=30, minimum=10, maximum=100, step=1)
                         
                     resize_method = gr.Radio(
                         ["Generate by", "Resize to the Start Image"],
@@ -576,6 +576,28 @@ def ui():
                     
                     with gr.Accordion("Image to Video (图片到视频)", open=False):
                         start_image = gr.Image(label="The image at the beginning of the video (图片到视频的开始图片)", show_label=True, elem_id="i2v_start", sources="upload", type="filepath")
+                        
+                        template_gallery_path = ["asset/1.png", "asset/2.png", "asset/3.png", "asset/4.png", "asset/5.png"]
+                        def select_template(evt: gr.SelectData):
+                            text = {
+                                "asset/1.png": "The dog is looking at camera and smiling. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                "asset/2.png": "a sailboat sailing in rough seas with a dramatic sunset. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                "asset/3.png": "a beautiful woman with long hair and a dress blowing in the wind. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                "asset/4.png": "a man in an astronaut suit playing a guitar. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                "asset/5.png": "fireworks display over night city. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                            }[template_gallery_path[evt.index]]
+                            return template_gallery_path[evt.index], text
+
+                        template_gallery = gr.Gallery(
+                            template_gallery_path,
+                            columns=5, rows=1,
+                            height=140,
+                            allow_preview=False,
+                            container=False,
+                            label="Template Examples",
+                        )
+                        template_gallery.select(select_template, None, [start_image, prompt_textbox])
+                        
                         with gr.Accordion("The image at the ending of the video (图片到视频的结束图片[非必需, Optional])", open=False):
                             end_image   = gr.Image(label="The image at the ending of the video (图片到视频的结束图片[非必需, Optional])", show_label=False, elem_id="i2v_end", sources="upload", type="filepath")
 
@@ -949,14 +971,14 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
                 """
             )
 
-            prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="A young woman with with black eyes and blonde hair standing in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
+            prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
             negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion." )
                 
             with gr.Row():
                 with gr.Column():
                     with gr.Row():
                         sampler_dropdown   = gr.Dropdown(label="Sampling method (采样器种类)", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
-                        sample_step_slider = gr.Slider(label="Sampling steps (生成步数)", value=25, minimum=10, maximum=30, step=1)
+                        sample_step_slider = gr.Slider(label="Sampling steps (生成步数)", value=30, minimum=10, maximum=30, step=1)
                     
                     if edition == "v1":
                         width_slider     = gr.Slider(label="Width (视频宽度)",            value=512, minimum=384, maximum=704, step=32)
@@ -997,16 +1019,33 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
                                 length_slider = gr.Slider(label="Animation length (视频帧数)", value=72, minimum=8,   maximum=72,  step=8)
                         
                         with gr.Accordion("Image to Video (图片到视频)", open=False):
-                            start_image = gr.Image(label="The image at the beginning of the video (图片到视频的开始图片)", show_label=True, elem_id="i2v_start", sources="upload", type="filepath")
-                            template_gallery = glob(os.path.join("asset", "*.png"))
-                            gr.Examples(
-                                template_gallery,
-                                inputs=[start_image],
+                            with gr.Row():
+                                start_image = gr.Image(label="The image at the beginning of the video (图片到视频的开始图片)", show_label=True, elem_id="i2v_start", sources="upload", type="filepath")
+                            
+                            template_gallery_path = ["asset/1.png", "asset/2.png", "asset/3.png", "asset/4.png", "asset/5.png"]
+                            def select_template(evt: gr.SelectData):
+                                text = {
+                                    "asset/1.png": "The dog is looking at camera and smiling. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                    "asset/2.png": "a sailboat sailing in rough seas with a dramatic sunset. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                    "asset/3.png": "a beautiful woman with long hair and a dress blowing in the wind. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                    "asset/4.png": "a man in an astronaut suit playing a guitar. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                    "asset/5.png": "fireworks display over night city. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                }[template_gallery_path[evt.index]]
+                                return template_gallery_path[evt.index], text
+
+                            template_gallery = gr.Gallery(
+                                template_gallery_path,
+                                columns=5, rows=1,
+                                height=140,
+                                allow_preview=False,
+                                container=False,
                                 label="Template Examples",
                             )
+                            template_gallery.select(select_template, None, [start_image, prompt_textbox])
 
                             with gr.Accordion("The image at the ending of the video (图片到视频的结束图片[非必需, Optional])", open=False):
                                 end_image   = gr.Image(label="The image at the ending of the video (图片到视频的结束图片[非必需, Optional])", show_label=False, elem_id="i2v_end", sources="upload", type="filepath")
+
 
                         cfg_scale_slider = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
                     
@@ -1255,14 +1294,14 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                 """
             )
             
-            prompt_textbox = gr.Textbox(label="Prompt", lines=2, value="A young woman with with black eyes and blonde hair standing in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
+            prompt_textbox = gr.Textbox(label="Prompt", lines=2, value="A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
             negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion. " )
                 
             with gr.Row():
                 with gr.Column():
                     with gr.Row():
                         sampler_dropdown   = gr.Dropdown(label="Sampling method", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
-                        sample_step_slider = gr.Slider(label="Sampling steps", value=25, minimum=10, maximum=30, step=1)
+                        sample_step_slider = gr.Slider(label="Sampling steps", value=30, minimum=10, maximum=30, step=1)
                     
                     if edition == "v1":
                         width_slider     = gr.Slider(label="Width",            value=512, minimum=384, maximum=704, step=32)
@@ -1305,21 +1344,27 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                         with gr.Accordion("Image to Video", open=False):
                             start_image = gr.Image(label="The image at the beginning of the video", show_label=True, elem_id="i2v_start", sources="upload", type="filepath")
                             
-                            template_gallery = glob.glob(
-                                os.path.join(
-                                    os.path.join(
-                                        tryon_gallery_dir,
-                                        "template",
-                                    ),
-                                    "*.jpg",
-                                )
-                            )
+                            template_gallery_path = ["asset/1.png", "asset/2.png", "asset/3.png", "asset/4.png", "asset/5.png"]
+                            def select_template(evt: gr.SelectData):
+                                text = {
+                                    "asset/1.png": "The dog is looking at camera and smiling. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                    "asset/2.png": "a sailboat sailing in rough seas with a dramatic sunset. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                    "asset/3.png": "a beautiful woman with long hair and a dress blowing in the wind. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                    "asset/4.png": "a man in an astronaut suit playing a guitar. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                    "asset/5.png": "fireworks display over night city. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                }[template_gallery_path[evt.index]]
+                                return template_gallery_path[evt.index], text
 
-                            gr.Examples(
-                                template_gallery,
-                                inputs=[start_image],
+                            template_gallery = gr.Gallery(
+                                template_gallery_path,
+                                columns=5, rows=1,
+                                height=140,
+                                allow_preview=False,
+                                container=False,
                                 label="Template Examples",
                             )
+                            template_gallery.select(select_template, None, [start_image, prompt_textbox])
+
                             with gr.Accordion("The image at the ending of the video", open=False):
                                 end_image   = gr.Image(label="The image at the ending of the video", show_label=True, elem_id="i2v_end", sources="upload", type="filepath")
                         
