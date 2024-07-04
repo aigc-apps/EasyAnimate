@@ -154,7 +154,7 @@ if lora_path is not None:
 
 with torch.no_grad():
     if transformer.config.in_channels == 12:
-        video_length = int(video_length // vae.mini_batch_encoder * vae.mini_batch_encoder)
+        video_length = int(video_length // vae.mini_batch_encoder * vae.mini_batch_encoder) if video_length != 1 else 1
         input_video, input_video_mask, clip_image = get_image_to_video_latent(None, None, video_length=video_length, sample_size=sample_size)
 
         sample = pipeline(

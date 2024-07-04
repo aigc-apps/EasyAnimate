@@ -66,8 +66,10 @@ def infer_forward_api(_: gr.Blocks, app: FastAPI, controller):
         negative_prompt_textbox = datas.get('negative_prompt_textbox', 'The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion.')
         sampler_dropdown = datas.get('sampler_dropdown', 'Euler')
         sample_step_slider = datas.get('sample_step_slider', 30)
+        resize_method = datas.get('resize_method', "Generate by")
         width_slider = datas.get('width_slider', 672)
         height_slider = datas.get('height_slider', 384)
+        base_resolution = datas.get('base_resolution', 512)
         is_image = datas.get('is_image', False)
         generation_method = datas.get('generation_method', False)
         length_slider = datas.get('length_slider', 144)
@@ -100,8 +102,10 @@ def infer_forward_api(_: gr.Blocks, app: FastAPI, controller):
                 negative_prompt_textbox, 
                 sampler_dropdown, 
                 sample_step_slider, 
+                resize_method,
                 width_slider, 
                 height_slider, 
+                base_resolution,
                 generation_method,
                 length_slider, 
                 overlap_video_length, 

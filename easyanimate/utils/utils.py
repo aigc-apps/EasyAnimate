@@ -8,6 +8,13 @@ import cv2
 from einops import rearrange
 from PIL import Image
 
+def get_width_and_height_from_image_and_base_resolution(image, base_resolution):
+    target_pixels = int(base_resolution) * int(base_resolution)
+    original_width, original_height = Image.open(image).size
+    ratio = (target_pixels / (original_width * original_height)) ** 0.5
+    width_slider = round(original_width * ratio)
+    height_slider = round(original_height * ratio)
+    return height_slider, width_slider
 
 def color_transfer(sc, dc):
     """

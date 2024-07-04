@@ -205,6 +205,7 @@ if partial_video_length is not None:
         init_frames = init_frames + _partial_video_length - overlap_video_length
         last_frames = init_frames + _partial_video_length
 else:
+    video_length = int(video_length // vae.mini_batch_encoder * vae.mini_batch_encoder) if video_length != 1 else 1
     input_video, input_video_mask, clip_image = get_image_to_video_latent(validation_image_start, validation_image_end, video_length=video_length, sample_size=sample_size)
 
     with torch.no_grad():

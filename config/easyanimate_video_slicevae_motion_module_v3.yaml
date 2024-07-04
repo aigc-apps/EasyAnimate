@@ -14,6 +14,7 @@ transformer_additional_kwargs:
     temporal_position_encoding_max_len: 4096
     temporal_attention_dim_div:         1
     block_size:                         1
+    remove_time_embedding_in_photo:     false
   motion_module_kwargs_odd:
     num_attention_heads:                16
     num_transformer_block:              1
@@ -22,6 +23,7 @@ transformer_additional_kwargs:
     temporal_position_encoding_max_len: 4096
     temporal_attention_dim_div:         1
     block_size:                         1
+    remove_time_embedding_in_photo:     false
 
 noise_scheduler_kwargs:
   beta_start:    0.0001
