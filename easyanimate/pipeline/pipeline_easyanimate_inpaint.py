@@ -945,7 +945,6 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
 
             if num_channels_transformer == 12:
                 mask_condition_tile = torch.tile(mask_condition, [1, 3, 1, 1, 1])
-                mask_condition_tile[:,:,4:] = 1
                 if masked_video_latents is None:
                     masked_video = init_video * (mask_condition_tile < 0.5) + torch.ones_like(init_video) * (mask_condition_tile > 0.5) * -1
                 else:

@@ -1,35 +1,39 @@
 """Modified from https://github.com/guoyww/AnimateDiff/blob/main/app.py
 """
+import base64
 import gc
 import json
 import os
 import random
-import base64
-import requests
-import pkg_resources
 from datetime import datetime
 from glob import glob
 
 import gradio as gr
-import torch
 import numpy as np
+import pkg_resources
+import requests
+import torch
 from diffusers import (AutoencoderKL, DDIMScheduler,
                        DPMSolverMultistepScheduler,
                        EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
                        PNDMScheduler)
-from easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
 from diffusers.utils.import_utils import is_xformers_available
 from omegaconf import OmegaConf
+from PIL import Image
 from safetensors import safe_open
-from transformers import T5EncoderModel, T5Tokenizer
-from transformers import CLIPVisionModelWithProjection,  CLIPImageProcessor
+from transformers import (CLIPImageProcessor, CLIPVisionModelWithProjection,
+                          T5EncoderModel, T5Tokenizer)
 
+from easyanimate.data.bucket_sampler import ASPECT_RATIO_512, get_closest_ratio
+from easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
 from easyanimate.models.transformer3d import Transformer3DModel
 from easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
-from easyanimate.pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaintPipeline
+from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
+    EasyAnimateInpaintPipeline
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
-from easyanimate.utils.utils import save_videos_grid, get_image_to_video_latent, get_width_and_height_from_image_and_base_resolution
-from PIL import Image
+from easyanimate.utils.utils import (
+    get_image_to_video_latent,
+    get_width_and_height_from_image_and_base_resolution, save_videos_grid)
 
 scheduler_dict = {
     "Euler": EulerDiscreteScheduler,
@@ -254,8 +258,9 @@ class EasyAnimateController:
             if start_image is None:
                 raise gr.Error(f"Please upload an image when using \"Resize to the Start Image\".")
 
-            height_slider, width_slider = get_width_and_height_from_image_and_base_resolution(start_image, base_resolution)
-            height_slider, width_slider = height_slider // 16 * 16, width_slider // 16 * 16
+            aspect_ratio_sample_size    = {key : [x / 512 * base_resolution for x in ASPECT_RATIO_512[key]] for key in ASPECT_RATIO_512.keys()}
+            closest_size, closest_ratio = get_closest_ratio(height_slider, width_slider, ratios=aspect_ratio_sample_size)
+            height_slider, width_slider = [int(x / 16) * 16 for x in closest_size]
 
         if self.transformer.config.in_channels != 12 and start_image is not None:
             raise gr.Error(f"Please select an image to video pretrained model while using image to video.")
