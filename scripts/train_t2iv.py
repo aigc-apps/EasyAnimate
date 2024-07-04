@@ -919,6 +919,7 @@ def main():
             pixel_value     = examples[0]["pixel_values"]
             f, h, w, c      = np.shape(pixel_value)
             closest_size, closest_ratio = get_closest_ratio(h, w, ratios=aspect_ratio_sample_size)
+            closest_size = [int(x / 16) * 16 for x in closest_size]
             if args.random_ratio_crop:
                 if rng is None:
                     random_sample_size = aspect_ratio_random_crop_sample_size[

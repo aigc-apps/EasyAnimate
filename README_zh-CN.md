@@ -30,7 +30,7 @@ EasyAnimate是一个基于transformer结构的pipeline，可用于生成AI图片
 我们会逐渐支持从不同平台快速启动，请参阅 [快速启动](#快速启动)。
 
 新特性：
-- 更新到v3版本，最大支持720p 144帧(960x960, 6s, 24fps)视频生成，支持图生视频模型。[ 2024.07.01 ]
+- 更新到v3版本，最大支持720p 144帧(960x960, 6s, 24fps)视频生成，支持文与图生视频模型。[ 2024.07.01 ]
 - ModelScope-Sora“数据导演”创意竞速——第三届Data-Juicer大模型数据挑战赛已经正式启动！其使用EasyAnimate作为基础模型，探究数据处理对于模型训练的作用。立即访问[竞赛官网](https://tianchi.aliyun.com/competition/entrance/532219)，了解赛事详情。[ 2024.06.17 ]
 - 更新到v2版本，最大支持144帧(768x768, 6s, 24fps)生成。[ 2024.05.26 ]
 - 创建代码！现在支持 Windows 和 Linux。[ 2024.04.12 ]
@@ -78,11 +78,9 @@ mkdir models/Diffusion_Transformer
 mkdir models/Motion_Module
 mkdir models/Personalized_Model
 
-wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-512x512.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-512x512.tar
 wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar
 
 cd models/Diffusion_Transformer/
-tar -xvf EasyAnimateV3-XL-2-512x512.tar
 tar -xvf EasyAnimateV3-XL-2-InP-512x512.tar
 cd ../../
 ```
@@ -169,7 +167,6 @@ EasyAnimateV3:
 ```
 📦 models/
 ├── 📂 Diffusion_Transformer/
-│   ├── 📂 EasyAnimateV3-XL-2-512x512/
 │   └── 📂 EasyAnimateV3-XL-2-InP-512x512/
 ├── 📂 Personalized_Model/
 │   └── your trained trainformer model / your trained lora model (for UI load)
@@ -310,13 +307,9 @@ EasyAnimateV3:
 
 | 名称 | 种类 | 存储空间 | 下载地址 | Hugging Face | 描述 |
 |--|--|--|--|--|--|
-| EasyAnimateV3-XL-2-512x512.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-512x512)| 官方的512x512分辨率的文生视频权重。以144帧、每秒24帧进行训练 |
 | EasyAnimateV3-XL-2-InP-512x512.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-512x512)| 官方的512x512分辨率的图生视频权重。以144帧、每秒24帧进行训练 |
-| EasyAnimateV3-XL-2-768x768.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-768x768) | 官方的768x768分辨率的文生视频权重。以144帧、每秒24帧进行训练 |
 | EasyAnimateV3-XL-2-InP-768x768.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-768x768) | 官方的768x768分辨率的图生视频权重。以144帧、每秒24帧进行训练 |
-| EasyAnimateV3-XL-2-960x960.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-960x960.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-960x960) | 官方的960x960（720P）分辨率的文生视频权重。以144帧、每秒24帧进行训练 |
 | EasyAnimateV3-XL-2-InP-960x960.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-960x960) | 官方的960x960（720P）分辨率的图生视频权重。以144帧、每秒24帧进行训练 |
-| easyanimatev3_minimalism_lora.safetensors | Lora of Pixart | 485.1MB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev3_minimalism_lora.safetensors)| - | 使用特定类型的图像进行lora训练的结果。图片可从这里[下载](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/webui/Minimalism.zip). |
 
 <details>
   <summary>(Obsolete) EasyAnimateV2:</summary>
@@ -376,8 +369,7 @@ EasyAnimateV3:
 更多细节可以看查看[arxiv](https://arxiv.org/abs/2405.18991)。
 
 # 未来计划
-- 支持更大分辨率的文视频生成模型。
-- 支持视频inpaint模型。
+- 支持更大规模参数量的文视频生成模型。
 
 # 联系我们
 1. 扫描下方二维码或搜索群号：77450006752 来加入钉钉群。

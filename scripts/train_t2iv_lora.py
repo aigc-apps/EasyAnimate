@@ -25,6 +25,7 @@ import shutil
 import sys
 
 import accelerate
+import datasets
 import diffusers
 import numpy as np
 import torch
@@ -44,14 +45,13 @@ from einops import rearrange
 from huggingface_hub import create_repo, upload_folder
 from omegaconf import OmegaConf
 from packaging import version
+from PIL import Image
 from torch.utils.data import RandomSampler
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import T5EncoderModel, T5Tokenizer
 from transformers.utils import ContextManagers
-
-import datasets
 
 current_file_path = os.path.abspath(__file__)
 project_roots = [os.path.dirname(current_file_path), os.path.dirname(os.path.dirname(current_file_path))]
@@ -67,7 +67,8 @@ from easyanimate.data.bucket_sampler import (ASPECT_RATIO_512,
                                              RandomSampler, get_closest_ratio)
 from easyanimate.data.dataset_image import CC15M
 from easyanimate.data.dataset_image_video import (ImageVideoDataset,
-                                                  ImageVideoSampler)
+                                                  ImageVideoSampler,
+                                                  get_random_mask)
 from easyanimate.data.dataset_video import VideoDataset, WebVid10M
 from easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
 from easyanimate.models.transformer2d import Transformer2DModel
@@ -82,6 +83,9 @@ from easyanimate.utils.lora_utils import (create_network, merge_lora,
                                           unmerge_lora)
 from easyanimate.utils.respace import SpacedDiffusion, space_timesteps
 from easyanimate.utils.utils import save_videos_grid
+from transformers import (CLIPImageProcessor, CLIPVisionModelWithProjection,
+                          T5EncoderModel, T5Tokenizer)
+from transformers.utils import ContextManagers
 
 if is_wandb_available():
     import wandb
@@ -864,6 +868,7 @@ def main():
             pixel_value     = examples[0]["pixel_values"]
             f, h, w, c      = np.shape(pixel_value)
             closest_size, closest_ratio = get_closest_ratio(h, w, ratios=aspect_ratio_sample_size)
+            closest_size    = [int(x / 16) * 16 for x in closest_size]
             if args.random_ratio_crop:
                 if rng is None:
                     random_sample_size = aspect_ratio_random_crop_sample_size[
@@ -980,6 +985,8 @@ def main():
     # Move text_encode and vae to gpu and cast to weight_dtype
     text_encoder.to(accelerator.device)
     vae.to(accelerator.device, dtype=weight_dtype)
+    if args.train_mode != "normal":
+        image_encoder.to(accelerator.device, dtype=weight_dtype)
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
@@ -1258,6 +1265,24 @@ def main():
                         inpaint_latents = inpaint_latents * vae.config.scaling_factor
                         
                 if args.low_vram:
+                    vae.to('cpu')
+                    torch.cuda.empty_cache()
+                    text_encoder.to(accelerator.device)
+                with torch.no_grad():
+                    prompt_ids = tokenizer(
+                        batch['text'], 
+                        max_length=args.tokenizer_max_length, 
+                        padding="max_length", 
+                        add_special_tokens=True, 
+                        truncation=True, 
+                        return_tensors="pt"
+                    )
+                    encoder_hidden_states = text_encoder(
+                        prompt_ids.input_ids.to(latents.device), 
+                        attention_mask=prompt_ids.attention_mask.to(latents.device), 
+                        return_dict=False
+                    )[0]
+                if args.low_vram:
                     text_encoder.to('cpu')
                     torch.cuda.empty_cache()
 
@@ -1266,6 +1291,13 @@ def main():
                 # Sample a random timestep for each image
                 timesteps = torch.randint(0, args.train_sampling_steps, (bsz,), device=latents.device, generator=torch_rng)
                 timesteps = timesteps.long()
+
+                if args.low_vram:
+                    transformer3d.to('cpu')
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    torch.cuda.ipc_collect()
+                    transformer3d.to('cuda')
 
                 added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
                 if unwrap_model(transformer3d).config.sample_size == 128:

@@ -1,23 +1,28 @@
+
+
 import os
 
-import torch
 import numpy as np
-from PIL import Image
+import torch
 from diffusers import (AutoencoderKL, DDIMScheduler,
                        DPMSolverMultistepScheduler,
                        EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
                        PNDMScheduler)
 from omegaconf import OmegaConf
+from PIL import Image
+from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 
 from easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
 from easyanimate.models.transformer3d import Transformer3DModel
 from easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
+from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
+    EasyAnimateInpaintPipeline
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
-from easyanimate.utils.utils import save_videos_grid
+from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 
 # Config and model path
 config_path         = "config/easyanimate_video_slicevae_motion_module_v3.yaml"
-model_name          = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-512x512"
+model_name          = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512"
 
 # Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" and "DDIM"
 sampler_name        = "DPM++"
@@ -100,6 +105,17 @@ if vae_path is not None:
     m, u = vae.load_state_dict(state_dict, strict=False)
     print(f"missing keys: {len(m)}, unexpected keys: {len(u)}")
 
+if transformer.config.in_channels == 12:
+    clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+        model_name, subfolder="image_encoder"
+    ).to("cuda", weight_dtype)
+    clip_image_processor = CLIPImageProcessor.from_pretrained(
+        model_name, subfolder="image_encoder"
+    )
+else:
+    clip_image_encoder = None
+    clip_image_processor = None
+
 # Get Scheduler
 Choosen_Scheduler = scheduler_dict = {
     "Euler": EulerDiscreteScheduler,
@@ -110,13 +126,24 @@ Choosen_Scheduler = scheduler_dict = {
 }[sampler_name]
 scheduler = Choosen_Scheduler(**OmegaConf.to_container(config['noise_scheduler_kwargs']))
 
-pipeline = EasyAnimatePipeline.from_pretrained(
-    model_name,
-    vae=vae,
-    transformer=transformer,
-    scheduler=scheduler,
-    torch_dtype=weight_dtype
-)
+if transformer.config.in_channels == 12:
+    pipeline = EasyAnimateInpaintPipeline.from_pretrained(
+        model_name,
+        vae=vae,
+        transformer=transformer,
+        scheduler=scheduler,
+        torch_dtype=weight_dtype,
+        clip_image_encoder=clip_image_encoder,
+        clip_image_processor=clip_image_processor,
+    )
+else:
+    pipeline = EasyAnimatePipeline.from_pretrained(
+        model_name,
+        vae=vae,
+        transformer=transformer,
+        scheduler=scheduler,
+        torch_dtype=weight_dtype
+    )
 pipeline.to("cuda")
 pipeline.enable_model_cpu_offload()
 
@@ -126,16 +153,35 @@ if lora_path is not None:
     pipeline = merge_lora(pipeline, lora_path, lora_weight)
 
 with torch.no_grad():
-    sample = pipeline(
-        prompt, 
-        video_length = video_length,
-        negative_prompt = negative_prompt,
-        height      = sample_size[0],
-        width       = sample_size[1],
-        generator   = generator,
-        guidance_scale = guidance_scale,
-        num_inference_steps = num_inference_steps,
-    ).videos
+    if transformer.config.in_channels == 12:
+        video_length = int(video_length // vae.mini_batch_encoder * vae.mini_batch_encoder)
+        input_video, input_video_mask, clip_image = get_image_to_video_latent(None, None, video_length=video_length, sample_size=sample_size)
+
+        sample = pipeline(
+            prompt, 
+            video_length = video_length,
+            negative_prompt = negative_prompt,
+            height      = sample_size[0],
+            width       = sample_size[1],
+            generator   = generator,
+            guidance_scale = guidance_scale,
+            num_inference_steps = num_inference_steps,
+
+            video        = input_video,
+            mask_video   = input_video_mask,
+            clip_image   = clip_image, 
+        ).videos
+    else:
+        sample = pipeline(
+            prompt, 
+            video_length = video_length,
+            negative_prompt = negative_prompt,
+            height      = sample_size[0],
+            width       = sample_size[1],
+            generator   = generator,
+            guidance_scale = guidance_scale,
+            num_inference_steps = num_inference_steps,
+        ).videos
 
 if not os.path.exists(save_path):
     os.makedirs(save_path, exist_ok=True)

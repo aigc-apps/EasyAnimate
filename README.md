@@ -10,8 +10,6 @@
 [![Modelscope Studio](https://img.shields.io/badge/Modelscope-Studio-blue)](https://modelscope.cn/studios/PAI/EasyAnimate/summary)
 [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-yellow)](https://huggingface.co/spaces/alibaba-pai/EasyAnimate)
 
-
-
 English | [简体中文](./README_zh-CN.md)
 
 # Table of Contents
@@ -32,7 +30,7 @@ EasyAnimate is a pipeline based on the transformer architecture that can be used
 We will support quick pull-ups from different platforms, refer to [Quick Start](#quick-start).
 
 What's New:
-- Updated to v3, supports up to 720p 144 frames (960x960, 6s, 24fps) video generation, and supports image generated video models. [ 2024.07.01 ]
+- Updated to v3, supports up to 720p 144 frames (960x960, 6s, 24fps) video generation, and supports text and image generated video models. [ 2024.07.01 ]
 - ModelScope-Sora "Data Directors" creative sprint has been annouced using EasyAnimate as the training backbone to investigate the influence of data preprocessing. Please visit the competition's [official website](https://tianchi.aliyun.com/competition/entrance/532219) for more information. [ 2024.06.17 ]
 - Updated to v2, supports a maximum of 144 frames (768x768, 6s, 24fps) for generation. [ 2024.05.26 ]
 - Create Code! Support for Windows and Linux Now. [ 2024.04.12 ]
@@ -85,11 +83,9 @@ mkdir models/Diffusion_Transformer
 mkdir models/Motion_Module
 mkdir models/Personalized_Model
 
-wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-512x512.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-512x512.tar
 wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar
 
 cd models/Diffusion_Transformer/
-tar -xvf EasyAnimateV3-XL-2-512x512.tar
 tar -xvf EasyAnimateV3-XL-2-InP-512x512.tar
 cd ../../
 ```
@@ -176,7 +172,6 @@ EasyAnimateV3:
 ```
 📦 models/
 ├── 📂 Diffusion_Transformer/
-│   ├── 📂 EasyAnimateV3-XL-2-512x512/
 │   └── 📂 EasyAnimateV3-XL-2-InP-512x512/
 ├── 📂 Personalized_Model/
 │   └── your trained trainformer model / your trained lora model (for UI load)
@@ -314,13 +309,9 @@ sh scripts/train_t2iv.sh
 EasyAnimateV3:
 | Name | Type | Storage Space | Url | Hugging Face | Description |
 |--|--|--|--|--|--|
-| EasyAnimateV3-XL-2-512x512.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-512x512) | EasyAnimateV3 official weights for 512x512 text to video resolution. Training with 144 frames and fps 24 |
-| EasyAnimateV3-XL-2-InP-512x512.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-512x512) | EasyAnimateV3 official weights for 512x512 image to video resolution. Training with 144 frames and fps 24 |
-| EasyAnimateV3-XL-2-768x768.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-768x768) | EasyAnimateV3 official weights for 768x768 text to video resolution. Training with 144 frames and fps 24 |
-| EasyAnimateV3-XL-2-InP-768x768.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-768x768) | EasyAnimateV3 official weights for 768x768 image to video resolution. Training with 144 frames and fps 24 |
-| EasyAnimateV3-XL-2-960x960.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-960x960.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-960x960) | EasyAnimateV3 official weights for 960x960 text to video resolution. Training with 144 frames and fps 24 |
-| EasyAnimateV3-XL-2-InP-960x960.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-960x960) | EasyAnimateV3 official weights for 960x960 image to video resolution. Training with 144 frames and fps 24 |
-| easyanimatev3_minimalism_lora.safetensors | Lora of Pixart | 485.1MB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors) | - | A lora training with a specifial type images. Images can be downloaded from [Url](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Minimalism.zip). |
+| EasyAnimateV3-XL-2-InP-512x512.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-512x512) | EasyAnimateV3 official weights for 512x512 text and image to video resolution. Training with 144 frames and fps 24 |
+| EasyAnimateV3-XL-2-InP-768x768.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-768x768) | EasyAnimateV3 official weights for 768x768 text and image to video resolution. Training with 144 frames and fps 24 |
+| EasyAnimateV3-XL-2-InP-960x960.tar | EasyAnimateV3 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-960x960) | EasyAnimateV3 official weights for 960x960 text and  image to video resolution. Training with 144 frames and fps 24 |
 
 <details>
   <summary>(Obsolete) EasyAnimateV2:</summary>
@@ -381,8 +372,7 @@ Moreover, it proposes Slice VAE, which addresses the memory difficulties encount
 For more details, please refer to [arxiv](https://arxiv.org/abs/2405.18991).
 
 # TODO List
-- Support model with larger resolution.
-- Support video inpaint model.
+- Support model with larger params.
 
 # Contact Us
 1. Use Dingding to search group 77450006752 or Scan to join

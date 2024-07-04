@@ -777,7 +777,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         mask_feature: bool = True,
         max_sequence_length: int = 120,
         clip_image: Image = None,
-        clip_apply_ratio: float = 0.70,
+        clip_apply_ratio: float = 0.50,
     ) -> Union[EasyAnimatePipelineOutput, Tuple]:
         """
         Function invoked when calling the pipeline for generation.

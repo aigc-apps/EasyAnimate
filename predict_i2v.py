@@ -42,12 +42,12 @@ partial_video_length = None
 overlap_video_length = 4
 
 weight_dtype            = torch.bfloat16
-# If you want to generate from text, please set the validation_image_start = None
+# If you want to generate from text, please set the validation_image_start = None and validation_image_end = None
 validation_image_start  = "asset/1.png"
 validation_image_end    = None
 
 # prompts
-prompt                  = "1dog is looking at viewer and smiling"
+prompt                  = "The dog is looking at camera and smiling"
 negative_prompt         = "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion. "
 guidance_scale          = 7
 seed                    = 43
@@ -138,6 +138,7 @@ pipeline = EasyAnimateInpaintPipeline.from_pretrained(
 )
 pipeline.to("cuda")
 pipeline.enable_model_cpu_offload()
+
 generator = torch.Generator(device="cuda").manual_seed(seed)
 
 if lora_path is not None:

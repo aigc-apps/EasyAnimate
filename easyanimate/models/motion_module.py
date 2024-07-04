@@ -52,6 +52,7 @@ class VanillaTemporalModule(nn.Module):
         zero_initialize                    = True,
         block_size                         = 1,
         grid                               = False,
+        remove_time_embedding_in_photo     = False,
 
         global_num_attention_heads         = 16,
         global_attention                   = False,
@@ -70,6 +71,7 @@ class VanillaTemporalModule(nn.Module):
             temporal_position_encoding_max_len=temporal_position_encoding_max_len,
             grid=grid,
             block_size=block_size,
+            remove_time_embedding_in_photo=remove_time_embedding_in_photo,
             qk_norm=qk_norm,
         )
         self.global_transformer = GlobalTransformer3DModel(
@@ -161,6 +163,7 @@ class TemporalTransformer3DModel(nn.Module):
         temporal_position_encoding_max_len = 4096,
         grid                               = False,
         block_size                         = 1,
+        remove_time_embedding_in_photo     = False,
         qk_norm                            = False,
     ):
         super().__init__()
@@ -189,6 +192,7 @@ class TemporalTransformer3DModel(nn.Module):
                     temporal_position_encoding_max_len=temporal_position_encoding_max_len,
                     block_size=block_size,
                     grid=grid,
+                    remove_time_embedding_in_photo=remove_time_embedding_in_photo,
                     qk_norm=qk_norm
                 )
                 for d in range(num_layers)
@@ -240,6 +244,7 @@ class TemporalTransformerBlock(nn.Module):
         temporal_position_encoding_max_len = 4096,
         block_size                         = 1,
         grid                               = False,
+        remove_time_embedding_in_photo     = False,
         qk_norm                            = False,
     ):
         super().__init__()
@@ -265,6 +270,7 @@ class TemporalTransformerBlock(nn.Module):
                     temporal_position_encoding_max_len=temporal_position_encoding_max_len,
                     block_size=block_size,
                     grid=grid,
+                    remove_time_embedding_in_photo=remove_time_embedding_in_photo,
                     qk_norm="layer_norm" if qk_norm else None,
                     processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
                 )
@@ -322,6 +328,7 @@ class VersatileAttention(Attention):
             temporal_position_encoding_max_len = 4096,  
             grid                               = False,
             block_size                         = 1,
+            remove_time_embedding_in_photo     = False,
             *args, **kwargs
         ):
         super().__init__(*args, **kwargs)
@@ -332,6 +339,7 @@ class VersatileAttention(Attention):
         
         self.block_size = block_size
         self.grid = grid
+        self.remove_time_embedding_in_photo = remove_time_embedding_in_photo
         self.pos_encoder = PositionalEncoding(
             kwargs["query_dim"],
             dropout=0., 
@@ -348,8 +356,13 @@ class VersatileAttention(Attention):
             # for add pos_encoder 
             _, before_d, _c = hidden_states.size()
             hidden_states = rearrange(hidden_states, "(b f) d c -> (b d) f c", f=video_length)
-            if self.pos_encoder is not None:
-                hidden_states = self.pos_encoder(hidden_states)
+            
+            if self.remove_time_embedding_in_photo:
+                if self.pos_encoder is not None and video_length > 1:
+                    hidden_states = self.pos_encoder(hidden_states)
+            else:
+                if self.pos_encoder is not None:
+                    hidden_states = self.pos_encoder(hidden_states)
             
             if self.grid:
                 hidden_states = rearrange(hidden_states, "(b d) f c -> b f d c", f=video_length, d=before_d)
