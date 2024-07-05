@@ -20,6 +20,9 @@ from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 
+# Low gpu memory mode, this is used when the GPU memory is under 16GB
+low_gpu_memory_mode = False
+
 # Config and model path
 config_path         = "config/easyanimate_video_slicevae_motion_module_v3.yaml"
 model_name          = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512"
@@ -42,7 +45,7 @@ video_length        = 144
 fps                 = 24
 
 weight_dtype        = torch.bfloat16
-prompt              = "A young woman with with black eyes and blonde hair standing in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic. "
+prompt              = "A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
 negative_prompt     = "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion. " 
 guidance_scale      = 7.0
 seed                = 43
@@ -144,8 +147,10 @@ else:
         scheduler=scheduler,
         torch_dtype=weight_dtype
     )
-pipeline.to("cuda")
-pipeline.enable_model_cpu_offload()
+if low_gpu_memory_mode:
+    pipeline.enable_sequential_cpu_offload()
+else:
+    pipeline.enable_model_cpu_offload()
 
 generator = torch.Generator(device="cuda").manual_seed(seed)
 
@@ -182,6 +187,9 @@ with torch.no_grad():
             guidance_scale = guidance_scale,
             num_inference_steps = num_inference_steps,
         ).videos
+
+if lora_path is not None:
+    pipeline = unmerge_lora(pipeline, lora_path, lora_weight)
 
 if not os.path.exists(save_path):
     os.makedirs(save_path, exist_ok=True)

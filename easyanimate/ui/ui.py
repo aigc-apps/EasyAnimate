@@ -56,7 +56,7 @@ css = """
 """
 
 class EasyAnimateController:
-    def __init__(self):
+    def __init__(self, low_gpu_memory_mode):
         # config dirs
         self.basedir                    = os.getcwd()
         self.config_dir                 = os.path.join(self.basedir, "config")
@@ -86,6 +86,7 @@ class EasyAnimateController:
         self.motion_module_path    = "none"
         self.base_model_path       = "none"
         self.lora_model_path       = "none"
+        self.low_gpu_memory_mode   = low_gpu_memory_mode
         
         self.weight_dtype = torch.bfloat16
 
@@ -164,7 +165,10 @@ class EasyAnimateController:
                 clip_image_encoder=clip_image_encoder,
                 clip_image_processor=clip_image_processor,
             )
-        self.pipeline.enable_model_cpu_offload()
+        if self.low_gpu_memory_mode:
+            self.pipeline.enable_sequential_cpu_offload()
+        else:
+            self.pipeline.enable_model_cpu_offload()
         print("Update diffusion transformer done")
         return gr.update()
 
@@ -297,7 +301,6 @@ class EasyAnimateController:
         if self.lora_model_path != "none":
             # lora part
             self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
-        self.pipeline.to("cuda")
 
         if int(seed_textbox) != -1 and seed_textbox != "": torch.manual_seed(int(seed_textbox))
         else: seed_textbox = np.random.randint(0, 1e10)
@@ -468,8 +471,8 @@ class EasyAnimateController:
                     return gr.Image.update(visible=False, value=None), gr.Video.update(value=save_sample_path, visible=True), "Success"
 
 
-def ui():
-    controller = EasyAnimateController()
+def ui(low_gpu_memory_mode):
+    controller = EasyAnimateController(low_gpu_memory_mode)
 
     with gr.Blocks(css=css) as demo:
         gr.Markdown(
@@ -709,7 +712,7 @@ def ui():
 
 
 class EasyAnimateController_Modelscope:
-    def __init__(self, edition, config_path, model_name, savedir_sample):
+    def __init__(self, edition, config_path, model_name, savedir_sample, low_gpu_memory_mode):
         # Weight Dtype
         weight_dtype                    = torch.bfloat16
 
@@ -772,7 +775,10 @@ class EasyAnimateController_Modelscope:
                 clip_image_encoder=clip_image_encoder,
                 clip_image_processor=clip_image_processor,
             )
-        self.pipeline.enable_model_cpu_offload()
+        if low_gpu_memory_mode:
+            self.pipeline.enable_sequential_cpu_offload()
+        else:
+            self.pipeline.enable_model_cpu_offload()
         print("Update diffusion transformer done")
 
 
@@ -848,7 +854,6 @@ class EasyAnimateController_Modelscope:
         if self.lora_model_path != "none":
             # lora part
             self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
-        self.pipeline.to("cuda")
 
         if int(seed_textbox) != -1 and seed_textbox != "": torch.manual_seed(int(seed_textbox))
         else: seed_textbox = np.random.randint(0, 1e10)
@@ -937,8 +942,8 @@ class EasyAnimateController_Modelscope:
                     return gr.Image.update(visible=False, value=None), gr.Video.update(value=save_sample_path, visible=True), "Success"
 
 
-def ui_modelscope(edition, config_path, model_name, savedir_sample):
-    controller = EasyAnimateController_Modelscope(edition, config_path, model_name, savedir_sample)
+def ui_modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memory_mode):
+    controller = EasyAnimateController_Modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memory_mode)
 
     with gr.Blocks(css=css) as demo:
         gr.Markdown(

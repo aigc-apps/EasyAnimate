@@ -16,6 +16,9 @@ from easyanimate.pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaint
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import save_videos_grid, get_image_to_video_latent
 
+# Low gpu memory mode, this is used when the GPU memory is under 16GB
+low_gpu_memory_mode = False
+
 # Config and model path
 config_path         = "config/easyanimate_video_slicevae_motion_module_v3.yaml"
 model_name          = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512"
@@ -136,8 +139,10 @@ pipeline = EasyAnimateInpaintPipeline.from_pretrained(
     clip_image_encoder=clip_image_encoder,
     clip_image_processor=clip_image_processor,
 )
-pipeline.to("cuda")
-pipeline.enable_model_cpu_offload()
+if low_gpu_memory_mode:
+    pipeline.enable_sequential_cpu_offload()
+else:
+    pipeline.enable_model_cpu_offload()
 
 generator = torch.Generator(device="cuda").manual_seed(seed)
 
