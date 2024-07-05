@@ -562,7 +562,7 @@ def ui():
                     )
                     width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=128, maximum=1280, step=16)
                     height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=128, maximum=1280, step=16)
-                    base_resolution  = gr.Radio(label="Base Resolution of Pretrained Models", choices=[512, 768, 960], interactive=False, visible=False)
+                    base_resolution  = gr.Radio(label="Base Resolution of Pretrained Models", choices=[512, 768, 960], visible=False)
 
                     with gr.Group():
                         generation_method = gr.Radio(
@@ -808,7 +808,7 @@ class EasyAnimateController_Modelscope:
             original_width, original_height = Image.open(start_image).size
             closest_size, closest_ratio = get_closest_ratio(original_height, original_width, ratios=aspect_ratio_sample_size)
             height_slider, width_slider = [int(x / 16) * 16 for x in closest_size]
-            
+
         if self.transformer.config.in_channels != 12 and start_image is not None:
             raise gr.Error(f"Please select an image to video pretrained model while using image to video.")
         
