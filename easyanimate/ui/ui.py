@@ -259,7 +259,8 @@ class EasyAnimateController:
                 raise gr.Error(f"Please upload an image when using \"Resize to the Start Image\".")
 
             aspect_ratio_sample_size    = {key : [x / 512 * base_resolution for x in ASPECT_RATIO_512[key]] for key in ASPECT_RATIO_512.keys()}
-            closest_size, closest_ratio = get_closest_ratio(height_slider, width_slider, ratios=aspect_ratio_sample_size)
+            original_width, original_height = Image.open(start_image).size
+            closest_size, closest_ratio = get_closest_ratio(original_height, original_width, ratios=aspect_ratio_sample_size)
             height_slider, width_slider = [int(x / 16) * 16 for x in closest_size]
 
         if self.transformer.config.in_channels != 12 and start_image is not None:
@@ -561,7 +562,7 @@ def ui():
                     )
                     width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=128, maximum=1280, step=16)
                     height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=128, maximum=1280, step=16)
-                    base_resolution  = gr.Slider(label="Base Resolution of Pretrained Models", value=512, minimum=512, maximum=960, step=16, visible=False)
+                    base_resolution  = gr.Radio(label="Base Resolution of Pretrained Models", choices=[512, 768, 960], interactive=False, visible=False)
 
                     with gr.Group():
                         generation_method = gr.Radio(
@@ -802,10 +803,12 @@ class EasyAnimateController_Modelscope:
         if resize_method == "Resize to the Start Image":
             if start_image is None:
                 raise gr.Error(f"Please upload an image when using \"Resize to the Start Image\".")
-
-            height_slider, width_slider = get_width_and_height_from_image_and_base_resolution(start_image, base_resolution)
-            height_slider, width_slider = height_slider // 16 * 16, width_slider // 16 * 16
-
+        
+            aspect_ratio_sample_size    = {key : [x / 512 * base_resolution for x in ASPECT_RATIO_512[key]] for key in ASPECT_RATIO_512.keys()}
+            original_width, original_height = Image.open(start_image).size
+            closest_size, closest_ratio = get_closest_ratio(original_height, original_width, ratios=aspect_ratio_sample_size)
+            height_slider, width_slider = [int(x / 16) * 16 for x in closest_size]
+            
         if self.transformer.config.in_channels != 12 and start_image is not None:
             raise gr.Error(f"Please select an image to video pretrained model while using image to video.")
         
@@ -1001,7 +1004,7 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
                         )
                         width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=256, maximum=704, step=16)
                         height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=256, maximum=704, step=16)
-                        base_resolution  = gr.Slider(label="Base Resolution of Pretrained Models", value=512, minimum=512, maximum=768, step=16, interactive=False, visible=False)
+                        base_resolution  = gr.Radio(label="Base Resolution of Pretrained Models", value=512, choices=[512, 768, 960], interactive=False, visible=False)
                         with gr.Column():
                             gr.Markdown(
                                 """                    
@@ -1324,7 +1327,7 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                         )
                         width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=256, maximum=704, step=16)
                         height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=256, maximum=704, step=16)
-                        base_resolution  = gr.Slider(label="Base Resolution of Pretrained Models", value=512, minimum=512, maximum=768, step=16, interactive=False, visible=False)
+                        base_resolution  = gr.Radio(label="Base Resolution of Pretrained Models", choices=[512, 768, 960], interactive=False, visible=False)
                         with gr.Column():
                             gr.Markdown(
                                 """                    
