@@ -17,7 +17,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from diffusers.configuration_utils import ConfigMixin, register_to_config
-from diffusers.loaders import FromOriginalVAEMixin
+
+try:
+    from diffusers.loaders import FromOriginalVAEMixin
+except:
+    from diffusers.loaders import FromOriginalModelMixin as FromOriginalVAEMixin
+
 from diffusers.models.attention_processor import (
     ADDED_KV_ATTENTION_PROCESSORS, CROSS_ATTENTION_PROCESSORS, Attention,
     AttentionProcessor, AttnAddedKVProcessor, AttnProcessor)
@@ -93,6 +98,7 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         norm_num_groups: int = 32,
         scaling_factor: float = 0.1825,
         slice_compression_vae=False,
+        use_tiling=False,
         mini_batch_encoder=9,
         mini_batch_decoder=3,
     ):
@@ -145,8 +151,8 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         self.mini_batch_encoder = mini_batch_encoder
         self.mini_batch_decoder = mini_batch_decoder
         self.use_slicing = False
-        self.use_tiling = False
-        self.tile_sample_min_size = 256
+        self.use_tiling = use_tiling
+        self.tile_sample_min_size = 384
         self.tile_overlap_factor = 0.25
         self.tile_latent_min_size = int(self.tile_sample_min_size / (2 ** (len(ch_mult) - 1)))
         self.scaling_factor = scaling_factor

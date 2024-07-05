@@ -3,9 +3,12 @@ import gc
 import base64
 import torch
 import gradio as gr
+import tempfile
+import hashlib
 
 from fastapi import FastAPI
 from io import BytesIO
+from PIL import Image
 
 # Function to encode a file to Base64
 def encode_file_to_base64(file_path):
@@ -63,12 +66,30 @@ def infer_forward_api(_: gr.Blocks, app: FastAPI, controller):
         negative_prompt_textbox = datas.get('negative_prompt_textbox', 'The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion.')
         sampler_dropdown = datas.get('sampler_dropdown', 'Euler')
         sample_step_slider = datas.get('sample_step_slider', 30)
+        resize_method = datas.get('resize_method', "Generate by")
         width_slider = datas.get('width_slider', 672)
         height_slider = datas.get('height_slider', 384)
+        base_resolution = datas.get('base_resolution', 512)
         is_image = datas.get('is_image', False)
+        generation_method = datas.get('generation_method', False)
         length_slider = datas.get('length_slider', 144)
+        overlap_video_length = datas.get('overlap_video_length', 4)
+        partial_video_length = datas.get('partial_video_length', 72)
         cfg_scale_slider = datas.get('cfg_scale_slider', 6)
+        start_image = datas.get('start_image', None)
+        end_image = datas.get('end_image', None)
         seed_textbox = datas.get("seed_textbox", 43)
+
+        generation_method = "Image Generation" if is_image else generation_method
+
+        temp_directory = tempfile.gettempdir()
+        if start_image is not None:
+            start_image = base64.b64decode(start_image)
+            start_image = [Image.open(BytesIO(start_image))]
+        
+        if end_image is not None:
+            end_image = base64.b64decode(end_image)
+            end_image = [Image.open(BytesIO(end_image))]
 
         try:
             save_sample_path, comment = controller.generate(
@@ -81,11 +102,17 @@ def infer_forward_api(_: gr.Blocks, app: FastAPI, controller):
                 negative_prompt_textbox, 
                 sampler_dropdown, 
                 sample_step_slider, 
+                resize_method,
                 width_slider, 
                 height_slider, 
-                is_image,
+                base_resolution,
+                generation_method,
                 length_slider, 
+                overlap_video_length, 
+                partial_video_length, 
                 cfg_scale_slider, 
+                start_image,
+                end_image,
                 seed_textbox,
                 is_api = True,
             )
@@ -96,5 +123,8 @@ def infer_forward_api(_: gr.Blocks, app: FastAPI, controller):
             save_sample_path = ""
             comment = f"Error. error information is {str(e)}"
             return {"message": comment}
-
-        return {"message": comment, "save_sample_path": save_sample_path, "base64_encoding": encode_file_to_base64(save_sample_path)}
+        
+        if save_sample_path != "":
+            return {"message": comment, "save_sample_path": save_sample_path, "base64_encoding": encode_file_to_base64(save_sample_path)}
+        else:
+            return {"message": comment, "save_sample_path": save_sample_path}

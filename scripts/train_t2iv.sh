@@ -1,4 +1,4 @@
-export MODEL_NAME="models/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512"
+export MODEL_NAME="models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512"
 export DATASET_NAME="datasets/internal_datasets/"
 export DATASET_META_NAME="datasets/internal_datasets/metadata.json"
 export NCCL_IB_DISABLE=1
@@ -10,7 +10,7 @@ accelerate launch --mixed_precision="bf16" scripts/train_t2iv.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
   --train_data_dir=$DATASET_NAME \
   --train_data_meta=$DATASET_META_NAME \
-  --config_path "config/easyanimate_video_magvit_motion_module_v2.yaml" \
+  --config_path "config/easyanimate_video_slicevae_motion_module_v3.yaml" \
   --image_sample_size=512 \
   --video_sample_size=512 \
   --video_sample_stride=1 \
@@ -35,4 +35,5 @@ accelerate launch --mixed_precision="bf16" scripts/train_t2iv.py \
   --vae_mini_batch=1 \
   --random_frame_crop \
   --enable_bucket \
+  --train_mode="inpaint" \
   --trainable_modules "transformer_blocks" "proj_out" "pos_embed" "long_connect_fc"

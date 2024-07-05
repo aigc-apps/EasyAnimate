@@ -1,19 +1,29 @@
 transformer_additional_kwargs:
   patch_3d:                                   false
   fake_3d:                                    false
-  basic_block_type:                           "motionmodule"
+  basic_block_type:                           "global_motionmodule"
   time_position_encoding_before_transformer:  false
   motion_module_type:                         "Vanilla"
   enable_uvit:                                true
   
-  motion_module_kwargs:
-    num_attention_heads:                8
+  motion_module_kwargs_even:
+    num_attention_heads:                16
     num_transformer_block:              1
     attention_block_types:              [ "Temporal_Self", "Temporal_Self" ]
     temporal_position_encoding:         true
     temporal_position_encoding_max_len: 4096
     temporal_attention_dim_div:         1
     block_size:                         1
+    remove_time_embedding_in_photo:     false
+  motion_module_kwargs_odd:
+    num_attention_heads:                16
+    num_transformer_block:              1
+    attention_block_types:              [ "Temporal_Self", "Global_Self" ]
+    temporal_position_encoding:         true
+    temporal_position_encoding_max_len: 4096
+    temporal_attention_dim_div:         1
+    block_size:                         1
+    remove_time_embedding_in_photo:     false
 
 noise_scheduler_kwargs:
   beta_start:    0.0001
@@ -23,5 +33,3 @@ noise_scheduler_kwargs:
 
 vae_kwargs:
   enable_magvit: true
-  slice_compression_vae: true
-  mini_batch_encoder: 8

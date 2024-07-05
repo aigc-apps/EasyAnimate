@@ -26,7 +26,7 @@ def post_update_edition(edition, url='http://0.0.0.0:7860'):
     data = r.content.decode('utf-8')
     return data
 
-def post_infer(is_image, length_slider, url='http://127.0.0.1:7860'):
+def post_infer(generation_method, length_slider, url='http://127.0.0.1:7860'):
     datas = json.dumps({
         "base_model_path": "none",
         "motion_module_path": "none",
@@ -38,7 +38,7 @@ def post_infer(is_image, length_slider, url='http://127.0.0.1:7860'):
         "sample_step_slider": 30, 
         "width_slider": 672, 
         "height_slider": 384, 
-        "is_image": is_image,
+        "generation_method": "Video Generation",
         "length_slider": length_slider,
         "cfg_scale_slider": 6,
         "seed_textbox": 43,
@@ -55,29 +55,31 @@ if __name__ == '__main__':
     # -------------------------- #
     #  Step 1: update edition
     # -------------------------- #
-    edition = "v2"
+    edition = "v3"
     outputs = post_update_edition(edition)
     print('Output update edition: ', outputs)
 
     # -------------------------- #
     #  Step 2: update edition
     # -------------------------- #
-    diffusion_transformer_path = "/your-path/EasyAnimate/models/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512"
+    diffusion_transformer_path = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-512x512"
     outputs = post_diffusion_transformer(diffusion_transformer_path)
     print('Output update edition: ', outputs)
 
     # -------------------------- #
     #  Step 3: infer
     # -------------------------- #
-    is_image = False
-    length_slider = 27
-    outputs = post_infer(is_image, length_slider)
+    # "Video Generation" and "Image Generation"
+    generation_method = "Video Generation"
+    length_slider = 72
+    outputs = post_infer(generation_method, length_slider)
     
     # Get decoded data
     outputs = json.loads(outputs)
     base64_encoding = outputs["base64_encoding"]
     decoded_data = base64.b64decode(base64_encoding)
 
+    is_image = True if generation_method == "Image Generation" else False
     if is_image or length_slider == 1:
         file_path = "1.png"
     else:

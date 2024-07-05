@@ -578,7 +578,7 @@ class EasyAnimatePipeline(DiffusionPipeline):
     
     def decode_latents(self, latents):
         video_length = latents.shape[2]
-        latents = 1 / 0.18215 * latents
+        latents = 1 / self.vae.config.scaling_factor * latents
         if self.vae.quant_conv.weight.ndim==5:
             mini_batch_encoder = self.vae.mini_batch_encoder
             mini_batch_decoder = self.vae.mini_batch_decoder

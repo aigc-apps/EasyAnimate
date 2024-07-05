@@ -1,10 +1,10 @@
+import math
 from typing import Optional
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.nn.init as init
-import math
 from einops import rearrange
 from torch import nn
 

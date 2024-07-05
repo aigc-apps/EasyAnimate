@@ -30,6 +30,7 @@ EasyAnimate是一个基于transformer结构的pipeline，可用于生成AI图片
 我们会逐渐支持从不同平台快速启动，请参阅 [快速启动](#快速启动)。
 
 新特性：
+- 更新到v3版本，最大支持720p 144帧(960x960, 6s, 24fps)视频生成，支持文与图生视频模型。[ 2024.07.01 ]
 - ModelScope-Sora“数据导演”创意竞速——第三届Data-Juicer大模型数据挑战赛已经正式启动！其使用EasyAnimate作为基础模型，探究数据处理对于模型训练的作用。立即访问[竞赛官网](https://tianchi.aliyun.com/competition/entrance/532219)，了解赛事详情。[ 2024.06.17 ]
 - 更新到v2版本，最大支持144帧(768x768, 6s, 24fps)生成。[ 2024.05.26 ]
 - 创建代码！现在支持 Windows 和 Linux。[ 2024.04.12 ]
@@ -42,9 +43,9 @@ EasyAnimate是一个基于transformer结构的pipeline，可用于生成AI图片
 
 这些是我们的生成结果 [GALLERY](scripts/Result_Gallery.md) (点击下方的图片可查看视频):
 
-[![Watch the video](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Combine_512.jpg)](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mp4)
+[![Watch the video](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/i2v_result.jpg)](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mp4)
 我们的ui界面如下:
-![ui](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/ui.png)
+![ui](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/ui_v3.jpg)
 
 # 快速启动
 ### 1. 云使用: AliyunDSW/Docker
@@ -58,7 +59,39 @@ DSW 有免费 GPU 时间，用户可申请一次，申请后3个月内有效。
 #### b. 通过docker
 使用docker的情况下，请保证机器中已经正确安装显卡驱动与CUDA环境，然后以此执行以下命令：
 
-EasyAnimateV2: 
+EasyAnimateV3:
+```
+# pull image
+docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
+
+# enter image
+docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
+
+# clone code
+git clone https://github.com/aigc-apps/EasyAnimate.git
+
+# enter EasyAnimate's dir
+cd EasyAnimate
+
+# download weights
+mkdir models/Diffusion_Transformer
+mkdir models/Motion_Module
+mkdir models/Personalized_Model
+
+wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar
+wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-768x768.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-768x768.tar
+wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960.tar
+
+cd models/Diffusion_Transformer/
+tar -xvf EasyAnimateV3-XL-2-InP-512x512.tar
+tar -xvf EasyAnimateV3-XL-2-InP-768x768.tar
+tar -xvf EasyAnimateV3-XL-2-InP-960x960.tar
+cd ../../
+```
+
+<details>
+  <summary>(Obsolete) EasyAnimateV2:</summary>
+
 ```
 # pull image
 docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
@@ -83,6 +116,7 @@ cd models/Diffusion_Transformer/
 tar -xvf EasyAnimateV2-XL-2-512x512.tar
 cd ../../
 ```
+</details>
 
 <details>
   <summary>(Obsolete) EasyAnimateV1:</summary>
@@ -118,7 +152,7 @@ cd ../../
 
 ### 2. 本地安装: 环境检查/下载/安装
 #### a. 环境检查
-我们已验证EasyPhoto可在以下环境中执行：
+我们已验证EasyAnimate可在以下环境中执行：
 
 Linux 的详细信息：
 - 操作系统 Ubuntu 20.04, CentOS
@@ -130,10 +164,30 @@ Linux 的详细信息：
 
 我们需要大约 60GB 的可用磁盘空间，请检查！
 
+不同显存可以生成的视频大小有：
+| GPU memory | 384x672x72 | 384x672x144 | 576x1008x72 | 576x1008x144 | 720x1280x72 | 720x1280x144 |
+|----------|----------|----------|----------|----------|----------|----------|
+| 16GB | ✅ | ✅ | ⭕️ | ⭕️ | ⭕️ | ❌ |
+| 24GB | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 40GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 80GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+✅ 表示它可以在low_gpu_memory_mode＝False下运行，⭕️ 表示它可以在low_gpu_memory_mode＝True下运行，❌ 表示它无法运行。low_gpu_memory_mode=True时，运行速度较慢。显卡需要支持bfloat16预测。
+
 #### b. 权重放置
 我们最好将[权重](#model-zoo)按照指定路径进行放置：
 
-EasyAnimateV2: 
+EasyAnimateV3:
+```
+📦 models/
+├── 📂 Diffusion_Transformer/
+│   └── 📂 EasyAnimateV3-XL-2-InP-512x512/
+├── 📂 Personalized_Model/
+│   └── your trained trainformer model / your trained lora model (for UI load)
+```
+
+<details>
+  <summary>(Obsolete) EasyAnimateV2:</summary>
 ```
 📦 models/
 ├── 📂 Diffusion_Transformer/
@@ -141,6 +195,7 @@ EasyAnimateV2:
 ├── 📂 Personalized_Model/
 │   └── your trained trainformer model / your trained lora model (for UI load)
 ```
+</details>
 
 <details>
   <summary>(Obsolete) EasyAnimateV1:</summary>
@@ -261,12 +316,24 @@ sh scripts/train_t2iv.sh
 
 
 # 模型地址
-EasyAnimateV2:
+
+EasyAnimateV3:
+
+| 名称 | 种类 | 存储空间 | 下载地址 | Hugging Face | 描述 |
+|--|--|--|--|--|--|
+| EasyAnimateV3-XL-2-InP-512x512.tar | EasyAnimateV3 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-512x512)| 官方的512x512分辨率的图生视频权重。以144帧、每秒24帧进行训练 |
+| EasyAnimateV3-XL-2-InP-768x768.tar | EasyAnimateV3 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-768x768) | 官方的768x768分辨率的图生视频权重。以144帧、每秒24帧进行训练 |
+| EasyAnimateV3-XL-2-InP-960x960.tar | EasyAnimateV3 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-960x960) | 官方的960x960（720P）分辨率的图生视频权重。以144帧、每秒24帧进行训练 |
+
+<details>
+  <summary>(Obsolete) EasyAnimateV2:</summary>
+
 | 名称 | 种类 | 存储空间 | 下载地址 | Hugging Face | 描述 |
 |--|--|--|--|--|--|
 | EasyAnimateV2-XL-2-512x512.tar | EasyAnimateV2 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV2-XL-2-512x512)| 官方的512x512分辨率的重量。以144帧、每秒24帧进行训练 |
 | EasyAnimateV2-XL-2-768x768.tar | EasyAnimateV2 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV2-XL-2-768x768) | 官方的768x768分辨率的重量。以144帧、每秒24帧进行训练 |
 | easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 485.1MB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors)| - | 使用特定类型的图像进行lora训练的结果。图片可从这里[下载](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/webui/Minimalism.zip). |
+</details>
 
 <details>
   <summary>(Obsolete) EasyAnimateV1:</summary>
@@ -305,9 +372,9 @@ EasyAnimateV2:
 
 下图概述了EasyAnimate的管道。它包括Text Encoder、Video VAE（视频编码器和视频解码器）和Diffusion Transformer（DiT）。T5 Encoder用作文本编码器。其他组件将在以下部分中详细说明。
 
-<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/pipeline_v2.jpg" alt="ui" style="zoom:50%;" />
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/pipeline_v3.jpg" alt="ui" style="zoom:50%;" />
 
-为了引入特征点在时间轴上的特征信息，EasyAnimate引入了运动模块（Motion Module），以实现从2D图像到3D视频的扩展。为了更好的生成效果，其联合图片和视频将Backbone连同Motion Module一起Finetune。在一个Pipeline中即实现了图片的生成，也实现了视频的生成。
+为了引入特征点在时间轴上的特征信息，EasyAnimate引入了混合运动模块（Hybrid Motion Module），以实现从2D图像到3D视频的扩展。为了更好的生成效果，在运动模块中，我们将时间注意力和全局注意力相结合，以确保生成连贯的帧和无缝的运动过渡。同时，在一个Pipeline中即实现了图片的生成，也实现了视频的生成。
 
 另外，参考U-ViT，其将跳连接结构引入到EasyAnimate当中，通过引入浅层特征进一步优化深层特征，并且0初始化了一个全连接层给每一个跳连接结构，使其可以作为一个可插入模块应用到之前已经训练的还不错的DIT中。
 
@@ -316,8 +383,7 @@ EasyAnimateV2:
 更多细节可以看查看[arxiv](https://arxiv.org/abs/2405.18991)。
 
 # 未来计划
-- 支持更大分辨率的文视频生成模型。
-- 支持视频inpaint模型。
+- 支持更大规模参数量的文视频生成模型。
 
 # 联系我们
 1. 扫描下方二维码或搜索群号：77450006752 来加入钉钉群。

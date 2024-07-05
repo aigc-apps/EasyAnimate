@@ -10,8 +10,6 @@
 [![Modelscope Studio](https://img.shields.io/badge/Modelscope-Studio-blue)](https://modelscope.cn/studios/PAI/EasyAnimate/summary)
 [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-yellow)](https://huggingface.co/spaces/alibaba-pai/EasyAnimate)
 
-
-
 English | [简体中文](./README_zh-CN.md)
 
 # Table of Contents
@@ -32,6 +30,7 @@ EasyAnimate is a pipeline based on the transformer architecture that can be used
 We will support quick pull-ups from different platforms, refer to [Quick Start](#quick-start).
 
 What's New:
+- Updated to v3, supports up to 720p 144 frames (960x960, 6s, 24fps) video generation, and supports text and image generated video models. [ 2024.07.01 ]
 - ModelScope-Sora "Data Directors" creative sprint has been annouced using EasyAnimate as the training backbone to investigate the influence of data preprocessing. Please visit the competition's [official website](https://tianchi.aliyun.com/competition/entrance/532219) for more information. [ 2024.06.17 ]
 - Updated to v2, supports a maximum of 144 frames (768x768, 6s, 24fps) for generation. [ 2024.05.26 ]
 - Create Code! Support for Windows and Linux Now. [ 2024.04.12 ]
@@ -45,11 +44,11 @@ Function：
 These are our generated results [GALLERY](scripts/Result_Gallery.md) (Click the image below to see the video):
 
 
-[![Watch the video](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Combine_512.jpg)](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mp4)
+[![Watch the video](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/i2v_result.jpg)](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mp4)
 
 
 Our UI interface is as follows:
-![ui](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/ui.png)
+![ui](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/ui_v3.jpg)
 
 # Quick Start
 ### 1. Cloud usage: AliyunDSW/Docker
@@ -65,7 +64,35 @@ If you are using docker, please make sure that the graphics card driver and CUDA
 
 Then execute the following commands in this way:
 
-EasyAnimateV2: 
+EasyAnimateV3:
+```
+# pull image
+docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
+
+# enter image
+docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
+
+# clone code
+git clone https://github.com/aigc-apps/EasyAnimate.git
+
+# enter EasyAnimate's dir
+cd EasyAnimate
+
+# download weights
+mkdir models/Diffusion_Transformer
+mkdir models/Motion_Module
+mkdir models/Personalized_Model
+
+wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar
+
+cd models/Diffusion_Transformer/
+tar -xvf EasyAnimateV3-XL-2-InP-512x512.tar
+cd ../../
+```
+
+<details>
+  <summary>(Obsolete) EasyAnimateV2:</summary>
+
 ```
 # pull image
 docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
@@ -90,6 +117,7 @@ cd models/Diffusion_Transformer/
 tar -xvf EasyAnimateV2-XL-2-512x512.tar
 cd ../../
 ```
+</details>
 
 <details>
   <summary>(Obsolete) EasyAnimateV1:</summary>
@@ -112,13 +140,14 @@ mkdir models/Diffusion_Transformer
 mkdir models/Motion_Module
 mkdir models/Personalized_Model
 
-wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Motion_Module/easyanimate_v1_mm.safetensors -O models/Motion_Module/easyanimate_v1_mm.safetensors
-wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait.safetensors -O models/Personalized_Model/easyanimate_portrait.safetensors
-wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait_lora.safetensors -O models/Personalized_Model/easyanimate_portrait_lora.safetensors
-wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/PixArt-XL-2-512x512.tar -O models/Diffusion_Transformer/PixArt-XL-2-512x512.tar
+wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar
+wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-768x768.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-768x768.tar
+wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960.tar
 
 cd models/Diffusion_Transformer/
-tar -xvf PixArt-XL-2-512x512.tar
+tar -xvf EasyAnimateV3-XL-2-InP-512x512.tar
+tar -xvf EasyAnimateV3-XL-2-InP-768x768.tar
+tar -xvf EasyAnimateV3-XL-2-InP-960x960.tar
 cd ../../
 ```
 </details>
@@ -133,14 +162,34 @@ The detailed of Linux:
 - pytorch: torch2.2.0
 - CUDA: 11.8
 - CUDNN: 8+
-- GPU： Nvidia-A10 24G & Nvidia-A100 40G & Nvidia-A100 80G
+- GPU： Nvidia-V100 16G & Nvidia-A10 24G & Nvidia-A100 40G & Nvidia-A100 80G
 
 We need about 60GB available on disk (for saving weights), please check!
+
+The video sizes that can be generated by different graphics memory include:
+| GPU memory | 384x672x72 | 384x672x144 | 576x1008x72 | 576x1008x144 | 720x1280x72 | 720x1280x144 |
+|----------|----------|----------|----------|----------|----------|----------|
+| 16GB | ✅ | ✅ | ⭕️ | ⭕️ | ⭕️ | ❌ |
+| 24GB | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 40GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 80GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+✅ indicates that it can run under low_gpu_memory_mode=False, ⭕️ indicates that it can run under low_gpu_memory_mode=True, ❌ indicates that it cannot run. When low_gpu_memory_mode=True, the running speed is slower. The GPU needs to support bfloat16 prediction. 
 
 #### b. Weights
 We'd better place the [weights](#model-zoo) along the specified path:
 
-EasyAnimateV2: 
+EasyAnimateV3:
+```
+📦 models/
+├── 📂 Diffusion_Transformer/
+│   └── 📂 EasyAnimateV3-XL-2-InP-512x512/
+├── 📂 Personalized_Model/
+│   └── your trained trainformer model / your trained lora model (for UI load)
+```
+
+<details>
+  <summary>(Obsolete) EasyAnimateV2:</summary>
 ```
 📦 models/
 ├── 📂 Diffusion_Transformer/
@@ -148,6 +197,7 @@ EasyAnimateV2:
 ├── 📂 Personalized_Model/
 │   └── your trained trainformer model / your trained lora model (for UI load)
 ```
+</details>
 
 <details>
   <summary>(Obsolete) EasyAnimateV1:</summary>
@@ -267,12 +317,21 @@ sh scripts/train_t2iv.sh
 
 # Model zoo
 
-EasyAnimateV2:
+EasyAnimateV3:
+| Name | Type | Storage Space | Url | Hugging Face | Description |
+|--|--|--|--|--|--|
+| EasyAnimateV3-XL-2-InP-512x512.tar | EasyAnimateV3 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-512x512) | EasyAnimateV3 official weights for 512x512 text and image to video resolution. Training with 144 frames and fps 24 |
+| EasyAnimateV3-XL-2-InP-768x768.tar | EasyAnimateV3 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-768x768) | EasyAnimateV3 official weights for 768x768 text and image to video resolution. Training with 144 frames and fps 24 |
+| EasyAnimateV3-XL-2-InP-960x960.tar | EasyAnimateV3 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-960x960) | EasyAnimateV3 official weights for 960x960 text and  image to video resolution. Training with 144 frames and fps 24 |
+
+<details>
+  <summary>(Obsolete) EasyAnimateV2:</summary>
 | Name | Type | Storage Space | Url | Hugging Face | Description |
 |--|--|--|--|--|--|
 | EasyAnimateV2-XL-2-512x512.tar | EasyAnimateV2 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV2-XL-2-512x512) | EasyAnimateV2 official weights for 512x512 resolution. Training with 144 frames and fps 24 |
 | EasyAnimateV2-XL-2-768x768.tar | EasyAnimateV2 | 16.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV2-XL-2-768x768) | EasyAnimateV2 official weights for 768x768 resolution. Training with 144 frames and fps 24 |
-| easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 485.1MB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors) | - | A lora training with a specifial type images. Images can be downloaded from [Url](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/webui/Minimalism.zip). |
+| easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 485.1MB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors) | - | A lora training with a specifial type images. Images can be downloaded from [Url](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Minimalism.zip). |
+</details>
 
 <details>
   <summary>(Obsolete) EasyAnimateV1:</summary>
@@ -313,9 +372,11 @@ We have adopted [PixArt-alpha](https://github.com/PixArt-alpha/PixArt-alpha) as 
 
 The diagram below outlines the pipeline of EasyAnimate. It includes the Text Encoder, Video VAE (video encoder and decoder), and Diffusion Transformer (DiT). The T5 Encoder is used as the text encoder. Other components are detailed in the sections below.
 
-<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/pipeline_v2.jpg" alt="ui" style="zoom:50%;" />
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/pipeline_v3.jpg" alt="ui" style="zoom:50%;" />
 
-To introduce feature information along the temporal axis, EasyAnimate incorporates the Motion Module to achieve the expansion from 2D images to 3D videos. For better generation effects, it jointly finetunes the Backbone together with the Motion Module, thereby achieving image generation and video generation within a single Pipeline.
+We have expanded the DiT framework originally designed for 2D image synthesis to accommodate the complexities of 3D video generation by incorporating a special motion module block named Hybrid Motion Module. 
+
+In the motion module, we employ a combination of temporal attention and global attention to ensure the generation of coherent frames and seamless motion transitions.
 
 Additionally, referencing U-ViT, it introduces a skip connection structure into EasyAnimate to further optimize deeper features by incorporating shallow features. A fully connected layer is also zero-initialized for each skip connection structure, allowing it to be applied as a plug-in module to previously trained and well-performing DiTs.
 
@@ -324,8 +385,7 @@ Moreover, it proposes Slice VAE, which addresses the memory difficulties encount
 For more details, please refer to [arxiv](https://arxiv.org/abs/2405.18991).
 
 # TODO List
-- Support model with larger resolution.
-- Support video inpaint model.
+- Support model with larger params.
 
 # Contact Us
 1. Use Dingding to search group 77450006752 or Scan to join
@@ -334,7 +394,6 @@ For more details, please refer to [arxiv](https://arxiv.org/abs/2405.18991).
 <img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/group/dd.png" alt="ding group" width="30%"/>
 <img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/group/wechat.jpg" alt="Wechat group" width="30%"/>
 <img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/group/person.jpg" alt="Person" width="30%"/>
-
 
 
 # Reference
