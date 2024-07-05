@@ -13,7 +13,7 @@ if __name__ == "__main__":
     # Params below is used when ui_mode = "modelscope"
     edition = "v3"
     config_path = "config/easyanimate_video_slicevae_motion_module_v3.yaml"
-    model_name = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-512x512"
+    model_name = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512"
     savedir_sample = "samples"
 
     if ui_mode == "modelscope":

@@ -11,18 +11,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
 from typing import Any, Dict, Optional
 
+import diffusers
+import pkg_resources
 import torch
 import torch.nn.functional as F
 import torch.nn.init as init
-from diffusers.models.activations import GEGLU, GELU, ApproximateGELU
+
+installed_version = diffusers.__version__
+
+if pkg_resources.parse_version(installed_version) >= pkg_resources.parse_version("0.28.2"):
+    from diffusers.models.attention_processor import (Attention,
+                                                      AttnProcessor2_0,
+                                                      HunyuanAttnProcessor2_0)
+else:
+    from diffusers.models.attention_processor import Attention, AttnProcessor2_0
+
 from diffusers.models.attention import AdaLayerNorm, FeedForward
-from diffusers.models.attention_processor import (Attention, AttnProcessor2_0,
-                                                  HunyuanAttnProcessor2_0)
 from diffusers.models.embeddings import SinusoidalPositionalEmbedding
-from diffusers.models.lora import LoRACompatibleLinear
 from diffusers.models.normalization import AdaLayerNorm, AdaLayerNormZero
 from diffusers.utils import USE_PEFT_BACKEND
 from diffusers.utils.import_utils import is_xformers_available
@@ -459,17 +466,28 @@ class TemporalTransformerBlock(nn.Module):
                 upcast_attention=upcast_attention,
             )
         else:
-            self.attn1 = Attention(
-                query_dim=dim,
-                heads=num_attention_heads,
-                dim_head=attention_head_dim,
-                dropout=dropout,
-                bias=attention_bias,
-                cross_attention_dim=cross_attention_dim if only_cross_attention else None,
-                upcast_attention=upcast_attention,
-                qk_norm="layer_norm" if qk_norm else None,
-                processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
-            )
+            if pkg_resources.parse_version(installed_version) >= pkg_resources.parse_version("0.28.2"):
+                self.attn1 = Attention(
+                    query_dim=dim,
+                    heads=num_attention_heads,
+                    dim_head=attention_head_dim,
+                    dropout=dropout,
+                    bias=attention_bias,
+                    cross_attention_dim=cross_attention_dim if only_cross_attention else None,
+                    upcast_attention=upcast_attention,
+                    qk_norm="layer_norm" if qk_norm else None,
+                    processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
+                )
+            else:
+                self.attn1 = Attention(
+                    query_dim=dim,
+                    heads=num_attention_heads,
+                    dim_head=attention_head_dim,
+                    dropout=dropout,
+                    bias=attention_bias,
+                    cross_attention_dim=cross_attention_dim if only_cross_attention else None,
+                    upcast_attention=upcast_attention,
+                )
 
         self.attn_temporal = get_motion_module(
             in_channels = dim,
@@ -487,17 +505,28 @@ class TemporalTransformerBlock(nn.Module):
                 if self.use_ada_layer_norm
                 else FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
             )
-            self.attn2 = Attention(
-                query_dim=dim,
-                cross_attention_dim=cross_attention_dim if not double_self_attention else None,
-                heads=num_attention_heads,
-                dim_head=attention_head_dim,
-                dropout=dropout,
-                bias=attention_bias,
-                upcast_attention=upcast_attention,
-                qk_norm="layer_norm" if qk_norm else None,
-                processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
-            )  # is self-attn if encoder_hidden_states is none
+            if pkg_resources.parse_version(installed_version) >= pkg_resources.parse_version("0.28.2"):
+                self.attn2 = Attention(
+                    query_dim=dim,
+                    cross_attention_dim=cross_attention_dim if not double_self_attention else None,
+                    heads=num_attention_heads,
+                    dim_head=attention_head_dim,
+                    dropout=dropout,
+                    bias=attention_bias,
+                    upcast_attention=upcast_attention,
+                    qk_norm="layer_norm" if qk_norm else None,
+                    processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
+                )  # is self-attn if encoder_hidden_states is none
+            else:
+                self.attn2 = Attention(
+                    query_dim=dim,
+                    cross_attention_dim=cross_attention_dim if not double_self_attention else None,
+                    heads=num_attention_heads,
+                    dim_head=attention_head_dim,
+                    dropout=dropout,
+                    bias=attention_bias,
+                    upcast_attention=upcast_attention,
+                )  # is self-attn if encoder_hidden_states is none
         else:
             self.norm2 = None
             self.attn2 = None
@@ -773,17 +802,28 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
         else:
             self.norm1 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
             
-        self.attn1 = Attention(
-            query_dim=dim,
-            heads=num_attention_heads,
-            dim_head=attention_head_dim,
-            dropout=dropout,
-            bias=attention_bias,
-            cross_attention_dim=cross_attention_dim if only_cross_attention else None,
-            upcast_attention=upcast_attention,
-            qk_norm="layer_norm" if qk_norm else None,
-            processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
-        )
+        if pkg_resources.parse_version(installed_version) >= pkg_resources.parse_version("0.28.2"):
+            self.attn1 = Attention(
+                query_dim=dim,
+                heads=num_attention_heads,
+                dim_head=attention_head_dim,
+                dropout=dropout,
+                bias=attention_bias,
+                cross_attention_dim=cross_attention_dim if only_cross_attention else None,
+                upcast_attention=upcast_attention,
+                qk_norm="layer_norm" if qk_norm else None,
+                processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
+            )
+        else:
+            self.attn1 = Attention(
+                query_dim=dim,
+                heads=num_attention_heads,
+                dim_head=attention_head_dim,
+                dropout=dropout,
+                bias=attention_bias,
+                cross_attention_dim=cross_attention_dim if only_cross_attention else None,
+                upcast_attention=upcast_attention,
+            )
 
         # 2. Cross-Attn
         if cross_attention_dim is not None or double_self_attention:
@@ -795,17 +835,28 @@ class SelfAttentionTemporalTransformerBlock(nn.Module):
                 if self.use_ada_layer_norm
                 else FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
             )
-            self.attn2 = Attention(
-                query_dim=dim,
-                cross_attention_dim=cross_attention_dim if not double_self_attention else None,
-                heads=num_attention_heads,
-                dim_head=attention_head_dim,
-                dropout=dropout,
-                bias=attention_bias,
-                upcast_attention=upcast_attention,
-                qk_norm="layer_norm" if qk_norm else None,
-                processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
-            )  # is self-attn if encoder_hidden_states is none
+            if pkg_resources.parse_version(installed_version) >= pkg_resources.parse_version("0.28.2"):
+                self.attn2 = Attention(
+                    query_dim=dim,
+                    cross_attention_dim=cross_attention_dim if not double_self_attention else None,
+                    heads=num_attention_heads,
+                    dim_head=attention_head_dim,
+                    dropout=dropout,
+                    bias=attention_bias,
+                    upcast_attention=upcast_attention,
+                    qk_norm="layer_norm" if qk_norm else None,
+                    processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
+                )  # is self-attn if encoder_hidden_states is none
+            else:
+                self.attn2 = Attention(
+                    query_dim=dim,
+                    cross_attention_dim=cross_attention_dim if not double_self_attention else None,
+                    heads=num_attention_heads,
+                    dim_head=attention_head_dim,
+                    dropout=dropout,
+                    bias=attention_bias,
+                    upcast_attention=upcast_attention,
+                )  # is self-attn if encoder_hidden_states is none
         else:
             self.norm2 = None
             self.attn2 = None
@@ -1073,17 +1124,28 @@ class KVCompressionTransformerBlock(nn.Module):
                 upcast_attention=upcast_attention,
             )
         else:
-            self.attn1 = Attention(
-                query_dim=dim,
-                heads=num_attention_heads,
-                dim_head=attention_head_dim,
-                dropout=dropout,
-                bias=attention_bias,
-                cross_attention_dim=cross_attention_dim if only_cross_attention else None,
-                upcast_attention=upcast_attention,
-                qk_norm="layer_norm" if qk_norm else None,
-                processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
-            )
+            if pkg_resources.parse_version(installed_version) >= pkg_resources.parse_version("0.28.2"):
+                self.attn1 = Attention(
+                    query_dim=dim,
+                    heads=num_attention_heads,
+                    dim_head=attention_head_dim,
+                    dropout=dropout,
+                    bias=attention_bias,
+                    cross_attention_dim=cross_attention_dim if only_cross_attention else None,
+                    upcast_attention=upcast_attention,
+                    qk_norm="layer_norm" if qk_norm else None,
+                    processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
+                )
+            else:
+                self.attn1 = Attention(
+                    query_dim=dim,
+                    heads=num_attention_heads,
+                    dim_head=attention_head_dim,
+                    dropout=dropout,
+                    bias=attention_bias,
+                    cross_attention_dim=cross_attention_dim if only_cross_attention else None,
+                    upcast_attention=upcast_attention,
+                )
 
         # 2. Cross-Attn
         if cross_attention_dim is not None or double_self_attention:
@@ -1095,17 +1157,28 @@ class KVCompressionTransformerBlock(nn.Module):
                 if self.use_ada_layer_norm
                 else FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
             )
-            self.attn2 = Attention(
-                query_dim=dim,
-                cross_attention_dim=cross_attention_dim if not double_self_attention else None,
-                heads=num_attention_heads,
-                dim_head=attention_head_dim,
-                dropout=dropout,
-                bias=attention_bias,
-                upcast_attention=upcast_attention,
-                qk_norm="layer_norm" if qk_norm else None,
-                processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
-            )  # is self-attn if encoder_hidden_states is none
+            if pkg_resources.parse_version(installed_version) >= pkg_resources.parse_version("0.28.2"):
+                self.attn2 = Attention(
+                    query_dim=dim,
+                    cross_attention_dim=cross_attention_dim if not double_self_attention else None,
+                    heads=num_attention_heads,
+                    dim_head=attention_head_dim,
+                    dropout=dropout,
+                    bias=attention_bias,
+                    upcast_attention=upcast_attention,
+                    qk_norm="layer_norm" if qk_norm else None,
+                    processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
+                )  # is self-attn if encoder_hidden_states is none
+            else:
+                self.attn2 = Attention(
+                    query_dim=dim,
+                    cross_attention_dim=cross_attention_dim if not double_self_attention else None,
+                    heads=num_attention_heads,
+                    dim_head=attention_head_dim,
+                    dropout=dropout,
+                    bias=attention_bias,
+                    upcast_attention=upcast_attention,
+                )  # is self-attn if encoder_hidden_states is none
         else:
             self.norm2 = None
             self.attn2 = None

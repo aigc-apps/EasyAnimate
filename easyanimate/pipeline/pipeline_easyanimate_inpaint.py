@@ -15,6 +15,7 @@
 import html
 import inspect
 import re
+import gc
 import copy
 import urllib.parse as ul
 from dataclasses import dataclass
@@ -851,6 +852,8 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         # 1. Check inputs. Raise error if not correct
         height = height or self.transformer.config.sample_size * self.vae_scale_factor
         width = width or self.transformer.config.sample_size * self.vae_scale_factor
+        height = int(height // 16 * 16)
+        width = int(width // 16 * 16)
 
         # 2. Default height and width to transformer
         if prompt is not None and isinstance(prompt, str):
@@ -1051,6 +1054,10 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
             
             added_cond_kwargs = {"resolution": resolution, "aspect_ratio": aspect_ratio}
 
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+
         # 10. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         self._num_timesteps = len(timesteps)
@@ -1123,9 +1130,16 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
                         step_idx = i // getattr(self.scheduler, "order", 1)
                         callback(step_idx, t, latents)
 
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+
         # Post-processing
         video = self.decode_latents(latents)
-
+        
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
         # Convert to tensor
         if output_type == "latent":
             video = torch.from_numpy(video)

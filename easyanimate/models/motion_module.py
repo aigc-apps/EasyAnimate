@@ -1,13 +1,21 @@
 """Modified from https://github.com/guoyww/AnimateDiff/blob/main/animatediff/models/motion_module.py
 """
 import math
-from typing import Any, Callable, List, Optional, Tuple, Union
 
+import diffusers
+import pkg_resources
 import torch
-import torch.nn.functional as F
+
+installed_version = diffusers.__version__
+
+if pkg_resources.parse_version(installed_version) >= pkg_resources.parse_version("0.28.2"):
+    from diffusers.models.attention_processor import (Attention,
+                                                      AttnProcessor2_0,
+                                                      HunyuanAttnProcessor2_0)
+else:
+    from diffusers.models.attention_processor import Attention, AttnProcessor2_0
+
 from diffusers.models.attention import FeedForward
-from diffusers.models.attention_processor import (Attention, AttnProcessor2_0,
-                                                  HunyuanAttnProcessor2_0)
 from diffusers.utils.import_utils import is_xformers_available
 from einops import rearrange, repeat
 from torch import nn
@@ -112,16 +120,26 @@ class GlobalTransformer3DModel(nn.Module):
         self.norm1 = FP32LayerNorm(inner_dim)        
         self.proj_in = nn.Linear(in_channels, inner_dim)
         self.norm2 = FP32LayerNorm(inner_dim)       
-        self.attention = Attention(
-            query_dim=inner_dim,
-            heads=num_attention_heads,
-            dim_head=attention_head_dim,
-            dropout=dropout,
-            bias=attention_bias,
-            upcast_attention=upcast_attention,
-            qk_norm="layer_norm" if qk_norm else None,
-            processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
-        )
+        if pkg_resources.parse_version(installed_version) >= pkg_resources.parse_version("0.28.2"):
+            self.attention = Attention(
+                query_dim=inner_dim,
+                heads=num_attention_heads,
+                dim_head=attention_head_dim,
+                dropout=dropout,
+                bias=attention_bias,
+                upcast_attention=upcast_attention,
+                qk_norm="layer_norm" if qk_norm else None,
+                processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
+            )
+        else:
+            self.attention = Attention(
+                query_dim=inner_dim,
+                heads=num_attention_heads,
+                dim_head=attention_head_dim,
+                dropout=dropout,
+                bias=attention_bias,
+                upcast_attention=upcast_attention,
+            )
         self.proj_out = nn.Linear(inner_dim, in_channels)
     
     def forward(self, hidden_states):
@@ -273,6 +291,24 @@ class TemporalTransformerBlock(nn.Module):
                     remove_time_embedding_in_photo=remove_time_embedding_in_photo,
                     qk_norm="layer_norm" if qk_norm else None,
                     processor=HunyuanAttnProcessor2_0() if qk_norm else AttnProcessor2_0(),
+                ) if pkg_resources.parse_version(installed_version) >= pkg_resources.parse_version("0.28.2") else \
+                VersatileAttention(
+                    attention_mode=block_name.split("_")[0],
+                    cross_attention_dim=cross_attention_dim if block_name.endswith("_Cross") else None,
+                    
+                    query_dim=dim,
+                    heads=num_attention_heads,
+                    dim_head=attention_head_dim,
+                    dropout=dropout,
+                    bias=attention_bias,
+                    upcast_attention=upcast_attention,
+        
+                    cross_frame_attention_mode=cross_frame_attention_mode,
+                    temporal_position_encoding=temporal_position_encoding,
+                    temporal_position_encoding_max_len=temporal_position_encoding_max_len,
+                    block_size=block_size,
+                    grid=grid,
+                    remove_time_embedding_in_photo=remove_time_embedding_in_photo,
                 )
             )
             norms.append(FP32LayerNorm(dim))

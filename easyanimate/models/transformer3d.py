@@ -26,7 +26,6 @@ from diffusers.models.attention import BasicTransformerBlock, FeedForward
 from diffusers.models.embeddings import (PatchEmbed, PixArtAlphaTextProjection,
                                          TimestepEmbedding, Timesteps)
 from diffusers.models.lora import LoRACompatibleConv, LoRACompatibleLinear
-from diffusers.models.modeling_outputs import Transformer2DModelOutput
 from diffusers.models.modeling_utils import ModelMixin
 from diffusers.models.normalization import AdaLayerNormContinuous
 from diffusers.utils import (USE_PEFT_BACKEND, BaseOutput, is_torch_version,

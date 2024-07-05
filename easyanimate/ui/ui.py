@@ -241,6 +241,10 @@ class EasyAnimateController:
         seed_textbox,
         is_api = False,
     ):
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+
         if self.transformer is None:
             raise gr.Error(f"Please select a pretrained model path.")
 
@@ -256,21 +260,34 @@ class EasyAnimateController:
         
         if resize_method == "Resize to the Start Image":
             if start_image is None:
-                raise gr.Error(f"Please upload an image when using \"Resize to the Start Image\".")
+                if is_api:
+                    return "", f"Please upload an image when using \"Resize to the Start Image\"."
+                else:
+                    raise gr.Error(f"Please upload an image when using \"Resize to the Start Image\".")
 
             aspect_ratio_sample_size    = {key : [x / 512 * base_resolution for x in ASPECT_RATIO_512[key]] for key in ASPECT_RATIO_512.keys()}
-            original_width, original_height = Image.open(start_image).size
+            
+            original_width, original_height = start_image[0].size if type(start_image) is list else Image.open(start_image).size
             closest_size, closest_ratio = get_closest_ratio(original_height, original_width, ratios=aspect_ratio_sample_size)
             height_slider, width_slider = [int(x / 16) * 16 for x in closest_size]
 
         if self.transformer.config.in_channels != 12 and start_image is not None:
-            raise gr.Error(f"Please select an image to video pretrained model while using image to video.")
+            if is_api:
+                return "", f"Please select an image to video pretrained model while using image to video."
+            else:
+                raise gr.Error(f"Please select an image to video pretrained model while using image to video.")
 
         if self.transformer.config.in_channels != 12 and generation_method == "Long Video Generation":
-            raise gr.Error(f"Please select an image to video pretrained model while using long video generation.")
+            if is_api:
+                return "", f"Please select an image to video pretrained model while using long video generation."
+            else:
+                raise gr.Error(f"Please select an image to video pretrained model while using long video generation.")
         
         if start_image is None and end_image is not None:
-            raise gr.Error(f"If specifying the ending image of the video, please specify a starting image of the video.")
+            if is_api:
+                return "", f"If specifying the ending image of the video, please specify a starting image of the video."
+            else:
+                raise gr.Error(f"If specifying the ending image of the video, please specify a starting image of the video.")
 
         is_image = True if generation_method == "Image Generation" else False
 
@@ -389,6 +406,10 @@ class EasyAnimateController:
                 return "", f"Error. error information is {str(e)}"
             else:
                 return gr.update(), gr.update(), f"Error. error information is {str(e)}"
+
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
 
         # lora part
         if self.lora_model_path != "none":
@@ -562,7 +583,7 @@ def ui():
                     )
                     width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=128, maximum=1280, step=16)
                     height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=128, maximum=1280, step=16)
-                    base_resolution  = gr.Radio(label="Base Resolution of Pretrained Models", choices=[512, 768, 960], visible=False)
+                    base_resolution  = gr.Radio(label="Base Resolution of Pretrained Models", value=512, choices=[512, 768, 960], visible=False)
 
                     with gr.Group():
                         generation_method = gr.Radio(
@@ -793,6 +814,10 @@ class EasyAnimateController_Modelscope:
         seed_textbox,
         is_api = False,
     ):    
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+
         if self.transformer is None:
             raise gr.Error(f"Please select a pretrained model path.")
 
@@ -805,7 +830,7 @@ class EasyAnimateController_Modelscope:
                 raise gr.Error(f"Please upload an image when using \"Resize to the Start Image\".")
         
             aspect_ratio_sample_size    = {key : [x / 512 * base_resolution for x in ASPECT_RATIO_512[key]] for key in ASPECT_RATIO_512.keys()}
-            original_width, original_height = Image.open(start_image).size
+            original_width, original_height = start_image[0].size if type(start_image) is list else Image.open(start_image).size
             closest_size, closest_ratio = get_closest_ratio(original_height, original_width, ratios=aspect_ratio_sample_size)
             height_slider, width_slider = [int(x / 16) * 16 for x in closest_size]
 
@@ -869,6 +894,10 @@ class EasyAnimateController_Modelscope:
             else:
                 return gr.update(), gr.update(), f"Error. error information is {str(e)}"
 
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+        
         # lora part
         if self.lora_model_path != "none":
             self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
@@ -981,7 +1010,7 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
                 with gr.Column():
                     with gr.Row():
                         sampler_dropdown   = gr.Dropdown(label="Sampling method (采样器种类)", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
-                        sample_step_slider = gr.Slider(label="Sampling steps (生成步数)", value=30, minimum=10, maximum=30, step=1)
+                        sample_step_slider = gr.Slider(label="Sampling steps (生成步数)", value=20, minimum=10, maximum=30, step=1, interactive=False)
                     
                     if edition == "v1":
                         width_slider     = gr.Slider(label="Width (视频宽度)",            value=512, minimum=384, maximum=704, step=32)
@@ -1001,27 +1030,31 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
                             ["Generate by", "Resize to the Start Image"],
                             value="Generate by",
                             show_label=False,
-                        )
-                        width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=256, maximum=704, step=16)
-                        height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=256, maximum=704, step=16)
-                        base_resolution  = gr.Radio(label="Base Resolution of Pretrained Models", value=512, choices=[512, 768, 960], interactive=False, visible=False)
+                        )                        
                         with gr.Column():
                             gr.Markdown(
                                 """                    
-                                To ensure the efficiency of the trial, we will limit the frame rate to no more than 72.
-                                If you want to experience longer video generation, you can go to our [Github](https://github.com/aigc-apps/EasyAnimate/).
+                                We support video generation up to 720p with 144 frames, but for the trial experience, we have set certain limitations. We fix the max resolution of video to 384x672x48 (2s). 
+
+                                If the start image you uploaded does not match this resolution, you can use the "Resize to the Start Image" option above. 
+                                
+                                If you want to experience longer and larger video generation, you can go to our [Github](https://github.com/aigc-apps/EasyAnimate/). 
                                 """
                             )
-                            with gr.Group():
-                                generation_method = gr.Radio(
-                                    ["Video Generation", "Image Generation"],
-                                    value="Video Generation",
-                                    show_label=False,
-                                    visible=True,
-                                )
-                                length_slider = gr.Slider(label="Animation length (视频帧数)", value=72, minimum=8,   maximum=72,  step=8)
+                        width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=128, maximum=1280, step=16, interactive=False)
+                        height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=128, maximum=1280, step=16, interactive=False)
+                        base_resolution  = gr.Radio(label="Base Resolution of Pretrained Models", value=512, choices=[512, 768, 960], interactive=False, visible=False)
+
+                        with gr.Group():
+                            generation_method = gr.Radio(
+                                ["Video Generation", "Image Generation"],
+                                value="Video Generation",
+                                show_label=False,
+                                visible=True,
+                            )
+                            length_slider = gr.Slider(label="Animation length (视频帧数)", value=48, minimum=8,   maximum=48,  step=8)
                         
-                        with gr.Accordion("Image to Video (图片到视频)", open=False):
+                        with gr.Accordion("Image to Video (图片到视频)", open=True):
                             with gr.Row():
                                 start_image = gr.Image(label="The image at the beginning of the video (图片到视频的开始图片)", show_label=True, elem_id="i2v_start", sources="upload", type="filepath")
                             
@@ -1074,9 +1107,9 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample):
 
             def upload_generation_method(generation_method):
                 if generation_method == "Video Generation":
-                    return gr.update(visible=True, maximum=72, value=72)
+                    return gr.update(visible=True, minimum=8, maximum=48, value=48, interactive=True)
                 elif generation_method == "Image Generation":
-                    return gr.update(visible=False)
+                    return gr.update(minimum=1, maximum=1, value=1, interactive=False)
             generation_method.change(
                 upload_generation_method, generation_method, [length_slider]
             )
@@ -1162,7 +1195,8 @@ def post_eas(
     session = requests.session()
     session.headers.update({"Authorization": os.environ.get("EAS_TOKEN")})
 
-    response = session.post(url=f'{os.environ.get("EAS_URL")}/easyanimate/infer_forward', json=datas)
+    response = session.post(url=f'{os.environ.get("EAS_URL")}/easyanimate/infer_forward', json=datas, timeout=300)
+
     outputs = response.json()
     return outputs
 
@@ -1205,7 +1239,11 @@ class EasyAnimateController_EAS:
             start_image, end_image, 
             seed_textbox
         )
-        base64_encoding = outputs["base64_encoding"]
+        try:
+            base64_encoding = outputs["base64_encoding"]
+        except:
+            return gr.Image(visible=False, value=None), gr.Video(None, visible=True), outputs["message"]
+            
         decoded_data = base64.b64decode(base64_encoding)
 
         if not os.path.exists(self.savedir_sample):
@@ -1274,7 +1312,7 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                     interactive=False,
                     visible=False
                 )
-                with gr.Column():
+                with gr.Column(visible=False):
                     gr.Markdown(
                         """
                         ### Minimalism is an example portrait of Lora, triggered by specific prompt words. More details can be found on [Wiki](https://github.com/aigc-apps/EasyAnimate/wiki/Training-Lora).
@@ -1304,7 +1342,7 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                 with gr.Column():
                     with gr.Row():
                         sampler_dropdown   = gr.Dropdown(label="Sampling method", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
-                        sample_step_slider = gr.Slider(label="Sampling steps", value=30, minimum=10, maximum=30, step=1)
+                        sample_step_slider = gr.Slider(label="Sampling steps", value=20, minimum=10, maximum=30, step=1, interactive=False)
                     
                     if edition == "v1":
                         width_slider     = gr.Slider(label="Width",            value=512, minimum=384, maximum=704, step=32)
@@ -1324,27 +1362,31 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                             ["Generate by", "Resize to the Start Image"],
                             value="Generate by",
                             show_label=False,
-                        )
-                        width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=256, maximum=704, step=16)
-                        height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=256, maximum=704, step=16)
-                        base_resolution  = gr.Radio(label="Base Resolution of Pretrained Models", choices=[512, 768, 960], interactive=False, visible=False)
+                        )                        
                         with gr.Column():
                             gr.Markdown(
                                 """                    
-                                To ensure the efficiency of the trial, we will limit the frame rate to no more than 72.
-                                If you want to experience longer video generation, you can go to our [Github](https://github.com/aigc-apps/EasyAnimate/).
+                                We support video generation up to 720p with 144 frames, but for the trial experience, we have set certain limitations. We fix the max resolution of video to 384x672x48 (2s). 
+
+                                If the start image you uploaded does not match this resolution, you can use the "Resize to the Start Image" option above. 
+                                
+                                If you want to experience longer and larger video generation, you can go to our [Github](https://github.com/aigc-apps/EasyAnimate/). 
                                 """
                             )
-                            with gr.Group():
-                                generation_method = gr.Radio(
-                                    ["Video Generation", "Image Generation"],
-                                    value="Video Generation",
-                                    show_label=False,
-                                    visible=True,
-                                )
-                                length_slider = gr.Slider(label="Animation length", value=72, minimum=8,   maximum=72,  step=8)
-                
-                        with gr.Accordion("Image to Video", open=False):
+                        width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=128, maximum=1280, step=16, interactive=False)
+                        height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=128, maximum=1280, step=16, interactive=False)
+                        base_resolution  = gr.Radio(label="Base Resolution of Pretrained Models", value=512, choices=[512, 768, 960], interactive=False, visible=False)
+
+                        with gr.Group():
+                            generation_method = gr.Radio(
+                                ["Video Generation", "Image Generation"],
+                                value="Video Generation",
+                                show_label=False,
+                                visible=True,
+                            )
+                            length_slider = gr.Slider(label="Animation length (视频帧数)", value=48, minimum=8,   maximum=48,  step=8)
+                        
+                        with gr.Accordion("Image to Video", open=True):
                             start_image = gr.Image(label="The image at the beginning of the video", show_label=True, elem_id="i2v_start", sources="upload", type="filepath")
                             
                             template_gallery_path = ["asset/1.png", "asset/2.png", "asset/3.png", "asset/4.png", "asset/5.png"]
@@ -1368,8 +1410,8 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                             )
                             template_gallery.select(select_template, None, [start_image, prompt_textbox])
 
-                            with gr.Accordion("The image at the ending of the video", open=False):
-                                end_image   = gr.Image(label="The image at the ending of the video", show_label=True, elem_id="i2v_end", sources="upload", type="filepath")
+                            with gr.Accordion("The image at the ending of the video (Optional)", open=False):
+                                end_image   = gr.Image(label="The image at the ending of the video (Optional)", show_label=True, elem_id="i2v_end", sources="upload", type="filepath")
                         
                         cfg_scale_slider = gr.Slider(label="CFG Scale",        value=7.0, minimum=0,   maximum=20)
                     
@@ -1395,9 +1437,9 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
 
             def upload_generation_method(generation_method):
                 if generation_method == "Video Generation":
-                    return [gr.update(visible=True, maximum=72, value=72)]
+                    return gr.update(visible=True, minimum=8, maximum=48, value=48, interactive=True)
                 elif generation_method == "Image Generation":
-                    return [gr.update(visible=False)]
+                    return gr.update(minimum=1, maximum=1, value=1, interactive=False)
             generation_method.change(
                 upload_generation_method, generation_method, [length_slider]
             )

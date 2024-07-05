@@ -177,7 +177,6 @@ if partial_video_length is not None:
                 video        = input_video,
                 mask_video   = input_video_mask,
                 clip_image   = clip_image, 
-                strength     = strength,
             ).videos
         
         if init_frames != 0:

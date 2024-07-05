@@ -6,6 +6,13 @@ from diffusers.models.embeddings import TimestepEmbedding, Timesteps
 from torch import nn
 
 
+def zero_module(module):
+    # Zero out the parameters of a module and return it.
+    for p in module.parameters():
+        p.detach().zero_()
+    return module
+
+
 class FP32LayerNorm(nn.LayerNorm):
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         origin_dtype = inputs.dtype
