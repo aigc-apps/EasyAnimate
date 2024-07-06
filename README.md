@@ -44,7 +44,7 @@ Function：
 These are our generated results [GALLERY](scripts/Result_Gallery.md) (Click the image below to see the video):
 
 
-[![Watch the video](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/i2v_result.jpg)](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/easyanimate.mp4)
+[![Watch the video](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/i2v_result.jpg)](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/EasyAnimate-v3-DemoShow.mp4)
 
 
 Our UI interface is as follows:
