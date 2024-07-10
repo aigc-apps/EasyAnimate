@@ -293,21 +293,21 @@ If you want to train video vae, you can refer to [README](easyanimate/vae/README
 
 <h4 id="dit-train">c. Video DiT training </h4>
  
-If the data format is relative path during data preprocessing, please set ```scripts/train_t2iv.sh``` as follow.
+If the data format is relative path during data preprocessing, please set ```scripts/train.sh``` as follow.
 ```
 export DATASET_NAME="datasets/internal_datasets/"
 export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.json"
 ```
 
-If the data format is absolute path during data preprocessing, please set ```scripts/train_t2iv.sh``` as follow.
+If the data format is absolute path during data preprocessing, please set ```scripts/train.sh``` as follow.
 ```
 export DATASET_NAME=""
 export DATASET_META_NAME="/mnt/data/json_of_internal_datasets.json"
 ```
 
-Then, we run scripts/train_t2iv.sh.
+Then, we run scripts/train.sh.
 ```sh
-sh scripts/train_t2iv.sh
+sh scripts/train.sh
 ```
 
 <details>

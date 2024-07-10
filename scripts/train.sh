@@ -6,7 +6,7 @@ export NCCL_P2P_DISABLE=1
 NCCL_DEBUG=INFO
 
 # When train model with multi machines, use "--config_file accelerate.yaml" instead of "--mixed_precision='bf16'".
-accelerate launch --mixed_precision="bf16" scripts/train_t2iv.py \
+accelerate launch --mixed_precision="bf16" scripts/train.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
   --train_data_dir=$DATASET_NAME \
   --train_data_meta=$DATASET_META_NAME \
