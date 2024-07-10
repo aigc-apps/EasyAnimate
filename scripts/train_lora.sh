@@ -8,7 +8,7 @@ NCCL_DEBUG=INFO
 # When train model with multi machines, use "--config_file accelerate.yaml" instead of "--mixed_precision='bf16'".
 # vae_mode can be choosen in "normal" and "magvit"
 # transformer_mode can be choosen in "normal" and "kvcompress"
-accelerate launch --mixed_precision="bf16" scripts/train_t2iv_lora.py \
+accelerate launch --mixed_precision="bf16" scripts/train_lora.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
   --train_data_dir=$DATASET_NAME \
   --train_data_meta=$DATASET_META_NAME \

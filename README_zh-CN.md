@@ -289,7 +289,7 @@ Video VAE训练是一个可选项，因为我们已经提供了训练好的Video
 
 <h4 id="dit-train">c. Video DiT训练 </h4>
 
-如果数据预处理时，数据的格式为相对路径，则进入scripts/train_t2iv.sh进行如下设置。
+如果数据预处理时，数据的格式为相对路径，则进入scripts/train.sh进行如下设置。
 ```
 export DATASET_NAME="datasets/internal_datasets/"
 export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.json"
@@ -299,15 +299,15 @@ export DATASET_META_NAME="datasets/internal_datasets/json_of_internal_datasets.j
 train_data_format="normal"
 ```
 
-如果数据的格式为绝对路径，则进入scripts/train_t2iv.sh进行如下设置。
+如果数据的格式为绝对路径，则进入scripts/train.sh进行如下设置。
 ```
 export DATASET_NAME=""
 export DATASET_META_NAME="/mnt/data/json_of_internal_datasets.json"
 ```
 
-最后运行scripts/train_t2iv.sh。
+最后运行scripts/train.sh。
 ```sh
-sh scripts/train_t2iv.sh
+sh scripts/train.sh
 ```
 
 <details>
