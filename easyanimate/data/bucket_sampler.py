@@ -243,6 +243,9 @@ class AspectRatioBatchSampler(BatchSampler):
                         videoid, name, page_dir = video_dict['videoid'], video_dict['name'], video_dict['page_dir']
                         video_dir = os.path.join(self.video_folder, f"{videoid}.mp4")
                     cap = cv2.VideoCapture(video_dir)
+                    if not cap.isOpened():
+                        print(f"Open video {video_dir} is error! ")
+                        continue
 
                     # 获取视频尺寸
                     width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))   # 浮点数转换为整数
@@ -354,6 +357,9 @@ class AspectRatioBatchImageVideoSampler(BatchSampler):
                         else:
                             video_dir = os.path.join(self.train_folder, video_id)
                         cap = cv2.VideoCapture(video_dir)
+                        if not cap.isOpened():
+                            print(f"Open video {video_dir} is error! ")
+                            continue
 
                         # 获取视频尺寸
                         width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))   # 浮点数转换为整数
