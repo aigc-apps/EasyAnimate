@@ -779,6 +779,8 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         max_sequence_length: int = 120,
         clip_image: Image = None,
         clip_apply_ratio: float = 0.50,
+        comfyui_progressbar: bool = False,
+        **kwargs,
     ) -> Union[EasyAnimatePipelineOutput, Tuple]:
         """
         Function invoked when calling the pipeline for generation.
@@ -1061,6 +1063,9 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         # 10. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         self._num_timesteps = len(timesteps)
+        if comfyui_progressbar:
+            from comfy.utils import ProgressBar
+            pbar = ProgressBar(num_inference_steps)
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
@@ -1130,6 +1135,8 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
                         step_idx = i // getattr(self.scheduler, "order", 1)
                         callback(step_idx, t, latents)
 
+                if comfyui_progressbar:
+                    pbar.update(1)
         gc.collect()
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
