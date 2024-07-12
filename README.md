@@ -9,6 +9,7 @@
 [![Project Page](https://img.shields.io/badge/Project-Website-green)](https://easyanimate.github.io/)
 [![Modelscope Studio](https://img.shields.io/badge/Modelscope-Studio-blue)](https://modelscope.cn/studios/PAI/EasyAnimate/summary)
 [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-yellow)](https://huggingface.co/spaces/alibaba-pai/EasyAnimate)
+[![Discord Page](https://img.shields.io/badge/Discord-Page-blue)](https://discord.gg/UzkpB4Bn)
 
 English | [简体中文](./README_zh-CN.md)
 
