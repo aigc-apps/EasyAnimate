@@ -31,6 +31,7 @@ EasyAnimate是一个基于transformer结构的pipeline，可用于生成AI图片
 我们会逐渐支持从不同平台快速启动，请参阅 [快速启动](#快速启动)。
 
 新特性：
+- 支持comfyui，详情查看[ComfyUI README](easyanimate/comfyui/README.md)。[ 2024.07.12 ]
 - 更新到v3版本，最大支持720p 144帧(960x960, 6s, 24fps)视频生成，支持文与图生视频模型。[ 2024.07.01 ]
 - ModelScope-Sora“数据导演”创意竞速——第三届Data-Juicer大模型数据挑战赛已经正式启动！其使用EasyAnimate作为基础模型，探究数据处理对于模型训练的作用。立即访问[竞赛官网](https://tianchi.aliyun.com/competition/entrance/532219)，了解赛事详情。[ 2024.06.17 ]
 - 更新到v2版本，最大支持144帧(768x768, 6s, 24fps)生成。[ 2024.05.26 ]
@@ -57,7 +58,11 @@ DSW 有免费 GPU 时间，用户可申请一次，申请后3个月内有效。
 
 [![DSW Notebook](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/dsw.png)](https://gallery.pai-ml.com/#/preview/deepLearning/cv/easyanimate)
 
-#### b. 通过docker
+#### b. 通过ComfyUI
+我们的ComfyUI界面如下，具体查看[ComfyUI README](easyanimate/comfyui/README.md)。
+![workflow graph](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/comfyui_i2v.jpg)
+
+#### c. 通过docker
 使用docker的情况下，请保证机器中已经正确安装显卡驱动与CUDA环境，然后以此执行以下命令：
 
 EasyAnimateV3:
