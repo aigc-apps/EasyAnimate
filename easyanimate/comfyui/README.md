@@ -21,7 +21,7 @@ TBD
 ```
 cd ComfyUI/custom_nodes/
 git clone https://github.com/aigc-apps/EasyAnimate.git
-cd ComfyUI-Stable-Video-Diffusion/
+cd EasyAnimate/
 python install.py
 ```
 
