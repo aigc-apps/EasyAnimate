@@ -633,6 +633,7 @@ class EasyAnimatePipeline(DiffusionPipeline):
         callback_steps: int = 1,
         clean_caption: bool = True,
         max_sequence_length: int = 120,
+        comfyui_progressbar: bool = False,
         **kwargs,
     ) -> Union[EasyAnimatePipelineOutput, Tuple]:
         """
@@ -783,6 +784,9 @@ class EasyAnimatePipeline(DiffusionPipeline):
         # 7. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
 
+        if comfyui_progressbar:
+            from comfy.utils import ProgressBar
+            pbar = ProgressBar(num_inference_steps)
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
                 latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
@@ -833,6 +837,9 @@ class EasyAnimatePipeline(DiffusionPipeline):
                     if callback is not None and i % callback_steps == 0:
                         step_idx = i // getattr(self.scheduler, "order", 1)
                         callback(step_idx, t, latents)
+
+                if comfyui_progressbar:
+                    pbar.update(1)
 
         # Post-processing
         video = self.decode_latents(latents)
