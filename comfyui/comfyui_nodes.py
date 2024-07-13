@@ -16,16 +16,16 @@ import comfy.model_management as mm
 import folder_paths
 from comfy.utils import ProgressBar, load_torch_file
 
-from ..models.autoencoder_magvit import AutoencoderKLMagvit
-from ..models.transformer3d import Transformer3DModel
-from ..pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaintPipeline
-from ..utils.utils import get_image_to_video_latent
-from ..data.bucket_sampler import ASPECT_RATIO_512, get_closest_ratio
+from ..easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
+from ..easyanimate.models.transformer3d import Transformer3DModel
+from ..easyanimate.pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaintPipeline
+from ..easyanimate.utils.utils import get_image_to_video_latent
+from ..easyanimate.data.bucket_sampler import ASPECT_RATIO_512, get_closest_ratio
 
 # Compatible with Alibaba EAS for quick launch
 eas_cache_dir       = '/stable-diffusion-cache/models'
 # The directory of the easyanimate
-script_directory    = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+script_directory    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def tensor2pil(image):
     return Image.fromarray(np.clip(255. * image.cpu().numpy(), 0, 255).astype(np.uint8))

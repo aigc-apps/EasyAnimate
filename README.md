@@ -31,7 +31,7 @@ EasyAnimate is a pipeline based on the transformer architecture that can be used
 We will support quick pull-ups from different platforms, refer to [Quick Start](#quick-start).
 
 What's New:
-- Support ComfyUI, please refer to [ComfyUI README](easyanimate/comfyui/README.md) for details. [ 2024.07.12 ]
+- Support ComfyUI, please refer to [ComfyUI README](comfyui/README.md) for details. [ 2024.07.12 ]
 - Updated to v3, supports up to 720p 144 frames (960x960, 6s, 24fps) video generation, and supports text and image generated video models. [ 2024.07.01 ]
 - ModelScope-Sora "Data Directors" creative sprint has been annouced using EasyAnimate as the training backbone to investigate the influence of data preprocessing. Please visit the competition's [official website](https://tianchi.aliyun.com/competition/entrance/532219) for more information. [ 2024.06.17 ]
 - Updated to v2, supports a maximum of 144 frames (768x768, 6s, 24fps) for generation. [ 2024.05.26 ]
@@ -62,7 +62,7 @@ Aliyun provide free GPU time in [Freetier](https://free.aliyun.com/?product=9602
 [![DSW Notebook](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/dsw.png)](https://gallery.pai-ml.com/#/preview/deepLearning/cv/easyanimate)
 
 #### b. From ComfyUI
-Our ComfyUI is as follows, please refer to [ComfyUI README](easyanimate/comfyui/README.md) for details.
+Our ComfyUI is as follows, please refer to [ComfyUI README](comfyui/README.md) for details.
 ![workflow graph](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/comfyui_i2v.jpg)
 
 #### c. From docker
