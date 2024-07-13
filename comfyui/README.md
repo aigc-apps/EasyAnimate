@@ -18,9 +18,17 @@ Easily use EasyAnimate inside ComfyUI!
 TBD
 
 ### Option 2: Install manually
+The EasyAnimate repository needs to be placed at `ComfyUI/custom_nodes/EasyAnimate/`.
+
 ```
 cd ComfyUI/custom_nodes/
+
+# Git clone the easyanimate itself
 git clone https://github.com/aigc-apps/EasyAnimate.git
+
+# Git clone the video outout node
+git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git
+
 cd EasyAnimate/
 python install.py
 ```
@@ -45,14 +53,14 @@ EasyAnimateV3:
 
 ## Example workflows
 
-### Image to video
-Our ui is shown as follow:
+### Image to video generation
+Our ui is shown as follow, this is the [download link](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/easyanimatev3_workflow_i2v.json) of the json:
 ![workflow graph](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/comfyui_i2v.jpg)
 
 You can run the demo using following photo:
 ![demo image](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/firework.png)
 
 
-### Image to video generation (high FPS w/ frame interpolation)
-Our ui is shown as follow:
+### Text to video generation
+Our ui is shown as follow, this is the [download link](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/easyanimatev3_workflow_t2v.json) of the json:
 ![workflow graph](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/comfyui_t2v.jpg)
