@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 
 import argparse
+import copy
 import gc
 import logging
 import math
@@ -25,7 +26,6 @@ import shutil
 import sys
 
 import accelerate
-import datasets
 import diffusers
 import numpy as np
 import torch
@@ -53,10 +53,16 @@ from tqdm.auto import tqdm
 from transformers import T5EncoderModel, T5Tokenizer
 from transformers.utils import ContextManagers
 
+import datasets
+
 current_file_path = os.path.abspath(__file__)
 project_roots = [os.path.dirname(current_file_path), os.path.dirname(os.path.dirname(current_file_path))]
 for project_root in project_roots:
     sys.path.insert(0, project_root) if project_root not in sys.path else None
+
+from transformers import (CLIPImageProcessor, CLIPVisionModelWithProjection,
+                          T5EncoderModel, T5Tokenizer)
+from transformers.utils import ContextManagers
 
 from easyanimate.data.bucket_sampler import (ASPECT_RATIO_512,
                                              ASPECT_RATIO_RANDOM_CROP_512,
@@ -82,10 +88,7 @@ from easyanimate.utils import gaussian_diffusion as gd
 from easyanimate.utils.lora_utils import (create_network, merge_lora,
                                           unmerge_lora)
 from easyanimate.utils.respace import SpacedDiffusion, space_timesteps
-from easyanimate.utils.utils import save_videos_grid
-from transformers import (CLIPImageProcessor, CLIPVisionModelWithProjection,
-                          T5EncoderModel, T5Tokenizer)
-from transformers.utils import ContextManagers
+from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 
 if is_wandb_available():
     import wandb
@@ -106,15 +109,34 @@ def log_validation(vae, text_encoder, tokenizer, transformer3d, network, config,
             transformer_additional_kwargs=OmegaConf.to_container(config['transformer_additional_kwargs'])
         ).to(weight_dtype)
         transformer3d_val.load_state_dict(accelerator.unwrap_model(transformer3d).state_dict())
+        
+        if args.train_mode != "normal":
+            clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+                args.pretrained_model_name_or_path, subfolder="image_encoder"
+            )
+            clip_image_processor = CLIPImageProcessor.from_pretrained(
+                args.pretrained_model_name_or_path, subfolder="image_encoder"
+            )
+            pipeline = EasyAnimateInpaintPipeline.from_pretrained(
+                args.pretrained_model_name_or_path, 
+                vae=accelerator.unwrap_model(vae).to(weight_dtype), 
+                text_encoder=accelerator.unwrap_model(text_encoder),
+                tokenizer=tokenizer,
+                transformer=transformer3d_val,
+                torch_dtype=weight_dtype,
+                clip_image_encoder=clip_image_encoder,
+                clip_image_processor=clip_image_processor,
+            )
+        else:
+            pipeline = EasyAnimatePipeline.from_pretrained(
+                args.pretrained_model_name_or_path, 
+                vae=accelerator.unwrap_model(vae).to(weight_dtype), 
+                text_encoder=accelerator.unwrap_model(text_encoder),
+                tokenizer=tokenizer,
+                transformer=transformer3d_val,
+                torch_dtype=weight_dtype
+            )
 
-        pipeline = EasyAnimatePipeline.from_pretrained(
-            args.pretrained_model_name_or_path, 
-            vae=accelerator.unwrap_model(vae).to(weight_dtype), 
-            text_encoder=accelerator.unwrap_model(text_encoder),
-            tokenizer=tokenizer,
-            transformer=transformer3d_val,
-            torch_dtype=weight_dtype
-        )
         pipeline = pipeline.to(accelerator.device)
         pipeline = merge_lora(
             pipeline, None, 1, accelerator.device, state_dict=accelerator.unwrap_model(network).state_dict(), transformer_only=True
@@ -130,31 +152,71 @@ def log_validation(vae, text_encoder, tokenizer, transformer3d, network, config,
 
         for i in range(len(args.validation_prompts)):
             with torch.no_grad():
-                with torch.autocast("cuda", dtype=weight_dtype):
-                    sample = pipeline(
-                        args.validation_prompts[i], 
-                        video_length = args.video_sample_n_frames,
-                        negative_prompt = "bad detailed",
-                        height      = args.video_sample_size,
-                        width       = args.video_sample_size,
-                        generator   = generator
-                    ).videos
-                    os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
-                    save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-{i}.gif"))
+                if args.train_mode != "normal":
+                    with torch.autocast("cuda", dtype=weight_dtype):
+                        video_length = int(args.video_sample_n_frames // vae.mini_batch_encoder * vae.mini_batch_encoder) if args.video_sample_n_frames != 1 else 1
+                        input_video, input_video_mask, clip_image = get_image_to_video_latent(None, None, video_length=video_length, sample_size=[args.video_sample_size, args.video_sample_size])
+                        sample = pipeline(
+                            args.validation_prompts[i], 
+                            video_length = args.video_sample_n_frames,
+                            negative_prompt = "bad detailed",
+                            height      = args.video_sample_size,
+                            width       = args.video_sample_size,
+                            guidance_scale = 7,
+                            generator   = generator, 
 
-                    sample = pipeline(
-                        args.validation_prompts[i], 
-                        video_length = 1,
-                        negative_prompt = "bad detailed",
-                        height      = args.video_sample_size,
-                        width       = args.video_sample_size,
-                        generator   = generator
-                    ).videos
-                    os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
-                    save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-image-{i}.gif"))
+                            video        = input_video,
+                            mask_video   = input_video_mask,
+                            clip_image   = clip_image, 
+                        ).videos
+                        os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
+                        save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-{i}.gif"))
+
+                        video_length = 1
+                        input_video, input_video_mask, clip_image = get_image_to_video_latent(None, None, video_length=video_length, sample_size=[args.video_sample_size, args.video_sample_size])
+                        sample = pipeline(
+                            args.validation_prompts[i], 
+                            video_length = 1,
+                            negative_prompt = "bad detailed",
+                            height      = args.video_sample_size,
+                            width       = args.video_sample_size,
+                            generator   = generator, 
+
+                            video        = input_video,
+                            mask_video   = input_video_mask,
+                            clip_image   = clip_image, 
+                        ).videos
+                        os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
+                        save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-image-{i}.gif"))
+                else:
+                    with torch.autocast("cuda", dtype=weight_dtype):
+                        sample = pipeline(
+                            args.validation_prompts[i], 
+                            video_length = args.video_sample_n_frames,
+                            negative_prompt = "bad detailed",
+                            height      = args.video_sample_size,
+                            width       = args.video_sample_size,
+                            generator   = generator
+                        ).videos
+                        os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
+                        save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-{i}.gif"))
+
+                        sample = pipeline(
+                            args.validation_prompts[i], 
+                            video_length = 1,
+                            negative_prompt = "bad detailed",
+                            height      = args.video_sample_size,
+                            width       = args.video_sample_size,
+                            generator   = generator
+                        ).videos
+                        os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
+                        save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-image-{i}.gif"))
 
         del pipeline
         del transformer3d_val
+        if args.train_mode != "normal":
+            del clip_image_encoder
+            del clip_image_processor
         gc.collect()
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
@@ -745,27 +807,22 @@ def main():
         # create custom saving & loading hooks so that `accelerator.save_state(...)` serializes in a nice format
         def save_model_hook(models, weights, output_dir):
             if accelerator.is_main_process:
-                models[0].save_pretrained(os.path.join(output_dir, "transformer"))
+                safetensor_save_path = os.path.join(output_dir, f"lora_diffusion_pytorch_model.safetensors")
+                save_model(safetensor_save_path, accelerator.unwrap_model(models[-1]))
                 if not args.use_deepspeed:
-                    weights.pop()
+                    for _ in range(len(weights)):
+                        weights.pop()
 
                 with open(os.path.join(output_dir, "sampler_pos_start.pkl"), 'wb') as file:
                     pickle.dump([batch_sampler.sampler._pos_start, first_epoch], file)
 
         def load_model_hook(models, input_dir):
-            for i in range(len(models)):
-                # pop models so that they are not loaded again
-                model = models.pop()
-
-                # load diffusers style into model
-                load_model = Transformer3DModel.from_pretrained(
-                    input_dir, subfolder="transformer",
-                    transformer_additional_kwargs=OmegaConf.to_container(config['transformer_additional_kwargs'])
-                )
-                model.register_to_config(**load_model.config)
-
-                model.load_state_dict(load_model.state_dict())
-                del load_model
+            from safetensors.torch import load_file, safe_open
+            state_dict = load_file(os.path.join(input_dir, "lora_diffusion_pytorch_model.safetensors"))
+            model = models[-1]
+            model.load_state_dict(state_dict)
+            for _ in range(len(models)):
+                models.pop()
 
             pkl_path = os.path.join(input_dir, "sampler_pos_start.pkl")
             if os.path.exists(pkl_path):
@@ -1365,11 +1422,11 @@ def main():
                                 for removing_checkpoint in removing_checkpoints:
                                     removing_checkpoint = os.path.join(args.output_dir, removing_checkpoint)
                                     shutil.rmtree(removing_checkpoint)
-
-                        safetensor_save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}.safetensors")
-                        accelerator_save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
-                        save_model(safetensor_save_path, accelerator.unwrap_model(network))
-                        if args.save_state:
+                        if not args.save_state:
+                            safetensor_save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}.safetensors")
+                            save_model(safetensor_save_path, accelerator.unwrap_model(network))
+                        else:
+                            accelerator_save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                             accelerator.save_state(accelerator_save_path)
                         logger.info(f"Saved state to {accelerator_save_path}")
 

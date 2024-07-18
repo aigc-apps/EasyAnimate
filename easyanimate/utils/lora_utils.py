@@ -238,9 +238,10 @@ class LoRANetwork(torch.nn.Module):
         self.text_encoder_loras = []
         skipped_te = []
         for i, text_encoder in enumerate(text_encoders):
-            text_encoder_loras, skipped = create_modules(False, text_encoder, LoRANetwork.TEXT_ENCODER_TARGET_REPLACE_MODULE)
-            self.text_encoder_loras.extend(text_encoder_loras)
-            skipped_te += skipped
+            if text_encoder is not None:
+                text_encoder_loras, skipped = create_modules(False, text_encoder, LoRANetwork.TEXT_ENCODER_TARGET_REPLACE_MODULE)
+                self.text_encoder_loras.extend(text_encoder_loras)
+                skipped_te += skipped
         print(f"create LoRA for Text Encoder: {len(self.text_encoder_loras)} modules.")
 
         self.unet_loras, skipped_un = create_modules(True, unet, LoRANetwork.TRANSFORMER_TARGET_REPLACE_MODULE)

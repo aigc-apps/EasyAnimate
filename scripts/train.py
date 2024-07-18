@@ -20,6 +20,7 @@ import gc
 import logging
 import math
 import os
+import pickle
 import shutil
 import sys
 
@@ -40,19 +41,18 @@ from diffusers.utils import check_min_version, deprecate, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import is_compiled_module
 from einops import rearrange
-from PIL import Image
 from huggingface_hub import create_repo, upload_folder
 from omegaconf import OmegaConf
 from packaging import version
+from PIL import Image
 from torch.utils.data import RandomSampler
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from tqdm.auto import tqdm
-from transformers import T5EncoderModel, T5Tokenizer
-from transformers import CLIPVisionModelWithProjection,  CLIPImageProcessor
+from transformers import (CLIPImageProcessor, CLIPVisionModelWithProjection,
+                          T5EncoderModel, T5Tokenizer)
 from transformers.utils import ContextManagers
 
-import pickle
 import datasets
 
 current_file_path = os.path.abspath(__file__)
@@ -67,17 +67,20 @@ from easyanimate.data.bucket_sampler import (ASPECT_RATIO_512,
                                              AspectRatioBatchImageVideoSampler,
                                              RandomSampler, get_closest_ratio)
 from easyanimate.data.dataset_image import CC15M
-from easyanimate.data.dataset_image_video import (ImageVideoDataset, get_random_mask, 
-                                                  ImageVideoSampler)
+from easyanimate.data.dataset_image_video import (ImageVideoDataset,
+                                                  ImageVideoSampler,
+                                                  get_random_mask)
 from easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
 from easyanimate.models.transformer2d import Transformer2DModel
 from easyanimate.models.transformer3d import Transformer3DModel
 from easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
+from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
+    EasyAnimateInpaintPipeline
 from easyanimate.pipeline.pipeline_pixart_magvit import \
     PixArtAlphaMagvitPipeline
 from easyanimate.utils import gaussian_diffusion as gd
 from easyanimate.utils.respace import SpacedDiffusion, space_timesteps
-from easyanimate.utils.utils import save_videos_grid
+from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 
 if is_wandb_available():
     import wandb
@@ -98,14 +101,32 @@ def log_validation(vae, text_encoder, tokenizer, transformer3d, config, args, ac
         ).to(weight_dtype)
         transformer3d_val.load_state_dict(accelerator.unwrap_model(transformer3d).state_dict())
 
-        pipeline = EasyAnimatePipeline.from_pretrained(
-            args.pretrained_model_name_or_path,
-            vae=accelerator.unwrap_model(vae).to(weight_dtype),
-            text_encoder=text_encoder,
-            tokenizer=tokenizer,
-            transformer=transformer3d_val,
-            torch_dtype=weight_dtype
-        )
+        if args.train_mode != "normal":
+            clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+                args.pretrained_model_name_or_path, subfolder="image_encoder"
+            )
+            clip_image_processor = CLIPImageProcessor.from_pretrained(
+                args.pretrained_model_name_or_path, subfolder="image_encoder"
+            )
+            pipeline = EasyAnimateInpaintPipeline.from_pretrained(
+                args.pretrained_model_name_or_path, 
+                vae=accelerator.unwrap_model(vae).to(weight_dtype), 
+                text_encoder=accelerator.unwrap_model(text_encoder),
+                tokenizer=tokenizer,
+                transformer=transformer3d_val,
+                torch_dtype=weight_dtype,
+                clip_image_encoder=clip_image_encoder,
+                clip_image_processor=clip_image_processor,
+            )
+        else:
+            pipeline = EasyAnimatePipeline.from_pretrained(
+                args.pretrained_model_name_or_path, 
+                vae=accelerator.unwrap_model(vae).to(weight_dtype), 
+                text_encoder=accelerator.unwrap_model(text_encoder),
+                tokenizer=tokenizer,
+                transformer=transformer3d_val,
+                torch_dtype=weight_dtype
+            )
         pipeline = pipeline.to(accelerator.device)
 
         if args.enable_xformers_memory_efficient_attention:
@@ -118,30 +139,72 @@ def log_validation(vae, text_encoder, tokenizer, transformer3d, config, args, ac
 
         images = []
         for i in range(len(args.validation_prompts)):
-            sample = pipeline(
-                args.validation_prompts[i], 
-                video_length = args.video_sample_n_frames,
-                negative_prompt = "bad detailed",
-                height      = args.video_sample_size,
-                width       = args.video_sample_size,
-                generator   = generator
-            ).videos
-            os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
-            save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-{i}.gif"))
+            with torch.no_grad():
+                if args.train_mode != "normal":
+                    with torch.autocast("cuda", dtype=weight_dtype):
+                        video_length = int(args.video_sample_n_frames // vae.mini_batch_encoder * vae.mini_batch_encoder) if args.video_sample_n_frames != 1 else 1
+                        input_video, input_video_mask, clip_image = get_image_to_video_latent(None, None, video_length=video_length, sample_size=[args.video_sample_size, args.video_sample_size])
+                        sample = pipeline(
+                            args.validation_prompts[i], 
+                            video_length = args.video_sample_n_frames,
+                            negative_prompt = "bad detailed",
+                            height      = args.video_sample_size,
+                            width       = args.video_sample_size,
+                            guidance_scale = 7,
+                            generator   = generator, 
 
-            sample = pipeline(
-                args.validation_prompts[i], 
-                video_length = 1,
-                negative_prompt = "bad detailed",
-                height      = args.video_sample_size,
-                width       = args.video_sample_size,
-                generator   = generator
-            ).videos
-            os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
-            save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-image-{i}.gif"))
+                            video        = input_video,
+                            mask_video   = input_video_mask,
+                            clip_image   = clip_image, 
+                        ).videos
+                        os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
+                        save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-{i}.gif"))
+
+                        video_length = 1
+                        input_video, input_video_mask, clip_image = get_image_to_video_latent(None, None, video_length=video_length, sample_size=[args.video_sample_size, args.video_sample_size])
+                        sample = pipeline(
+                            args.validation_prompts[i], 
+                            video_length = 1,
+                            negative_prompt = "bad detailed",
+                            height      = args.video_sample_size,
+                            width       = args.video_sample_size,
+                            generator   = generator, 
+
+                            video        = input_video,
+                            mask_video   = input_video_mask,
+                            clip_image   = clip_image, 
+                        ).videos
+                        os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
+                        save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-image-{i}.gif"))
+                else:
+                    with torch.autocast("cuda", dtype=weight_dtype):
+                        sample = pipeline(
+                            args.validation_prompts[i], 
+                            video_length = args.video_sample_n_frames,
+                            negative_prompt = "bad detailed",
+                            height      = args.video_sample_size,
+                            width       = args.video_sample_size,
+                            generator   = generator
+                        ).videos
+                        os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
+                        save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-{i}.gif"))
+
+                        sample = pipeline(
+                            args.validation_prompts[i], 
+                            video_length = 1,
+                            negative_prompt = "bad detailed",
+                            height      = args.video_sample_size,
+                            width       = args.video_sample_size,
+                            generator   = generator
+                        ).videos
+                        os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
+                        save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-image-{i}.gif"))
 
         del pipeline
         del transformer3d_val
+        if args.train_mode != "normal":
+            del clip_image_encoder
+            del clip_image_processor
         gc.collect()
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
