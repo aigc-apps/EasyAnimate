@@ -4,6 +4,7 @@ import os
 
 import numpy as np
 import torch
+import json
 from diffusers import (AutoencoderKL, DDIMScheduler,
                        DPMSolverMultistepScheduler,
                        EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
@@ -13,7 +14,9 @@ from PIL import Image
 from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 
 from easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
-from easyanimate.models.transformer3d import Transformer3DModel
+from easyanimate.models.transformer3d import Transformer3DModel, HunyuanTransformer3DModel
+from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import EasyAnimatePipeline_Multi_Text_Encoder
+from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import EasyAnimatePipeline_Multi_Text_Encoder_Inpaint
 from easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
 from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
     EasyAnimateInpaintPipeline
@@ -28,7 +31,7 @@ config_path         = "config/easyanimate_video_slicevae_motion_module_v3.yaml"
 model_name          = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512"
 
 # Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" and "DDIM"
-sampler_name        = "DPM++"
+sampler_name        = "Euler"
 
 # Load pretrained model if need
 transformer_path    = None
@@ -56,7 +59,12 @@ save_path           = "samples/easyanimate-videos"
 config = OmegaConf.load(config_path)
 
 # Get Transformer
-transformer = Transformer3DModel.from_pretrained_2d(
+if config['enable_multi_text_encoder']:
+    Choosen_Transformer3DModel = HunyuanTransformer3DModel
+else:
+    Choosen_Transformer3DModel = Transformer3DModel
+
+transformer = Choosen_Transformer3DModel.from_pretrained_2d(
     model_name, 
     subfolder="transformer",
     transformer_additional_kwargs=OmegaConf.to_container(config['transformer_additional_kwargs'])
@@ -108,7 +116,7 @@ if vae_path is not None:
     m, u = vae.load_state_dict(state_dict, strict=False)
     print(f"missing keys: {len(m)}, unexpected keys: {len(u)}")
 
-if transformer.config.in_channels == 12:
+if transformer.config.in_channels != vae.config.latent_channels:
     clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
         model_name, subfolder="image_encoder"
     ).to("cuda", weight_dtype)
@@ -127,26 +135,50 @@ Choosen_Scheduler = scheduler_dict = {
     "PNDM": PNDMScheduler,
     "DDIM": DDIMScheduler,
 }[sampler_name]
-scheduler = Choosen_Scheduler(**OmegaConf.to_container(config['noise_scheduler_kwargs']))
+scheduler = Choosen_Scheduler.from_pretrained(
+    model_name, 
+    subfolder="scheduler"
+)
+# scheduler = Choosen_Scheduler(**OmegaConf.to_container(config['noise_scheduler_kwargs']))
 
-if transformer.config.in_channels == 12:
-    pipeline = EasyAnimateInpaintPipeline.from_pretrained(
-        model_name,
-        vae=vae,
-        transformer=transformer,
-        scheduler=scheduler,
-        torch_dtype=weight_dtype,
-        clip_image_encoder=clip_image_encoder,
-        clip_image_processor=clip_image_processor,
-    )
+if config['enable_multi_text_encoder']:
+    if transformer.config.in_channels != vae.config.latent_channels:
+        pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
+            model_name,
+            vae=vae,
+            transformer=transformer,
+            scheduler=scheduler,
+            torch_dtype=weight_dtype,
+            clip_image_encoder=clip_image_encoder,
+            clip_image_processor=clip_image_processor,
+        )
+    else:
+        pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
+            model_name,
+            vae=vae,
+            transformer=transformer,
+            scheduler=scheduler,
+            torch_dtype=weight_dtype
+        )
 else:
-    pipeline = EasyAnimatePipeline.from_pretrained(
-        model_name,
-        vae=vae,
-        transformer=transformer,
-        scheduler=scheduler,
-        torch_dtype=weight_dtype
-    )
+    if transformer.config.in_channels != vae.config.latent_channels:
+        pipeline = EasyAnimateInpaintPipeline.from_pretrained(
+            model_name,
+            vae=vae,
+            transformer=transformer,
+            scheduler=scheduler,
+            torch_dtype=weight_dtype,
+            clip_image_encoder=clip_image_encoder,
+            clip_image_processor=clip_image_processor,
+        )
+    else:
+        pipeline = EasyAnimatePipeline.from_pretrained(
+            model_name,
+            vae=vae,
+            transformer=transformer,
+            scheduler=scheduler,
+            torch_dtype=weight_dtype
+        )
 if low_gpu_memory_mode:
     pipeline.enable_sequential_cpu_offload()
 else:
@@ -158,7 +190,7 @@ if lora_path is not None:
     pipeline = merge_lora(pipeline, lora_path, lora_weight)
 
 with torch.no_grad():
-    if transformer.config.in_channels == 12:
+    if transformer.config.in_channels != vae.config.latent_channels:
         video_length = int(video_length // vae.mini_batch_encoder * vae.mini_batch_encoder) if video_length != 1 else 1
         input_video, input_video_mask, clip_image = get_image_to_video_latent(None, None, video_length=video_length, sample_size=sample_size)
 

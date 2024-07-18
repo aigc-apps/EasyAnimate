@@ -26,9 +26,9 @@ def get_random_mask(shape):
     f, c, h, w = shape
     
     if f != 1:
-        mask_index = np.random.randint(1, 4)
+        mask_index = np.random.randint(0, 5)
     else:
-        mask_index = np.random.randint(1, 2)
+        mask_index = np.random.randint(0, 2)
     mask = torch.zeros((f, 1, h, w), dtype=torch.uint8)
 
     if mask_index == 0:
@@ -290,6 +290,9 @@ class ImageVideoDataset(Dataset):
             clip_pixel_values = sample["pixel_values"][0].permute(1, 2, 0).contiguous()
             clip_pixel_values = (clip_pixel_values * 0.5 + 0.5) * 255
             sample["clip_pixel_values"] = clip_pixel_values
+
+            ref_pixel_values = torch.tile(sample["pixel_values"][0].unsqueeze(0), [sample["pixel_values"].size()[0], 1, 1, 1])
+            sample["ref_pixel_values"] = ref_pixel_values
 
         return sample
 

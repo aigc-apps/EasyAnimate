@@ -1,0 +1,17 @@
+transformer_additional_kwargs:
+  basic_block_type:                           "basic"
+  after_norm:                                 false
+  time_position_encoding:                     true
+
+noise_scheduler_kwargs:
+  beta_start:    0.00085
+  beta_end:      0.03
+  beta_schedule: "scaled_linear"
+  steps_offset:  1
+  prediction_type: "v_prediction"
+  clip_sample: false
+
+vae_kwargs:
+  enable_magvit: true
+
+enable_multi_text_encoder: true

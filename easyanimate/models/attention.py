@@ -29,6 +29,8 @@ else:
     from diffusers.models.attention_processor import Attention, AttnProcessor2_0
 
 from diffusers.models.attention import AdaLayerNorm, FeedForward
+from diffusers.models.attention_processor import (Attention, AttnProcessor2_0,
+                                                  HunyuanAttnProcessor2_0)
 from diffusers.models.embeddings import SinusoidalPositionalEmbedding
 from diffusers.models.normalization import AdaLayerNorm, AdaLayerNormZero
 from diffusers.utils import USE_PEFT_BACKEND
@@ -94,6 +96,34 @@ class GatedSelfAttentionDense(nn.Module):
         x = x + self.alpha_dense.tanh() * self.ff(self.norm2(x))
 
         return x
+
+
+class AdaLayerNormShift(nn.Module):
+    r"""
+    Norm layer modified to incorporate timestep embeddings.
+
+    Parameters:
+        embedding_dim (`int`): The size of each embedding vector.
+        num_embeddings (`int`): The size of the embeddings dictionary.
+    """
+
+    def __init__(self, embedding_dim: int, elementwise_affine=True, eps=1e-6):
+        super().__init__()
+        self.silu = nn.SiLU()
+        self.linear = nn.Linear(embedding_dim, embedding_dim)
+        self.norm = FP32LayerNorm(embedding_dim, elementwise_affine=elementwise_affine, eps=eps)
+
+    def forward(self, x: torch.Tensor, emb: torch.Tensor) -> torch.Tensor:
+        shift = self.linear(self.silu(emb.to(torch.float32)).to(emb.dtype))
+        x = self.norm(x) + shift.unsqueeze(dim=1)
+        return x
+
+
+def zero_module(module):
+    # Zero out the parameters of a module and return it.
+    for p in module.parameters():
+        p.detach().zero_()
+    return module
 
 
 class KVCompressionCrossAttention(nn.Module):
@@ -1352,5 +1382,465 @@ class KVCompressionTransformerBlock(nn.Module):
         hidden_states = ff_output + hidden_states
         if hidden_states.ndim == 4:
             hidden_states = hidden_states.squeeze(1)
+
+        return hidden_states
+
+class GEGLU(nn.Module):
+    def __init__(self, dim_in, dim_out, norm_elementwise_affine):
+        super().__init__()
+        self.norm = FP32LayerNorm(dim_in, dim_in, norm_elementwise_affine)
+        self.proj = nn.Linear(dim_in, dim_out * 2)
+
+    def forward(self, x):
+        x, gate = self.proj(self.norm(x)).chunk(2, dim=-1)
+        return x * F.gelu(gate)
+
+@maybe_allow_in_graph
+class HunyuanDiTBlock(nn.Module):
+    r"""
+    Transformer block used in Hunyuan-DiT model (https://github.com/Tencent/HunyuanDiT). Allow skip connection and
+    QKNorm
+
+    Parameters:
+        dim (`int`):
+            The number of channels in the input and output.
+        num_attention_heads (`int`):
+            The number of headsto use for multi-head attention.
+        cross_attention_dim (`int`,*optional*):
+            The size of the encoder_hidden_states vector for cross attention.
+        dropout(`float`, *optional*, defaults to 0.0):
+            The dropout probability to use.
+        activation_fn (`str`,*optional*, defaults to `"geglu"`):
+            Activation function to be used in feed-forward. .
+        norm_elementwise_affine (`bool`, *optional*, defaults to `True`):
+            Whether to use learnable elementwise affine parameters for normalization.
+        norm_eps (`float`, *optional*, defaults to 1e-6):
+            A small constant added to the denominator in normalization layers to prevent division by zero.
+        final_dropout (`bool` *optional*, defaults to False):
+            Whether to apply a final dropout after the last feed-forward layer.
+        ff_inner_dim (`int`, *optional*):
+            The size of the hidden layer in the feed-forward block. Defaults to `None`.
+        ff_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the feed-forward block.
+        skip (`bool`, *optional*, defaults to `False`):
+            Whether to use skip connection. Defaults to `False` for down-blocks and mid-blocks.
+        qk_norm (`bool`, *optional*, defaults to `True`):
+            Whether to use normalization in QK calculation. Defaults to `True`.
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        num_attention_heads: int,
+        cross_attention_dim: int = 1024,
+        dropout=0.0,
+        activation_fn: str = "geglu",
+        norm_elementwise_affine: bool = True,
+        norm_eps: float = 1e-6,
+        final_dropout: bool = False,
+        ff_inner_dim: Optional[int] = None,
+        ff_bias: bool = True,
+        skip: bool = False,
+        qk_norm: bool = True,
+        time_position_encoding: bool = False,
+        after_norm: bool = False,
+        is_local_attention: bool = False,
+        local_attention_frames: int = 2,
+        enable_inpaint: bool = False,
+    ):
+        super().__init__()
+
+        # Define 3 blocks. Each block has its own normalization layer.
+        # NOTE: when new version comes, check norm2 and norm 3
+        # 1. Self-Attn
+        self.norm1 = AdaLayerNormShift(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+        self.t_embed = PositionalEncoding(dim, dropout=0., max_len=512) if time_position_encoding else nn.Identity()
+
+        self.attn1 = Attention(
+            query_dim=dim,
+            cross_attention_dim=None,
+            dim_head=dim // num_attention_heads,
+            heads=num_attention_heads,
+            qk_norm="layer_norm" if qk_norm else None,
+            eps=1e-6,
+            bias=True,
+            processor=HunyuanAttnProcessor2_0(),
+        )
+
+        # 2. Cross-Attn
+        self.norm2 = FP32LayerNorm(dim, norm_eps, norm_elementwise_affine)
+
+        self.is_local_attention = is_local_attention
+        self.local_attention_frames = local_attention_frames
+        if self.is_local_attention:
+            from mamba_ssm import Mamba2
+            self.mamba_norm_in = FP32LayerNorm(dim, norm_eps, norm_elementwise_affine)
+            self.in_linear = nn.Linear(dim, 1536)
+            self.mamba_norm_1 = FP32LayerNorm(1536, norm_eps, norm_elementwise_affine)
+            self.mamba_norm_2 = FP32LayerNorm(1536, norm_eps, norm_elementwise_affine)
+
+            self.mamba_block_1 = Mamba2(
+                d_model=1536, 
+                d_state=64, 
+                d_conv=4, 
+                expand=2, 
+            )
+            self.mamba_block_2 = Mamba2(
+                d_model=1536, 
+                d_state=64, 
+                d_conv=4, 
+                expand=2, 
+            )
+            self.mamba_norm_after_mamba_block = FP32LayerNorm(1536, norm_eps, norm_elementwise_affine)
+
+            self.out_linear = nn.Linear(1536, dim)
+            self.out_linear = zero_module(self.out_linear)
+            self.mamba_norm_out = FP32LayerNorm(dim, norm_eps, norm_elementwise_affine)
+
+        self.attn2 = Attention(
+            query_dim=dim,
+            cross_attention_dim=cross_attention_dim,
+            dim_head=dim // num_attention_heads,
+            heads=num_attention_heads,
+            qk_norm="layer_norm" if qk_norm else None,
+            eps=1e-6,
+            bias=True,
+            processor=HunyuanAttnProcessor2_0(),
+        )
+
+        if enable_inpaint:
+            self.norm_clip = FP32LayerNorm(dim, norm_eps, norm_elementwise_affine)
+            self.attn_clip = Attention(
+                query_dim=dim,
+                cross_attention_dim=cross_attention_dim,
+                dim_head=dim // num_attention_heads,
+                heads=num_attention_heads,
+                qk_norm="layer_norm" if qk_norm else None,
+                eps=1e-6,
+                bias=True,
+                processor=HunyuanAttnProcessor2_0(),
+            )
+            self.gate_clip = GEGLU(dim, dim, norm_elementwise_affine)
+            self.norm_clip_out = FP32LayerNorm(dim, norm_eps, norm_elementwise_affine)
+        else:
+            self.attn_clip = None
+            self.norm_clip = None
+            self.gate_clip = None
+            self.norm_clip_out = None
+            
+        # 3. Feed-forward
+        self.norm3 = FP32LayerNorm(dim, norm_eps, norm_elementwise_affine)
+
+        self.ff = FeedForward(
+            dim,
+            dropout=dropout,  ### 0.0
+            activation_fn=activation_fn,  ### approx GeLU
+            final_dropout=final_dropout,  ### 0.0
+            inner_dim=ff_inner_dim,  ### int(dim * mlp_ratio)
+            bias=ff_bias,
+        )
+
+        # 4. Skip Connection
+        if skip:
+            self.skip_norm = FP32LayerNorm(2 * dim, norm_eps, elementwise_affine=True)
+            self.skip_linear = nn.Linear(2 * dim, dim)
+        else:
+            self.skip_linear = None
+
+        if after_norm:
+            print("add after norm")
+            self.norm4 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+        else:
+            self.norm4 = None
+
+        # let chunk size default to None
+        self._chunk_size = None
+        self._chunk_dim = 0
+        self.is_local_attention = is_local_attention
+        self.local_attention_frames = local_attention_frames
+
+    def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int = 0):
+        # Sets chunk feed-forward
+        self._chunk_size = chunk_size
+        self._chunk_dim = dim
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        temb: Optional[torch.Tensor] = None,
+        image_rotary_emb=None,
+        skip=None,
+        num_frames: int = 1,
+        height: int = 32,
+        width: int = 32,
+        clip_encoder_hidden_states: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        # Notice that normalization is always applied before the real computation in the following blocks.
+        # 0. Long Skip Connection
+        if self.skip_linear is not None:
+            cat = torch.cat([hidden_states, skip], dim=-1)
+            cat = self.skip_norm(cat)
+            hidden_states = self.skip_linear(cat)
+
+        if num_frames != 1:
+            image_rotary_emb = (torch.cat([image_rotary_emb[0] for i in range(num_frames)], dim=0), torch.cat([image_rotary_emb[1] for i in range(num_frames)], dim=0))
+
+            # add time embedding
+            hidden_states = rearrange(hidden_states, "b (f d) c -> (b d) f c", f=num_frames)
+            if self.t_embed is not None:
+                hidden_states = self.t_embed(hidden_states)
+            hidden_states = rearrange(hidden_states, "(b d) f c -> b (f d) c", d=height * width)
+
+        # 1. Self-Attention
+        norm_hidden_states = self.norm1(hidden_states, temb)  ### checked: self.norm1 is correct
+        if num_frames > 2 and self.is_local_attention:
+            attn1_image_rotary_emb = (image_rotary_emb[0][:int(height * width * 2)], image_rotary_emb[1][:int(height * width * 2)])
+
+            norm_hidden_states_1 = rearrange(norm_hidden_states, "b (f d) c -> b f d c", d=height * width)
+            norm_hidden_states_1 = rearrange(norm_hidden_states_1, "b (f p) d c -> (b f) (p d) c", p = 2)
+            
+            attn_output = self.attn1(
+                norm_hidden_states_1,
+                image_rotary_emb=attn1_image_rotary_emb,
+            )
+            attn_output = rearrange(attn_output, "(b f) (p d) c -> b (f p) d c", p = 2, f = num_frames // 2)
+
+            norm_hidden_states_2 = rearrange(norm_hidden_states, "b (f d) c -> b f d c", d = height * width)[:, 1:-1]
+            local_attention_frames_num = norm_hidden_states_2.size()[1] // 2
+            norm_hidden_states_2 = rearrange(norm_hidden_states_2, "b (f p) d c -> (b f) (p d) c", p = 2)
+            attn_output_2 = self.attn1(
+                norm_hidden_states_2,
+                image_rotary_emb=attn1_image_rotary_emb,
+            )
+            attn_output_2 = rearrange(attn_output_2, "(b f) (p d) c -> b (f p) d c", p = 2, f = local_attention_frames_num)
+            attn_output[:, 1:-1] = (attn_output[:, 1:-1] + attn_output_2) / 2
+
+            attn_output = rearrange(attn_output, "b f d c -> b (f d) c")
+        else:
+            attn_output = self.attn1(
+                norm_hidden_states,
+                image_rotary_emb=image_rotary_emb,
+            )
+        hidden_states = hidden_states + attn_output
+
+        if num_frames > 2 and self.is_local_attention:
+            hidden_states_in = self.in_linear(self.mamba_norm_in(hidden_states))
+            hidden_states = hidden_states + self.mamba_norm_out(
+                self.out_linear(
+                    self.mamba_norm_after_mamba_block(
+                        self.mamba_block_1(
+                            self.mamba_norm_1(hidden_states_in)
+                        ) + 
+                        self.mamba_block_2(
+                            self.mamba_norm_2(hidden_states_in.flip(1))
+                        ).flip(1)
+                    )
+                )
+            )
+        
+        # 2. Cross-Attention
+        hidden_states = hidden_states + self.attn2(
+            self.norm2(hidden_states),
+            encoder_hidden_states=encoder_hidden_states,
+            image_rotary_emb=image_rotary_emb,
+        )
+
+        if self.attn_clip is not None:
+            hidden_states = hidden_states + self.norm_clip_out(
+                self.gate_clip(
+                    self.attn_clip(
+                        self.norm_clip(hidden_states),
+                        encoder_hidden_states=clip_encoder_hidden_states,
+                        image_rotary_emb=image_rotary_emb,
+                    )
+                )
+            )
+
+        # FFN Layer ### TODO: switch norm2 and norm3 in the state dict
+        mlp_inputs = self.norm3(hidden_states)
+        if self.norm4 is not None:
+            hidden_states = hidden_states + self.norm4(self.ff(mlp_inputs))
+        else:
+            hidden_states = hidden_states + self.ff(mlp_inputs)
+
+        return hidden_states
+    
+
+@maybe_allow_in_graph
+class HunyuanTemporalTransformerBlock(nn.Module):
+    r"""
+    Transformer block used in Hunyuan-DiT model (https://github.com/Tencent/HunyuanDiT). Allow skip connection and
+    QKNorm
+
+    Parameters:
+        dim (`int`):
+            The number of channels in the input and output.
+        num_attention_heads (`int`):
+            The number of headsto use for multi-head attention.
+        cross_attention_dim (`int`,*optional*):
+            The size of the encoder_hidden_states vector for cross attention.
+        dropout(`float`, *optional*, defaults to 0.0):
+            The dropout probability to use.
+        activation_fn (`str`,*optional*, defaults to `"geglu"`):
+            Activation function to be used in feed-forward. .
+        norm_elementwise_affine (`bool`, *optional*, defaults to `True`):
+            Whether to use learnable elementwise affine parameters for normalization.
+        norm_eps (`float`, *optional*, defaults to 1e-6):
+            A small constant added to the denominator in normalization layers to prevent division by zero.
+        final_dropout (`bool` *optional*, defaults to False):
+            Whether to apply a final dropout after the last feed-forward layer.
+        ff_inner_dim (`int`, *optional*):
+            The size of the hidden layer in the feed-forward block. Defaults to `None`.
+        ff_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the feed-forward block.
+        skip (`bool`, *optional*, defaults to `False`):
+            Whether to use skip connection. Defaults to `False` for down-blocks and mid-blocks.
+        qk_norm (`bool`, *optional*, defaults to `True`):
+            Whether to use normalization in QK calculation. Defaults to `True`.
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        num_attention_heads: int,
+        cross_attention_dim: int = 1024,
+        dropout=0.0,
+        activation_fn: str = "geglu",
+        norm_elementwise_affine: bool = True,
+        norm_eps: float = 1e-6,
+        final_dropout: bool = False,
+        ff_inner_dim: Optional[int] = None,
+        ff_bias: bool = True,
+        skip: bool = False,
+        qk_norm: bool = True,
+        after_norm: bool = False,
+        # motion module kwargs
+        motion_module_type = "VanillaGrid",
+        motion_module_kwargs = None,
+        use_reentrant: bool = False,
+    ):
+        super().__init__()
+
+        # Define 3 blocks. Each block has its own normalization layer.
+        # NOTE: when new version comes, check norm2 and norm 3
+        # 1. Self-Attn
+        self.norm1 = AdaLayerNormShift(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+
+        self.attn1 = Attention(
+            query_dim=dim,
+            cross_attention_dim=None,
+            dim_head=dim // num_attention_heads,
+            heads=num_attention_heads,
+            qk_norm="layer_norm" if qk_norm else None,
+            eps=1e-6,
+            bias=True,
+            processor=HunyuanAttnProcessor2_0(),
+        )
+
+        self.attn_temporal = get_motion_module(
+            in_channels = dim,
+            motion_module_type = motion_module_type,
+            motion_module_kwargs = motion_module_kwargs,
+        )
+
+        # 2. Cross-Attn
+        self.norm2 = FP32LayerNorm(dim, norm_eps, norm_elementwise_affine)
+
+        self.attn2 = Attention(
+            query_dim=dim,
+            cross_attention_dim=cross_attention_dim,
+            dim_head=dim // num_attention_heads,
+            heads=num_attention_heads,
+            qk_norm="layer_norm" if qk_norm else None,
+            eps=1e-6,
+            bias=True,
+            processor=HunyuanAttnProcessor2_0(),
+        )
+        # 3. Feed-forward
+        self.norm3 = FP32LayerNorm(dim, norm_eps, norm_elementwise_affine)
+
+        self.ff = FeedForward(
+            dim,
+            dropout=dropout,  ### 0.0
+            activation_fn=activation_fn,  ### approx GeLU
+            final_dropout=final_dropout,  ### 0.0
+            inner_dim=ff_inner_dim,  ### int(dim * mlp_ratio)
+            bias=ff_bias,
+        )
+
+        # 4. Skip Connection
+        if skip:
+            self.skip_norm = FP32LayerNorm(2 * dim, norm_eps, elementwise_affine=True)
+            self.skip_linear = nn.Linear(2 * dim, dim)
+        else:
+            self.skip_linear = None
+
+        if after_norm:
+            print("add after norm")
+            self.norm4 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
+        else:
+            self.norm4 = None
+
+        # let chunk size default to None
+        self._chunk_size = None
+        self._chunk_dim = 0
+
+    def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int = 0):
+        # Sets chunk feed-forward
+        self._chunk_size = chunk_size
+        self._chunk_dim = dim
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        temb: Optional[torch.Tensor] = None,
+        image_rotary_emb=None,
+        skip=None,
+        num_frames: int = 16,
+        height: int = 32,
+        width: int = 32,
+        use_reentrant: bool = False,
+    ) -> torch.Tensor:
+        # Notice that normalization is always applied before the real computation in the following blocks.
+        # 0. Long Skip Connection
+        if self.skip_linear is not None:
+            cat = torch.cat([hidden_states, skip], dim=-1)
+            cat = self.skip_norm(cat)
+            hidden_states = self.skip_linear(cat)
+
+        # 1. Self-Attention
+        norm_hidden_states = self.norm1(hidden_states, temb)  ### checked: self.norm1 is correct
+        norm_hidden_states = rearrange(norm_hidden_states, "b (f d) c -> (b f) d c", f=num_frames)
+        attn_output = self.attn1(
+            norm_hidden_states,
+            image_rotary_emb=image_rotary_emb,
+        )
+        attn_output = rearrange(attn_output, "(b f) d c -> b (f d) c", f=num_frames)
+        hidden_states = hidden_states + attn_output
+
+        # 1.5. Temp-Attention
+        if self.attn_temporal is not None:
+            attn_output = rearrange(hidden_states, "b (f h w) c -> b c f h w", f=num_frames, h=height, w=width)
+            attn_output = self.attn_temporal(attn_output)
+            hidden_states = rearrange(attn_output, "b c f h w -> b (f h w) c")
+
+        if num_frames != 1:
+            image_rotary_emb = (torch.cat([image_rotary_emb[0] for i in range(num_frames)], dim=0), torch.cat([image_rotary_emb[1] for i in range(num_frames)], dim=0))
+
+        # 2. Cross-Attention
+        hidden_states = hidden_states + self.attn2(
+            self.norm2(hidden_states),
+            encoder_hidden_states=encoder_hidden_states,
+            image_rotary_emb=image_rotary_emb,
+        )
+
+        # FFN Layer ### TODO: switch norm2 and norm3 in the state dict
+        mlp_inputs = self.norm3(hidden_states)
+        if self.norm4 is not None:
+            hidden_states = hidden_states + self.norm4(self.ff(mlp_inputs))
+        else:
+            hidden_states = hidden_states + self.ff(mlp_inputs)
 
         return hidden_states

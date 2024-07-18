@@ -12,7 +12,10 @@ from transformers import CLIPVisionModelWithProjection,  CLIPImageProcessor
 
 from easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
 from easyanimate.models.transformer3d import Transformer3DModel
-from easyanimate.pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaintPipeline
+from easyanimate.models.transformer3d import Transformer3DModel, HunyuanTransformer3DModel
+from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import EasyAnimatePipeline_Multi_Text_Encoder_Inpaint
+from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
+    EasyAnimateInpaintPipeline
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import save_videos_grid, get_image_to_video_latent
 
@@ -24,7 +27,7 @@ config_path         = "config/easyanimate_video_slicevae_motion_module_v3.yaml"
 model_name          = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512"
 
 # Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" and "DDIM"
-sampler_name        = "DPM++"
+sampler_name        = "Euler"
 
 # Load pretrained model if need
 transformer_path    = None
@@ -61,7 +64,12 @@ save_path               = "samples/easyanimate-videos_i2v"
 config = OmegaConf.load(config_path)
 
 # Get Transformer
-transformer = Transformer3DModel.from_pretrained_2d(
+if config['enable_multi_text_encoder']:
+    Choosen_Transformer3DModel = HunyuanTransformer3DModel
+else:
+    Choosen_Transformer3DModel = Transformer3DModel
+
+transformer = Choosen_Transformer3DModel.from_pretrained_2d(
     model_name, 
     subfolder="transformer",
     transformer_additional_kwargs=OmegaConf.to_container(config['transformer_additional_kwargs'])
@@ -128,17 +136,34 @@ Choosen_Scheduler = scheduler_dict = {
     "PNDM": PNDMScheduler,
     "DDIM": DDIMScheduler,
 }[sampler_name]
-scheduler = Choosen_Scheduler(**OmegaConf.to_container(config['noise_scheduler_kwargs']))
 
-pipeline = EasyAnimateInpaintPipeline.from_pretrained(
-    model_name,
-    vae=vae,
-    transformer=transformer,
-    scheduler=scheduler,
-    torch_dtype=weight_dtype,
-    clip_image_encoder=clip_image_encoder,
-    clip_image_processor=clip_image_processor,
-)
+if config['enable_multi_text_encoder']:
+    scheduler = Choosen_Scheduler.from_pretrained(
+        model_name, 
+        subfolder="scheduler"
+    )
+    pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
+        model_name,
+        vae=vae,
+        transformer=transformer,
+        scheduler=scheduler,
+        torch_dtype=weight_dtype,
+        clip_image_encoder=clip_image_encoder,
+        clip_image_processor=clip_image_processor,
+    )
+else:
+    scheduler = Choosen_Scheduler(**OmegaConf.to_container(config['noise_scheduler_kwargs']))
+
+    pipeline = EasyAnimateInpaintPipeline.from_pretrained(
+        model_name,
+        vae=vae,
+        transformer=transformer,
+        scheduler=scheduler,
+        torch_dtype=weight_dtype,
+        clip_image_encoder=clip_image_encoder,
+        clip_image_processor=clip_image_processor,
+    )
+
 if low_gpu_memory_mode:
     pipeline.enable_sequential_cpu_offload()
 else:

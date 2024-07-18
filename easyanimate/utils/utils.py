@@ -1,5 +1,5 @@
 import os
-
+import gc
 import imageio
 import numpy as np
 import torch
@@ -73,13 +73,20 @@ def save_videos_grid(videos: torch.Tensor, path: str, rescale=False, n_rows=6, f
 def get_image_to_video_latent(validation_image_start, validation_image_end, video_length, sample_size):
     if validation_image_start is not None and validation_image_end is not None:
         if type(validation_image_start) is str and os.path.isfile(validation_image_start):
-            image_start = clip_image = Image.open(validation_image_start)
+            image_start = clip_image = Image.open(validation_image_start).convert("RGB")
+            image_start = image_start.resize([sample_size[1], sample_size[0]])
+            clip_image = clip_image.resize([sample_size[1], sample_size[0]])
         else:
             image_start = clip_image = validation_image_start
+            image_start = [_image_start.resize([sample_size[1], sample_size[0]]) for _image_start in image_start]
+            clip_image = [_clip_image.resize([sample_size[1], sample_size[0]]) for _clip_image in clip_image]
+
         if type(validation_image_end) is str and os.path.isfile(validation_image_end):
-            image_end = Image.open(validation_image_end)
+            image_end = Image.open(validation_image_end).convert("RGB")
+            image_end = image_end.resize([sample_size[1], sample_size[0]])
         else:
             image_end = validation_image_end
+            image_end = [_image_end.resize([sample_size[1], sample_size[0]]) for _image_end in image_end]
 
         if type(image_start) is list:
             clip_image = clip_image[0]
@@ -119,8 +126,13 @@ def get_image_to_video_latent(validation_image_start, validation_image_end, vide
     elif validation_image_start is not None:
         if type(validation_image_start) is str and os.path.isfile(validation_image_start):
             image_start = clip_image = Image.open(validation_image_start).convert("RGB")
+            image_start = image_start.resize([sample_size[1], sample_size[0]])
+            clip_image = clip_image.resize([sample_size[1], sample_size[0]])
         else:
             image_start = clip_image = validation_image_start
+            image_start = [_image_start.resize([sample_size[1], sample_size[0]]) for _image_start in image_start]
+            clip_image = [_clip_image.resize([sample_size[1], sample_size[0]]) for _clip_image in clip_image]
+        image_end = None
         
         if type(image_start) is list:
             clip_image = clip_image[0]
@@ -142,9 +154,15 @@ def get_image_to_video_latent(validation_image_start, validation_image_end, vide
             input_video_mask = torch.zeros_like(input_video[:, :1])
             input_video_mask[:, :, 1:, ] = 255
     else:
+        image_start = None
+        image_end = None
         input_video = torch.zeros([1, 3, video_length, sample_size[0], sample_size[1]])
         input_video_mask = torch.ones([1, 1, video_length, sample_size[0], sample_size[1]]) * 255
         clip_image = None
+
+    del image_start
+    del image_end
+    gc.collect()
 
     return  input_video, input_video_mask, clip_image
 
