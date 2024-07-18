@@ -827,8 +827,12 @@ class HunyuanTransformer3DModel(ModelMixin, ConfigMixin):
     ):
         super().__init__()
         # 4. Define output layers
-        self.out_channels = in_channels if out_channels is None else out_channels
-        self.enable_inpaint = in_channels * 2 != out_channels if learn_sigma else in_channels != out_channels
+        # 4. Define output layers
+        if learn_sigma:
+            self.out_channels = in_channels * 2 if out_channels is None else out_channels
+        else:
+            self.out_channels = in_channels if out_channels is None else out_channels
+        self.enable_inpaint = in_channels * 2 != self.out_channels if learn_sigma else in_channels != self.out_channels
         self.num_heads = num_attention_heads
         self.inner_dim = num_attention_heads * attention_head_dim
         self.basic_block_type = basic_block_type
