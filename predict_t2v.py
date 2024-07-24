@@ -243,9 +243,6 @@ with torch.no_grad():
             generator=generator,
             guidance_scale=guidance_scale,
             num_inference_steps=num_inference_steps,
-            time_factor=1.2,
-            scale_factor=2,
-            us_eta=0.6,
         ).videos
 
 if lora_path is not None:
