@@ -68,24 +68,6 @@ EXAMPLE_DOC_STRING = """
 """
 
 
-def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
-    """
-    Rescale `noise_cfg` according to `guidance_rescale`. Based on findings of [Common Diffusion Noise Schedules and
-    Sample Steps are Flawed](https://arxiv.org/pdf/2305.08891.pdf). See Section 3.4
-    """
-    std_text = noise_pred_text.std(
-        dim=list(range(1, noise_pred_text.ndim)), keepdim=True
-    )
-    std_cfg = noise_cfg.std(dim=list(range(1, noise_cfg.ndim)), keepdim=True)
-    # rescale the results from guidance (fixes overexposure)
-    noise_pred_rescaled = noise_cfg * (std_text / std_cfg)
-    # mix with the original results from guidance by factor guidance_rescale to avoid "plain looking" images
-    noise_cfg = (
-        guidance_rescale * noise_pred_rescaled + (1 - guidance_rescale) * noise_cfg
-    )
-    return noise_cfg
-
-
 # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.retrieve_timesteps
 def retrieve_timesteps(
     scheduler,
@@ -743,34 +725,6 @@ class EasyAnimatePipeline(DiffusionPipeline):
         video = video.cpu().float().numpy()
         return video
 
-    def upsampling(
-        self, img: torch.Tensor, scale_factor: int = 2, mode: str = "nearest"
-    ):
-        # mode: nearest, bilinear
-        upsample_model = torch.nn.Upsample(scale_factor=scale_factor, mode=mode)
-        return upsample_model(img)
-
-    def downsampling(self, img: torch.Tensor, scale_factor: int = 2):
-        downsampl_model = torch.nn.AvgPool2d(
-            kernel_size=(scale_factor, scale_factor), stride=scale_factor
-        )
-        return downsampl_model(img)
-
-    def get_tau(self, scale_factor, alphas):
-        # m: scale_factor
-        # alphas: cumprod of alpha
-        alphas = torch.sqrt(alphas)
-        snr = alphas / (1 - alphas)
-        snr_low = alphas / (1 - alphas) * scale_factor**2
-        log_snr, log_snr_low = torch.log(snr), torch.log(snr_low)
-
-        def get_single_match(t):
-            differences = torch.abs(log_snr_low[t] - log_snr)
-            tau = torch.argmin(differences)
-            return tau
-
-        return [get_single_match(t) for t in range(len(alphas))]
-
     @torch.no_grad()
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
@@ -778,10 +732,6 @@ class EasyAnimatePipeline(DiffusionPipeline):
         prompt: Union[str, List[str]] = None,
         video_length: Optional[int] = None,
         negative_prompt: str = "",
-        time_factor: float = 1.2,
-        scale_factor: int = 2,
-        us_eta: float = 0.6,
-        guidance_rescale: float = 0.0,
         num_inference_steps: int = 20,
         timesteps: List[int] = None,
         guidance_scale: float = 4.5,
@@ -961,9 +911,6 @@ class EasyAnimatePipeline(DiffusionPipeline):
         num_warmup_steps = max(
             len(timesteps) - num_inference_steps * self.scheduler.order, 0
         )
-        # upsampling guidance
-        m = scale_factor
-        taus = self.get_tau(m, self.scheduler.alphas_cumprod)
 
         if comfyui_progressbar:
             from comfy.utils import ProgressBar
@@ -976,19 +923,6 @@ class EasyAnimatePipeline(DiffusionPipeline):
                 )
                 latent_model_input = self.scheduler.scale_model_input(
                     latent_model_input, t
-                )
-
-                d_latent_model_input = (
-                    torch.cat([self.downsampling(latents, m)] * 2)
-                    if self.do_classifier_free_guidance
-                    else self.downsampling(latents, m)
-                )
-                a_t = self.scheduler.alphas_cumprod[t]
-                p = a_t + (1 - a_t) / (m**2)
-                p_factor = 1 / (p**0.5)
-                tau = taus[t].to(t.device)
-                d_latent_model_input = self.scheduler.scale_model_input(
-                    d_latent_model_input, tau
                 )
 
                 current_timestep = t
@@ -1022,49 +956,11 @@ class EasyAnimatePipeline(DiffusionPipeline):
                     return_dict=False,
                 )[0]
 
-                # predict noise model_output
-                d_noise_pred = self.transformer(
-                    d_latent_model_input * p_factor,
-                    encoder_hidden_states=prompt_embeds,
-                    encoder_attention_mask=prompt_attention_mask,
-                    timestep=tau,
-                    added_cond_kwargs=added_cond_kwargs,
-                    return_dict=False,
-                )[0]
-
-                noise_adj = (
-                    self.upsampling(d_noise_pred / m, scale_factor=scale_factor)
-                    + noise_pred
-                    - self.upsampling(self.downsampling(noise_pred))
-                )
-                us_wt = time_factor * torch.heaviside(
-                    t - (1 - us_eta) * 1000, torch.tensor(0.0).to(t.device)
-                )
-                noise_pred = (1 - us_wt) * noise_pred + us_wt * noise_adj
-
-
-
-
-
-
-
-
-
-
-
                 # perform guidance
                 if do_classifier_free_guidance:
                     noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
                     noise_pred = noise_pred_uncond + guidance_scale * (
                         noise_pred_text - noise_pred_uncond
-                    )
-
-                if do_classifier_free_guidance and guidance_rescale > 0.0:
-                    # Based on 3.4. in https://arxiv.org/pdf/2305.08891.pdf
-                    noise_pred = rescale_noise_cfg(
-                        noise_pred,
-                        noise_pred_text,
-                        guidance_rescale=guidance_rescale,
                     )
 
                 # learned sigma
