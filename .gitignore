@@ -12,6 +12,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+Upsample-Guidance/
 build/
 develop-eggs/
 dist/
