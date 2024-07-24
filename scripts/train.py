@@ -1339,15 +1339,18 @@ def main():
                         if vae.quant_conv.weight.ndim==5:
                             # This way is quicker when batch grows up
                             if vae.slice_compression_vae:
-                                ref_pixel_values = rearrange(ref_pixel_values, "b f c h w -> b c f h w")
-                                bs = args.vae_mini_batch
-                                new_ref_pixel_values = []
-                                for i in range(0, ref_pixel_values.shape[0], bs):
-                                    ref_pixel_values_bs = ref_pixel_values[i : i + bs]
-                                    ref_pixel_values_bs = vae.encode(ref_pixel_values_bs)[0]
-                                    ref_pixel_values_bs = ref_pixel_values_bs.sample()
-                                    new_ref_pixel_values.append(ref_pixel_values_bs)
-                                ref_latents = torch.cat(new_ref_pixel_values, dim = 0)
+                                if config.get('enable_multi_text_encoder', False):
+                                    ref_pixel_values = rearrange(ref_pixel_values, "b f c h w -> b c f h w")
+                                    bs = args.vae_mini_batch
+                                    new_ref_pixel_values = []
+                                    for i in range(0, ref_pixel_values.shape[0], bs):
+                                        ref_pixel_values_bs = ref_pixel_values[i : i + bs]
+                                        ref_pixel_values_bs = vae.encode(ref_pixel_values_bs)[0]
+                                        ref_pixel_values_bs = ref_pixel_values_bs.sample()
+                                        new_ref_pixel_values.append(ref_pixel_values_bs)
+                                    ref_latents = torch.cat(new_ref_pixel_values, dim = 0)
+                                else:
+                                    ref_latents = None
 
                                 mask_pixel_values = rearrange(mask_pixel_values, "b f c h w -> b c f h w")
                                 bs = args.vae_mini_batch
@@ -1369,23 +1372,29 @@ def main():
                                     mask_bs = mask_bs.sample()
                                     new_mask.append(mask_bs)
                                 mask = torch.cat(new_mask, dim = 0)
-                                ref_latents = ref_latents.expand_as(mask_latents)
-                                inpaint_latents = torch.concat([mask, mask_latents, ref_latents], dim=1)
+                                if ref_latents is not None:
+                                    ref_latents = ref_latents.expand_as(mask_latents)
+                                    inpaint_latents = torch.concat([mask, mask_latents, ref_latents], dim=1)
+                                else:
+                                    inpaint_latents = torch.concat([mask, mask_latents], dim=1)
                             else:
-                                # This way is quicker when batch grows up
-                                ref_pixel_values = rearrange(ref_pixel_values, "b f c h w -> b c f h w")
-                                bs = args.vae_mini_batch
-                                new_ref_pixel_values = []
-                                for i in range(0, ref_pixel_values.shape[0], bs):
-                                    new_ref_pixel_values_mini_batch = []
-                                    for j in range(0, ref_pixel_values.shape[2], sample_n_frames_bucket_interval):
-                                        ref_pixel_values_bs = ref_pixel_values[i : i + bs, :, j: j + sample_n_frames_bucket_interval, :, :]
-                                        ref_pixel_values_bs = vae.encode(ref_pixel_values_bs)[0]
-                                        ref_pixel_values_bs = ref_pixel_values_bs.sample()
-                                        new_ref_pixel_values_mini_batch.append(ref_pixel_values_bs)
-                                    new_ref_pixel_values_mini_batch = torch.cat(new_ref_pixel_values_mini_batch, dim = 2)
-                                    new_ref_pixel_values.append(new_ref_pixel_values_mini_batch)
-                                ref_latents = torch.cat(new_ref_pixel_values, dim = 0)
+                                if config.get('enable_multi_text_encoder', False):
+                                    # This way is quicker when batch grows up
+                                    ref_pixel_values = rearrange(ref_pixel_values, "b f c h w -> b c f h w")
+                                    bs = args.vae_mini_batch
+                                    new_ref_pixel_values = []
+                                    for i in range(0, ref_pixel_values.shape[0], bs):
+                                        new_ref_pixel_values_mini_batch = []
+                                        for j in range(0, ref_pixel_values.shape[2], sample_n_frames_bucket_interval):
+                                            ref_pixel_values_bs = ref_pixel_values[i : i + bs, :, j: j + sample_n_frames_bucket_interval, :, :]
+                                            ref_pixel_values_bs = vae.encode(ref_pixel_values_bs)[0]
+                                            ref_pixel_values_bs = ref_pixel_values_bs.sample()
+                                            new_ref_pixel_values_mini_batch.append(ref_pixel_values_bs)
+                                        new_ref_pixel_values_mini_batch = torch.cat(new_ref_pixel_values_mini_batch, dim = 2)
+                                        new_ref_pixel_values.append(new_ref_pixel_values_mini_batch)
+                                    ref_latents = torch.cat(new_ref_pixel_values, dim = 0)
+                                else:
+                                    ref_latents = None
 
                                 # This way is quicker when batch grows up
                                 mask_pixel_values = rearrange(mask_pixel_values, "b f c h w -> b c f h w")
@@ -1417,19 +1426,25 @@ def main():
                                     new_mask_mini_batch = torch.cat(new_mask_mini_batch, dim = 2)
                                     new_mask.append(new_mask_mini_batch)
                                 mask = torch.cat(new_mask, dim = 0)
-                                ref_latents = ref_latents.expand_as(mask_latents)
-                                inpaint_latents = torch.concat([mask, mask_latents, ref_latents], dim=1)
+                                if ref_latents is not None:
+                                    ref_latents = ref_latents.expand_as(mask_latents)
+                                    inpaint_latents = torch.concat([mask, mask_latents, ref_latents], dim=1)
+                                else:
+                                    inpaint_latents = torch.concat([mask, mask_latents], dim=1)
                         else:
-                            ref_pixel_values = rearrange(ref_pixel_values, "b f c h w -> (b f) c h w")
-                            bs = args.vae_mini_batch
-                            new_ref_pixel_values = []
-                            for i in range(0, ref_pixel_values.shape[0], bs):
-                                ref_pixel_values_bs = ref_pixel_values[i : i + bs]
-                                ref_pixel_values_bs = vae.encode(ref_pixel_values_bs.to(dtype=weight_dtype)).latent_dist
-                                ref_pixel_values_bs = ref_pixel_values_bs.sample()
-                                new_ref_pixel_values.append(ref_pixel_values_bs)
-                            ref_latents = torch.cat(new_ref_pixel_values, dim = 0)
-                            ref_latents = rearrange(ref_latents, "(b f) c h w -> b c f h w", f=video_length)
+                            if config.get('enable_multi_text_encoder', False):
+                                ref_pixel_values = rearrange(ref_pixel_values, "b f c h w -> (b f) c h w")
+                                bs = args.vae_mini_batch
+                                new_ref_pixel_values = []
+                                for i in range(0, ref_pixel_values.shape[0], bs):
+                                    ref_pixel_values_bs = ref_pixel_values[i : i + bs]
+                                    ref_pixel_values_bs = vae.encode(ref_pixel_values_bs.to(dtype=weight_dtype)).latent_dist
+                                    ref_pixel_values_bs = ref_pixel_values_bs.sample()
+                                    new_ref_pixel_values.append(ref_pixel_values_bs)
+                                ref_latents = torch.cat(new_ref_pixel_values, dim = 0)
+                                ref_latents = rearrange(ref_latents, "(b f) c h w -> b c f h w", f=video_length)
+                            else:
+                                ref_latents = None
 
                             mask_pixel_values = rearrange(mask_pixel_values, "b f c h w -> (b f) c h w")
                             bs = args.vae_mini_batch
@@ -1447,8 +1462,11 @@ def main():
                                 mask, size=(mask_latents.size()[-2], mask_latents.size()[-1])
                             )
                             mask = rearrange(mask, "(b f) c h w -> b c f h w", f=video_length)
-                            ref_latents = ref_latents.expand_as(mask_latents)
-                            inpaint_latents = torch.concat([mask, mask_latents, ref_latents], dim=1)
+                            if ref_latents is not None:
+                                ref_latents = ref_latents.expand_as(mask_latents)
+                                inpaint_latents = torch.concat([mask, mask_latents, ref_latents], dim=1)
+                            else:
+                                inpaint_latents = torch.concat([mask, mask_latents], dim=1)
                                 
                         with torch.no_grad():
                             clip_encoder_hidden_states = []

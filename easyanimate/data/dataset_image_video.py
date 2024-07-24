@@ -291,7 +291,9 @@ class ImageVideoDataset(Dataset):
             clip_pixel_values = (clip_pixel_values * 0.5 + 0.5) * 255
             sample["clip_pixel_values"] = clip_pixel_values
 
-            ref_pixel_values = torch.tile(sample["pixel_values"][0].unsqueeze(0), [sample["pixel_values"].size()[0], 1, 1, 1])
+            ref_pixel_values = sample["pixel_values"][0].unsqueeze(0)
+            if (mask == 1).all():
+                ref_pixel_values = torch.ones_like(ref_pixel_values) * -1
             sample["ref_pixel_values"] = ref_pixel_values
 
         return sample

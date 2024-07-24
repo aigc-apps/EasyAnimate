@@ -56,7 +56,7 @@ css = """
 """
 
 class EasyAnimateController:
-    def __init__(self, low_gpu_memory_mode):
+    def __init__(self, low_gpu_memory_mode, weight_dtype):
         # config dirs
         self.basedir                    = os.getcwd()
         self.config_dir                 = os.path.join(self.basedir, "config")
@@ -88,7 +88,7 @@ class EasyAnimateController:
         self.lora_model_path       = "none"
         self.low_gpu_memory_mode   = low_gpu_memory_mode
         
-        self.weight_dtype = torch.bfloat16
+        self.weight_dtype = weight_dtype
 
     def refresh_diffusion_transformer(self):
         self.diffusion_transformer_list = sorted(glob(os.path.join(self.diffusion_transformer_dir, "*/")))
@@ -132,10 +132,16 @@ class EasyAnimateController:
             diffusion_transformer_dropdown, 
             subfolder="vae", 
         ).to(self.weight_dtype)
+        if OmegaConf.to_container(self.inference_config['vae_kwargs'])['enable_magvit'] and self.weight_dtype == torch.float16:
+            self.vae.upcast_vae = True
+            
+        transformer_additional_kwargs = OmegaConf.to_container(self.inference_config['transformer_additional_kwargs'])
+        if self.weight_dtype == torch.float16:
+            transformer_additional_kwargs["upcast_attention"] = True
         self.transformer = Transformer3DModel.from_pretrained_2d(
             diffusion_transformer_dropdown, 
             subfolder="transformer", 
-            transformer_additional_kwargs=OmegaConf.to_container(self.inference_config.transformer_additional_kwargs)
+            transformer_additional_kwargs=transformer_additional_kwargs
         ).to(self.weight_dtype)
         self.tokenizer = T5Tokenizer.from_pretrained(diffusion_transformer_dropdown, subfolder="tokenizer")
         self.text_encoder = T5EncoderModel.from_pretrained(diffusion_transformer_dropdown, subfolder="text_encoder", torch_dtype=self.weight_dtype)
@@ -471,8 +477,8 @@ class EasyAnimateController:
                     return gr.Image.update(visible=False, value=None), gr.Video.update(value=save_sample_path, visible=True), "Success"
 
 
-def ui(low_gpu_memory_mode):
-    controller = EasyAnimateController(low_gpu_memory_mode)
+def ui(low_gpu_memory_mode, weight_dtype):
+    controller = EasyAnimateController(low_gpu_memory_mode, weight_dtype)
 
     with gr.Blocks(css=css) as demo:
         gr.Markdown(
@@ -712,10 +718,7 @@ def ui(low_gpu_memory_mode):
 
 
 class EasyAnimateController_Modelscope:
-    def __init__(self, edition, config_path, model_name, savedir_sample, low_gpu_memory_mode):
-        # Weight Dtype
-        weight_dtype                    = torch.bfloat16
-
+    def __init__(self, edition, config_path, model_name, savedir_sample, low_gpu_memory_mode, weight_dtype):
         # Basic dir
         self.basedir                    = os.getcwd()
         self.personalized_model_dir     = os.path.join(self.basedir, "models", "Personalized_Model")
@@ -728,10 +731,13 @@ class EasyAnimateController_Modelscope:
         self.edition = edition
         self.inference_config = OmegaConf.load(config_path)
         # Get Transformer
+        transformer_additional_kwargs = OmegaConf.to_container(self.inference_config['transformer_additional_kwargs'])
+        if weight_dtype == torch.float16:
+            transformer_additional_kwargs["upcast_attention"] = True
         self.transformer = Transformer3DModel.from_pretrained_2d(
             model_name, 
             subfolder="transformer",
-            transformer_additional_kwargs=OmegaConf.to_container(self.inference_config['transformer_additional_kwargs'])
+            transformer_additional_kwargs=transformer_additional_kwargs
         ).to(weight_dtype)
         if OmegaConf.to_container(self.inference_config['vae_kwargs'])['enable_magvit']:
             Choosen_AutoencoderKL = AutoencoderKLMagvit
@@ -741,6 +747,8 @@ class EasyAnimateController_Modelscope:
             model_name, 
             subfolder="vae"
         ).to(weight_dtype)
+        if OmegaConf.to_container(self.inference_config['vae_kwargs'])['enable_magvit'] and weight_dtype == torch.float16:
+            self.vae.upcast_vae = True
         self.tokenizer = T5Tokenizer.from_pretrained(
             model_name, 
             subfolder="tokenizer"
@@ -814,6 +822,8 @@ class EasyAnimateController_Modelscope:
         base_resolution, 
         generation_method, 
         length_slider, 
+        overlap_video_length, 
+        partial_video_length, 
         cfg_scale_slider, 
         start_image, 
         end_image, 
@@ -942,8 +952,8 @@ class EasyAnimateController_Modelscope:
                     return gr.Image.update(visible=False, value=None), gr.Video.update(value=save_sample_path, visible=True), "Success"
 
 
-def ui_modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memory_mode):
-    controller = EasyAnimateController_Modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memory_mode)
+def ui_modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memory_mode, weight_dtype):
+    controller = EasyAnimateController_Modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memory_mode, weight_dtype)
 
     with gr.Blocks(css=css) as demo:
         gr.Markdown(
@@ -1029,6 +1039,8 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memo
                                 visible=False,
                             )
                             length_slider = gr.Slider(label="Animation length (视频帧数)", value=80,  minimum=40,  maximum=96,   step=1)
+                        overlap_video_length = gr.Slider(label="Overlap length (视频续写的重叠帧数)", value=4, minimum=1,   maximum=4,  step=1, visible=False)
+                        partial_video_length = gr.Slider(label="Partial video generation length (每个部分的视频生成帧数)", value=72, minimum=8,   maximum=144,  step=8, visible=False)
                         cfg_scale_slider = gr.Slider(label="CFG Scale (引导系数)",        value=6.0, minimum=0,   maximum=20)
                     else:
                         resize_method = gr.Radio(
@@ -1058,6 +1070,8 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memo
                                 visible=True,
                             )
                             length_slider = gr.Slider(label="Animation length (视频帧数)", value=48, minimum=8,   maximum=48,  step=8)
+                            overlap_video_length = gr.Slider(label="Overlap length (视频续写的重叠帧数)", value=4, minimum=1,   maximum=4,  step=1, visible=False)
+                            partial_video_length = gr.Slider(label="Partial video generation length (每个部分的视频生成帧数)", value=72, minimum=8,   maximum=144,  step=8, visible=False)
                         
                         with gr.Accordion("Image to Video (图片到视频)", open=True):
                             with gr.Row():
@@ -1146,6 +1160,8 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memo
                     base_resolution, 
                     generation_method, 
                     length_slider, 
+                    overlap_video_length, 
+                    partial_video_length, 
                     cfg_scale_slider, 
                     start_image, 
                     end_image, 

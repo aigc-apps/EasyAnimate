@@ -101,6 +101,7 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         use_tiling=False,
         mini_batch_encoder=9,
         mini_batch_decoder=3,
+        upcast_vae=False,
     ):
         super().__init__()
         down_block_types = str_eval(down_block_types)
@@ -152,6 +153,7 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         self.mini_batch_decoder = mini_batch_decoder
         self.use_slicing = False
         self.use_tiling = use_tiling
+        self.upcast_vae = upcast_vae
         self.tile_sample_min_size = 384
         self.tile_overlap_factor = 0.25
         self.tile_latent_min_size = int(self.tile_sample_min_size / (2 ** (len(ch_mult) - 1)))
@@ -253,8 +255,13 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
                 The latent representations of the encoded images. If `return_dict` is True, a
                 [`~models.autoencoder_kl.AutoencoderKLOutput`] is returned, otherwise a plain `tuple` is returned.
         """
-        if self.use_tiling and (x.shape[-1] > self.tile_sample_min_size and x.shape[-2] > self.tile_sample_min_size):
-            return self.tiled_encode(x, return_dict=return_dict)
+        if self.upcast_vae:
+            x = x.float()
+            self.encoder = self.encoder.float()
+            self.quant_conv = self.quant_conv.float()
+        if self.use_tiling and (x.shape[-1] > self.tile_sample_min_size or x.shape[-2] > self.tile_sample_min_size):
+            x = self.tiled_encode(x, return_dict=return_dict)
+            return x
 
         if self.use_slicing and x.shape[0] > 1:
             encoded_slices = [self.encoder(x_slice) for x_slice in x.split(1)]
@@ -271,7 +278,11 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         return AutoencoderKLOutput(latent_dist=posterior)
 
     def _decode(self, z: torch.FloatTensor, return_dict: bool = True) -> Union[DecoderOutput, torch.FloatTensor]:
-        if self.use_tiling and (z.shape[-1] > self.tile_latent_min_size and z.shape[-2] > self.tile_latent_min_size):
+        if self.upcast_vae:
+            z = z.float()
+            self.decoder = self.decoder.float()
+            self.post_quant_conv = self.post_quant_conv.float()
+        if self.use_tiling and (z.shape[-1] > self.tile_latent_min_size or z.shape[-2] > self.tile_latent_min_size):
             return self.tiled_decode(z, return_dict=return_dict)
         z = self.post_quant_conv(z)
         dec = self.decoder(z)

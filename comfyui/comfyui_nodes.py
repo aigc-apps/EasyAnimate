@@ -1,3 +1,5 @@
+"""Modified from https://github.com/kijai/ComfyUI-EasyAnimateWrapper/blob/main/nodes.py
+"""
 import gc
 import os
 

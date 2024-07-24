@@ -47,6 +47,8 @@ fps                 = 24
 partial_video_length = None
 overlap_video_length = 4
 
+# Use torch.float16 if GPU does not support torch.bfloat16
+# ome graphics cards, such as v100, 2080ti, do not support torch.bfloat16
 weight_dtype            = torch.bfloat16
 # If you want to generate from text, please set the validation_image_start = None and validation_image_end = None
 validation_image_start  = "asset/1.png"
@@ -64,15 +66,19 @@ save_path               = "samples/easyanimate-videos_i2v"
 config = OmegaConf.load(config_path)
 
 # Get Transformer
-if config['enable_multi_text_encoder']:
+if config.get('enable_multi_text_encoder', False):
     Choosen_Transformer3DModel = HunyuanTransformer3DModel
 else:
     Choosen_Transformer3DModel = Transformer3DModel
 
+transformer_additional_kwargs = OmegaConf.to_container(config['transformer_additional_kwargs'])
+if weight_dtype == torch.float16:
+    transformer_additional_kwargs["upcast_attention"] = True
+
 transformer = Choosen_Transformer3DModel.from_pretrained_2d(
     model_name, 
     subfolder="transformer",
-    transformer_additional_kwargs=OmegaConf.to_container(config['transformer_additional_kwargs'])
+    transformer_additional_kwargs=transformer_additional_kwargs
 ).to(weight_dtype)
 
 if transformer_path is not None:
@@ -108,6 +114,8 @@ vae = Choosen_AutoencoderKL.from_pretrained(
     model_name, 
     subfolder="vae", 
 ).to(weight_dtype)
+if OmegaConf.to_container(config['vae_kwargs'])['enable_magvit'] and weight_dtype == torch.float16:
+    vae.upcast_vae = True
 
 if vae_path is not None:
     print(f"From checkpoint: {vae_path}")
@@ -137,7 +145,7 @@ Choosen_Scheduler = scheduler_dict = {
     "DDIM": DDIMScheduler,
 }[sampler_name]
 
-if config['enable_multi_text_encoder']:
+if config.get('enable_multi_text_encoder', False):
     scheduler = Choosen_Scheduler.from_pretrained(
         model_name, 
         subfolder="scheduler"

@@ -67,6 +67,8 @@ class CausalConv3d(nn.Conv3d):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, C, T, H, W)
+        dtype = x.dtype
+        x = x.float()
         if self.padding_flag == 0:
             x = F.pad(
                 x,
@@ -78,6 +80,7 @@ class CausalConv3d(nn.Conv3d):
                 x,
                 pad=(0, 0, 0, 0, self.temporal_padding_origin, self.temporal_padding_origin),
             )
+        x = x.to(dtype=dtype)
         return super().forward(x)
     
     def set_padding_one_frame(self):

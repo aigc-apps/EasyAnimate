@@ -406,6 +406,7 @@ EasyAnimateV3:
 - Open-Sora-Plan: https://github.com/PKU-YuanGroup/Open-Sora-Plan
 - Open-Sora: https://github.com/hpcaitech/Open-Sora
 - Animatediff: https://github.com/guoyww/AnimateDiff
+- ComfyUI-EasyAnimateWrapper: https://github.com/kijai/ComfyUI-EasyAnimateWrapper
 
 # 许可证
 本项目采用 [Apache License (Version 2.0)](https://github.com/modelscope/modelscope/blob/master/LICENSE).
