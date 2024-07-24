@@ -120,6 +120,8 @@ class LoadEasyAnimateModel:
             model_path, 
             subfolder="vae", 
         ).to(weight_dtype)
+        if OmegaConf.to_container(config['vae_kwargs'])['enable_magvit'] and weight_dtype == torch.float16:
+            vae.upcast_vae = True
         # Update pbar
         pbar.update(1)
 
@@ -131,10 +133,13 @@ class LoadEasyAnimateModel:
         
         # Load Transformer
         print("Load Transformer.")
+        transformer_additional_kwargs = OmegaConf.to_container(config['transformer_additional_kwargs'])
+        if weight_dtype == torch.float16:
+            transformer_additional_kwargs["upcast_attention"] = True
         transformer = Transformer3DModel.from_pretrained(
             model_path, 
             subfolder= 'transformer', 
-            transformer_additional_kwargs=OmegaConf.to_container(config['transformer_additional_kwargs'])
+            transformer_additional_kwargs=transformer_additional_kwargs
         ).to(weight_dtype).eval()  
         # Update pbar
         pbar.update(1) 
