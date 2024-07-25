@@ -1,11 +1,9 @@
-auto_gptq==0.6.0
 pandas>=2.0.0
-vllm==0.3.3
-sglang[srt]==0.1.13
-func_timeout
 easyocr==1.7.1
 git+https://github.com/openai/CLIP.git
 natsort
 joblib
 scenedetect
 av
+# https://github.com/NVlabs/VILA/issues/78#issuecomment-2195568292
+numpy<2.0.0

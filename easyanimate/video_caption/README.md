@@ -4,25 +4,21 @@ EasyAnimate uses multi-modal LLMs to generate captions for frames extracted from
 English | [简体中文](./README_zh-CN.md)
 
 ## Quick Start
-1. Cloud usage: AliyunDSW/Docker
-    
-    Check [README.md](../../README.md#quick-start) for details.
+1. Docker
+```
+# pull image
+docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:
+asyanimate_video_caption
 
-2. Local usage
+# enter image
+docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:asyanimate_video_caption
 
-    ```shell
-    # Install EasyAnimate requirements firstly.
-    cd EasyAnimate && pip install -r requirements.txt
+# clone code
+git clone https://github.com/aigc-apps/EasyAnimate.git
 
-    # Install additional requirements for video caption.
-    cd easyanimate/video_caption && pip install -r requirements.txt --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
-
-    # Use DDP instead of DP in EasyOCR detection.
-    site_pkg_path=$(python -c 'import site; print(site.getsitepackages()[0])')
-    cp -v easyocr_detection_patched.py $site_pkg_path/easyocr/detection.py
-
-    # We strongly recommend using Docker unless you can properly handle the dependency between vllm with torch(cuda).
-    ```
+# enter EasyAnimate's dir
+cd EasyAnimate/easyanimate/video_caption
+```
 
 ## Data preprocessing
 Data preprocessing can be divided into three parts:
