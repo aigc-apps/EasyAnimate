@@ -1,5 +1,5 @@
 # Video Caption
-EasyAnimate uses multi-modal LLMs to generate captions for frames extracted from the video firstly, and then employs LLMs to summarize and refine the generated frame captions into the final video caption. By leveraging [sglang](https://github.com/sgl-project/sglang)/[vLLM](https://github.com/vllm-project/vllm) and [accelerate distributed inference](https://huggingface.co/docs/accelerate/en/usage_guides/distributed_inference), the entire processing could be very fast.
+EasyAnimate uses [VILA-1.5](https://github.com/NVlabs/VILA) to generate captions for frames extracted from the video. By leveraging [llm-awq](https://github.com/mit-han-lab/llm-awq) and [accelerate distributed inference](https://huggingface.co/docs/accelerate/en/usage_guides/distributed_inference), the entire processing could be very fast.
 
 English | [简体中文](./README_zh-CN.md)
 

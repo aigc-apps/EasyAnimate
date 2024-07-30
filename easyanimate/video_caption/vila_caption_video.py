@@ -234,6 +234,7 @@ def main(args):
 
     elif args.precision == "W4A16":
         from tinychat.utils.load_quant import load_awq_model
+        # TODO: Auto load quant_path from the 3b/8b/13b/40b model.
         model.llm = load_awq_model(model.llm, args.quant_path, 4, 128, state.device)
         from tinychat.modules import (
             make_fused_mlp,
@@ -265,6 +266,7 @@ def main(args):
     
     result_dict = {args.video_path_column: [], args.caption_column: []}
     with state.split_between_processes(video_path_list) as splitted_video_path_list:
+        # TODO: Use VideoDataset.
         for i, video_path in enumerate(tqdm(splitted_video_path_list)):
             try:
                 image_list = extract_uniform_frames(video_path, args.num_sampled_frames)
@@ -305,7 +307,7 @@ def main(args):
             
             except Exception as e:
                 logger.warning(f"VILA with {video_path} failed. Error is {e}.")
-                # continue # Skip i when it gathers would result in the NCCL timeout.
+                # continue may affect the gather operation and cause the NCCL timeout.
 
             if i != 0 and i % args.saved_freq == 0:
                 state.wait_for_everyone()
