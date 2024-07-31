@@ -112,6 +112,7 @@ class AutoencoderKLMagvit_fromOmnigen(pl.LightningModule):
         monitor=None,
         ckpt_path=None,
         lossconfig=None,
+        slice_mag_vae=False,
         slice_compression_vae=False,
         mini_batch_encoder=9,
         mini_batch_decoder=3,
@@ -137,6 +138,7 @@ class AutoencoderKLMagvit_fromOmnigen(pl.LightningModule):
             act_fn=act_fn,
             num_attention_heads=num_attention_heads,
             double_z=True,
+            slice_mag_vae=slice_mag_vae,
             slice_compression_vae=slice_compression_vae,
             mini_batch_encoder=mini_batch_encoder,
         )
@@ -156,6 +158,7 @@ class AutoencoderKLMagvit_fromOmnigen(pl.LightningModule):
             norm_num_groups=norm_num_groups,
             act_fn=act_fn,
             num_attention_heads=num_attention_heads,
+            slice_mag_vae=slice_mag_vae,
             slice_compression_vae=slice_compression_vae,
             mini_batch_decoder=mini_batch_decoder,
         )

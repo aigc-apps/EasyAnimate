@@ -26,9 +26,9 @@ def get_random_mask(shape):
     f, c, h, w = shape
     
     if f != 1:
-        mask_index = np.random.randint(0, 5)
+        mask_index = np.random.choice([0, 1, 2, 3, 4], p = [0.05, 0.3, 0.3, 0.3, 0.05]) # np.random.randint(0, 5)
     else:
-        mask_index = np.random.randint(0, 2)
+        mask_index = np.random.choice([0, 1], p = [0.2, 0.8]) # np.random.randint(0, 2)
     mask = torch.zeros((f, 1, h, w), dtype=torch.uint8)
 
     if mask_index == 0:

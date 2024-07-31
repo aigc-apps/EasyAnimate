@@ -1,11 +1,25 @@
 import torch
 import torch.nn as nn
 import numpy as np
+from typing import Any, Dict, Optional, Tuple
+from einops import rearrange, repeat
+from diffusers.utils import (USE_PEFT_BACKEND, BaseOutput, is_torch_version,
+                             logging)
 from ..modules.vaemodules.activations import get_activation
 from ..modules.vaemodules.common import CausalConv3d
 from ..modules.vaemodules.down_blocks import get_down_block
 from ..modules.vaemodules.mid_blocks import get_mid_block
 from ..modules.vaemodules.up_blocks import get_up_block
+
+
+def create_custom_forward(module, return_dict=None):
+    def custom_forward(*inputs):
+        if return_dict is not None:
+            return module(*inputs, return_dict=return_dict)
+        else:
+            return module(*inputs)
+
+    return custom_forward
 
 
 class Encoder(nn.Module):
@@ -54,6 +68,7 @@ class Encoder(nn.Module):
         act_fn: str = "silu",
         num_attention_heads: int = 1,
         double_z: bool = True,
+        slice_mag_vae: bool = False,
         slice_compression_vae: bool = False,
         mini_batch_encoder: int = 9,
         verbose = False,
@@ -118,9 +133,9 @@ class Encoder(nn.Module):
         conv_out_channels = 2 * out_channels if double_z else out_channels
         self.conv_out = CausalConv3d(block_out_channels[-1], conv_out_channels, kernel_size=3)
 
+        self.slice_mag_vae = slice_mag_vae
         self.slice_compression_vae = slice_compression_vae
         self.mini_batch_encoder = mini_batch_encoder
-        self.features_share = False
         self.verbose = verbose
 
     def set_padding_one_frame(self):
@@ -147,11 +162,11 @@ class Encoder(nn.Module):
 
     def single_forward(self, x: torch.Tensor, previous_features: torch.Tensor, after_features: torch.Tensor) -> torch.Tensor:
         # x: (B, C, T, H, W)
-        if self.features_share and previous_features is not None and after_features is None:
+        if previous_features is not None and after_features is None:
             x = torch.concat([previous_features, x], 2)
-        elif self.features_share and previous_features is None and after_features is not None:
+        elif previous_features is None and after_features is not None:
             x = torch.concat([x, after_features], 2)
-        elif self.features_share and previous_features is not None and after_features is not None:
+        elif previous_features is not None and after_features is not None:
             x = torch.concat([previous_features, x, after_features], 2)
 
         x = self.conv_in(x)
@@ -165,11 +180,11 @@ class Encoder(nn.Module):
         x = self.conv_act(x)
         x = self.conv_out(x)
 
-        if self.features_share and previous_features is not None and after_features is None:
+        if previous_features is not None and after_features is None:
             x = x[:, :, 1:]
-        elif self.features_share and previous_features is None and after_features is not None:
+        elif previous_features is None and after_features is not None:
             x = x[:, :, :2]
-        elif self.features_share and previous_features is not None and after_features is not None:
+        elif previous_features is not None and after_features is not None:
             x = x[:, :, 1:3]
         return x
 
@@ -188,11 +203,15 @@ class Encoder(nn.Module):
                 new_pixel_values = []
                 start_index = 0
 
-            previous_features = None
             for i in range(start_index, x.shape[2], self.mini_batch_encoder):
-                after_features = x[:, :, i + self.mini_batch_encoder: i + self.mini_batch_encoder + 4, :, :] if i + self.mini_batch_encoder < x.shape[2] else None
-                next_frames = self.single_forward(x[:, :, i: i + self.mini_batch_encoder, :, :], previous_features, after_features)
-                previous_features = x[:, :, i + self.mini_batch_encoder - 4: i + self.mini_batch_encoder, :, :]
+                next_frames = self.single_forward(x[:, :, i: i + self.mini_batch_encoder, :, :], None, None)
+                new_pixel_values.append(next_frames)
+            new_pixel_values = torch.cat(new_pixel_values, dim=2)
+        elif self.slice_mag_vae:
+            _, _, f, _, _ = x.size()
+            new_pixel_values = []
+            for i in range(0, x.shape[2], self.mini_batch_encoder):
+                next_frames = self.single_forward(x[:, :, i: i + self.mini_batch_encoder, :, :], None, None)
                 new_pixel_values.append(next_frames)
             new_pixel_values = torch.cat(new_pixel_values, dim=2)
         else:
@@ -242,6 +261,7 @@ class Decoder(nn.Module):
         norm_num_groups: int = 32,
         act_fn: str = "silu",
         num_attention_heads: int = 1,
+        slice_mag_vae: bool = False,
         slice_compression_vae: bool = False,
         mini_batch_decoder: int = 3, 
         verbose = False,
@@ -309,9 +329,9 @@ class Decoder(nn.Module):
 
         self.conv_out = CausalConv3d(block_out_channels[0], out_channels, kernel_size=3)
         
+        self.slice_mag_vae = slice_mag_vae
         self.slice_compression_vae = slice_compression_vae
-        self.mini_batch_decoder = mini_batch_decoder
-        self.features_share = True
+        self.mini_batch_decoder = mini_batch_decoder        
         self.verbose = verbose
 
     def set_padding_one_frame(self):
@@ -338,19 +358,19 @@ class Decoder(nn.Module):
             
     def single_forward(self, x: torch.Tensor, previous_features: torch.Tensor, after_features: torch.Tensor) -> torch.Tensor:
         # x: (B, C, T, H, W)
-        if self.features_share and previous_features is not None and after_features is None:
+        if previous_features is not None and after_features is None:
             b, c, t, h, w = x.size()
             x = torch.concat([previous_features, x], 2)
             x = self.conv_in(x)
             x = self.mid_block(x)
             x = x[:, :, -t:]
-        elif self.features_share and previous_features is None and after_features is not None:
+        elif previous_features is None and after_features is not None:
             b, c, t, h, w = x.size()
             x = torch.concat([x, after_features], 2)
             x = self.conv_in(x)
             x = self.mid_block(x)
             x = x[:, :, :t]
-        elif self.features_share and previous_features is not None and after_features is not None:
+        elif previous_features is not None and after_features is not None:
             _, _, t_1, _, _ = previous_features.size()
             _, _, t_2, _, _ = x.size()
             x = torch.concat([previous_features, x, after_features], 2)
@@ -389,6 +409,13 @@ class Decoder(nn.Module):
                 after_features = x[:, :, i + self.mini_batch_decoder: i + 2 * self.mini_batch_decoder, :, :] if i + self.mini_batch_decoder < x.shape[2] else None
                 next_frames = self.single_forward(x[:, :, i: i + self.mini_batch_decoder, :, :], previous_features, after_features)
                 previous_features = x[:, :, i: i + self.mini_batch_decoder, :, :]
+                new_pixel_values.append(next_frames)
+            new_pixel_values = torch.cat(new_pixel_values, dim=2)
+        elif self.slice_mag_vae:
+            _, _, f, _, _ = x.size()
+            new_pixel_values = []
+            for i in range(0, x.shape[2], self.mini_batch_decoder):
+                next_frames = self.single_forward(x[:, :, i: i + self.mini_batch_decoder, :, :], None, None)
                 new_pixel_values.append(next_frames)
             new_pixel_values = torch.cat(new_pixel_values, dim=2)
         else:

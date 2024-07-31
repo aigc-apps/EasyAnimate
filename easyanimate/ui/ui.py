@@ -26,10 +26,15 @@ from transformers import (CLIPImageProcessor, CLIPVisionModelWithProjection,
 
 from easyanimate.data.bucket_sampler import ASPECT_RATIO_512, get_closest_ratio
 from easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
-from easyanimate.models.transformer3d import Transformer3DModel
+from easyanimate.models.transformer3d import (HunyuanTransformer3DModel,
+                                              Transformer3DModel)
 from easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
 from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
     EasyAnimateInpaintPipeline
+from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import \
+    EasyAnimatePipeline_Multi_Text_Encoder
+from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import \
+    EasyAnimatePipeline_Multi_Text_Encoder_Inpaint
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import (
     get_image_to_video_latent,
@@ -65,8 +70,8 @@ class EasyAnimateController:
         self.personalized_model_dir     = os.path.join(self.basedir, "models", "Personalized_Model")
         self.savedir                    = os.path.join(self.basedir, "samples", datetime.now().strftime("Gradio-%Y-%m-%dT%H-%M-%S"))
         self.savedir_sample             = os.path.join(self.savedir, "sample")
-        self.edition                    = "v3"
-        self.inference_config           = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_slicevae_motion_module_v3.yaml"))
+        self.edition                    = "v4"
+        self.inference_config           = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_slicevae_multi_text_encoder_v4.yaml"))
         os.makedirs(self.savedir, exist_ok=True)
 
         self.diffusion_transformer_list = []
@@ -114,11 +119,16 @@ class EasyAnimateController:
             return gr.update(), gr.update(value="none"), gr.update(visible=False), gr.update(visible=False), \
                 gr.update(value=672, minimum=128, maximum=1280, step=16), \
                 gr.update(value=384, minimum=128, maximum=1280, step=16), gr.update(value=144, minimum=9, maximum=144, step=9)
-        else:
+        elif edition == "v3":
             self.inference_config = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_slicevae_motion_module_v3.yaml"))
             return gr.update(), gr.update(value="none"), gr.update(visible=False), gr.update(visible=False), \
                 gr.update(value=672, minimum=128, maximum=1280, step=16), \
                 gr.update(value=384, minimum=128, maximum=1280, step=16), gr.update(value=144, minimum=8, maximum=144, step=8)
+        else:
+            self.inference_config = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_slicevae_multi_text_encoder_v4.yaml"))
+            return gr.update(), gr.update(value="none"), gr.update(visible=False), gr.update(visible=False), \
+                gr.update(value=672, minimum=128, maximum=1344, step=16), \
+                gr.update(value=384, minimum=128, maximum=1344, step=16), gr.update(value=144, minimum=8, maximum=144, step=8)
 
     def update_diffusion_transformer(self, diffusion_transformer_dropdown):
         print("Update diffusion transformer")
@@ -138,39 +148,70 @@ class EasyAnimateController:
         transformer_additional_kwargs = OmegaConf.to_container(self.inference_config['transformer_additional_kwargs'])
         if self.weight_dtype == torch.float16:
             transformer_additional_kwargs["upcast_attention"] = True
-        self.transformer = Transformer3DModel.from_pretrained_2d(
+
+        # Get Transformer
+        if self.inference_config.get('enable_multi_text_encoder', False):
+            Choosen_Transformer3DModel = HunyuanTransformer3DModel
+        else:
+            Choosen_Transformer3DModel = Transformer3DModel
+        self.transformer = Choosen_Transformer3DModel.from_pretrained_2d(
             diffusion_transformer_dropdown, 
             subfolder="transformer", 
             transformer_additional_kwargs=transformer_additional_kwargs
         ).to(self.weight_dtype)
-        self.tokenizer = T5Tokenizer.from_pretrained(diffusion_transformer_dropdown, subfolder="tokenizer")
-        self.text_encoder = T5EncoderModel.from_pretrained(diffusion_transformer_dropdown, subfolder="text_encoder", torch_dtype=self.weight_dtype)
-
+        
         # Get pipeline
-        if self.transformer.config.in_channels != 12:
-            self.pipeline = EasyAnimatePipeline(
-                vae=self.vae, 
-                text_encoder=self.text_encoder, 
-                tokenizer=self.tokenizer, 
-                transformer=self.transformer,
-                scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
-            )
+        if self.inference_config.get('enable_multi_text_encoder', False):
+            if self.transformer.config.in_channels != self.vae.config.latent_channels:
+                clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+                    diffusion_transformer_dropdown, subfolder="image_encoder"
+                ).to("cuda", self.weight_dtype)
+                clip_image_processor = CLIPImageProcessor.from_pretrained(
+                    diffusion_transformer_dropdown, subfolder="image_encoder"
+                )
+                self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
+                    diffusion_transformer_dropdown,
+                    vae=self.vae, 
+                    transformer=self.transformer,
+                    scheduler=scheduler_dict["Euler"].from_pretrained(diffusion_transformer_dropdown, subfolder="scheduler"),
+                    clip_image_encoder=clip_image_encoder,
+                    clip_image_processor=clip_image_processor,
+                )
+            else:
+                self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
+                    diffusion_transformer_dropdown,
+                    vae=self.vae, 
+                    transformer=self.transformer,
+                    scheduler=scheduler_dict["Euler"].from_pretrained(diffusion_transformer_dropdown, subfolder="scheduler"),
+                )
         else:
-            clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
-                diffusion_transformer_dropdown, subfolder="image_encoder"
-            ).to("cuda", self.weight_dtype)
-            clip_image_processor = CLIPImageProcessor.from_pretrained(
-                diffusion_transformer_dropdown, subfolder="image_encoder"
-            )
-            self.pipeline = EasyAnimateInpaintPipeline(
-                vae=self.vae, 
-                text_encoder=self.text_encoder, 
-                tokenizer=self.tokenizer, 
-                transformer=self.transformer,
-                scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs)),
-                clip_image_encoder=clip_image_encoder,
-                clip_image_processor=clip_image_processor,
-            )
+            self.tokenizer = T5Tokenizer.from_pretrained(diffusion_transformer_dropdown, subfolder="tokenizer")
+            self.text_encoder = T5EncoderModel.from_pretrained(diffusion_transformer_dropdown, subfolder="text_encoder", torch_dtype=self.weight_dtype)
+
+            if self.transformer.config.in_channels != self.vae.config.latent_channels:
+                clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+                    diffusion_transformer_dropdown, subfolder="image_encoder"
+                ).to("cuda", self.weight_dtype)
+                clip_image_processor = CLIPImageProcessor.from_pretrained(
+                    diffusion_transformer_dropdown, subfolder="image_encoder"
+                )
+                self.pipeline = EasyAnimateInpaintPipeline(
+                    vae=self.vae, 
+                    text_encoder=self.text_encoder, 
+                    tokenizer=self.tokenizer, 
+                    transformer=self.transformer,
+                    scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs)),
+                    clip_image_encoder=clip_image_encoder,
+                    clip_image_processor=clip_image_processor,
+                )
+            else:
+                self.pipeline = EasyAnimatePipeline(
+                    vae=self.vae, 
+                    text_encoder=self.text_encoder, 
+                    tokenizer=self.tokenizer, 
+                    transformer=self.transformer,
+                    scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
+                )
         if self.low_gpu_memory_mode:
             self.pipeline.enable_sequential_cpu_offload()
         else:
@@ -281,13 +322,13 @@ class EasyAnimateController:
             closest_size, closest_ratio = get_closest_ratio(original_height, original_width, ratios=aspect_ratio_sample_size)
             height_slider, width_slider = [int(x / 16) * 16 for x in closest_size]
 
-        if self.transformer.config.in_channels != 12 and start_image is not None:
+        if self.transformer.config.in_channels == self.vae.config.latent_channels and start_image is not None:
             if is_api:
                 return "", f"Please select an image to video pretrained model while using image to video."
             else:
                 raise gr.Error(f"Please select an image to video pretrained model while using image to video.")
 
-        if self.transformer.config.in_channels != 12 and generation_method == "Long Video Generation":
+        if self.transformer.config.in_channels == self.vae.config.latent_channels and generation_method == "Long Video Generation":
             if is_api:
                 return "", f"Please select an image to video pretrained model while using long video generation."
             else:
@@ -301,9 +342,9 @@ class EasyAnimateController:
 
         is_image = True if generation_method == "Image Generation" else False
 
-        if is_xformers_available(): self.transformer.enable_xformers_memory_efficient_attention()
+        if is_xformers_available() and not self.inference_config.get('enable_multi_text_encoder', False): self.transformer.enable_xformers_memory_efficient_attention()
 
-        self.pipeline.scheduler = scheduler_dict[sampler_dropdown](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
+        self.pipeline.scheduler = scheduler_dict[sampler_dropdown].from_pretrained(diffusion_transformer_dropdown, subfolder="scheduler")
         if self.lora_model_path != "none":
             # lora part
             self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
@@ -312,89 +353,74 @@ class EasyAnimateController:
         else: seed_textbox = np.random.randint(0, 1e10)
         generator = torch.Generator(device="cuda").manual_seed(int(seed_textbox))
         
-        try:
-            if self.transformer.config.in_channels == 12:
-                if generation_method == "Long Video Generation":
-                    init_frames = 0
-                    last_frames = init_frames + partial_video_length
-                    while init_frames < length_slider:
-                        if last_frames >= length_slider:
-                            if self.pipeline.vae.quant_conv.weight.ndim==5:
-                                mini_batch_encoder = self.pipeline.vae.mini_batch_encoder
-                                _partial_video_length = length_slider - init_frames
-                                _partial_video_length = int(_partial_video_length // mini_batch_encoder * mini_batch_encoder)
-                            else:
-                                _partial_video_length = length_slider - init_frames
-                            
-                            if _partial_video_length <= 0:
-                                break
+        # try:
+        if self.transformer.config.in_channels != self.vae.config.latent_channels:
+            if generation_method == "Long Video Generation":
+                init_frames = 0
+                last_frames = init_frames + partial_video_length
+                while init_frames < length_slider:
+                    if last_frames >= length_slider:
+                        if self.pipeline.vae.quant_conv.weight.ndim==5:
+                            mini_batch_encoder = self.pipeline.vae.mini_batch_encoder
+                            _partial_video_length = length_slider - init_frames
+                            _partial_video_length = int(_partial_video_length // mini_batch_encoder * mini_batch_encoder)
                         else:
-                            _partial_video_length = partial_video_length
-
-                        if last_frames >= length_slider:
-                            input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, video_length=_partial_video_length, sample_size=(height_slider, width_slider))
-                        else:
-                            input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, None, video_length=_partial_video_length, sample_size=(height_slider, width_slider))
-
-                        with torch.no_grad():
-                            sample = self.pipeline(
-                                prompt_textbox, 
-                                negative_prompt     = negative_prompt_textbox,
-                                num_inference_steps = sample_step_slider,
-                                guidance_scale      = cfg_scale_slider,
-                                width               = width_slider,
-                                height              = height_slider,
-                                video_length        = _partial_video_length,
-                                generator           = generator,
-
-                                video        = input_video,
-                                mask_video   = input_video_mask,
-                                clip_image   = clip_image, 
-                                strength     = 1,
-                            ).videos
+                            _partial_video_length = length_slider - init_frames
                         
-                        if init_frames != 0:
-                            mix_ratio = torch.from_numpy(
-                                np.array([float(_index) / float(overlap_video_length) for _index in range(overlap_video_length)], np.float32)
-                            ).unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-                            
-                            new_sample[:, :, -overlap_video_length:] = new_sample[:, :, -overlap_video_length:] * (1 - mix_ratio) + \
-                                sample[:, :, :overlap_video_length] * mix_ratio
-                            new_sample = torch.cat([new_sample, sample[:, :, overlap_video_length:]], dim = 2)
-
-                            sample = new_sample
-                        else:
-                            new_sample = sample
-
-                        if last_frames >= length_slider:
+                        if _partial_video_length <= 0:
                             break
+                    else:
+                        _partial_video_length = partial_video_length
 
-                        start_image = [
-                            Image.fromarray(
-                                (sample[0, :, _index].transpose(0, 1).transpose(1, 2) * 255).numpy().astype(np.uint8)
-                            ) for _index in range(-overlap_video_length, 0)
-                        ]
+                    if last_frames >= length_slider:
+                        input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, video_length=_partial_video_length, sample_size=(height_slider, width_slider))
+                    else:
+                        input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, None, video_length=_partial_video_length, sample_size=(height_slider, width_slider))
 
-                        init_frames = init_frames + _partial_video_length - overlap_video_length
-                        last_frames = init_frames + _partial_video_length
-                else:
-                    input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
+                    with torch.no_grad():
+                        sample = self.pipeline(
+                            prompt_textbox, 
+                            negative_prompt     = negative_prompt_textbox,
+                            num_inference_steps = sample_step_slider,
+                            guidance_scale      = cfg_scale_slider,
+                            width               = width_slider,
+                            height              = height_slider,
+                            video_length        = _partial_video_length,
+                            generator           = generator,
 
-                    sample = self.pipeline(
-                        prompt_textbox,
-                        negative_prompt     = negative_prompt_textbox,
-                        num_inference_steps = sample_step_slider,
-                        guidance_scale      = cfg_scale_slider,
-                        width               = width_slider,
-                        height              = height_slider,
-                        video_length        = length_slider if not is_image else 1,
-                        generator           = generator,
+                            video        = input_video,
+                            mask_video   = input_video_mask,
+                            clip_image   = clip_image, 
+                            strength     = 1,
+                        ).videos
+                    
+                    if init_frames != 0:
+                        mix_ratio = torch.from_numpy(
+                            np.array([float(_index) / float(overlap_video_length) for _index in range(overlap_video_length)], np.float32)
+                        ).unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+                        
+                        new_sample[:, :, -overlap_video_length:] = new_sample[:, :, -overlap_video_length:] * (1 - mix_ratio) + \
+                            sample[:, :, :overlap_video_length] * mix_ratio
+                        new_sample = torch.cat([new_sample, sample[:, :, overlap_video_length:]], dim = 2)
 
-                        video        = input_video,
-                        mask_video   = input_video_mask,
-                        clip_image   = clip_image, 
-                    ).videos
+                        sample = new_sample
+                    else:
+                        new_sample = sample
+
+                    if last_frames >= length_slider:
+                        break
+
+                    start_image = [
+                        Image.fromarray(
+                            (sample[0, :, _index].transpose(0, 1).transpose(1, 2) * 255).numpy().astype(np.uint8)
+                        ) for _index in range(-overlap_video_length, 0)
+                    ]
+
+                    init_frames = init_frames + _partial_video_length - overlap_video_length
+                    last_frames = init_frames + _partial_video_length
             else:
+                input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
+
                 sample = self.pipeline(
                     prompt_textbox,
                     negative_prompt     = negative_prompt_textbox,
@@ -403,18 +429,33 @@ class EasyAnimateController:
                     width               = width_slider,
                     height              = height_slider,
                     video_length        = length_slider if not is_image else 1,
-                    generator           = generator
+                    generator           = generator,
+
+                    video        = input_video,
+                    mask_video   = input_video_mask,
+                    clip_image   = clip_image, 
                 ).videos
-        except Exception as e:
-            gc.collect()
-            torch.cuda.empty_cache()
-            torch.cuda.ipc_collect()
-            if self.lora_model_path != "none":
-                self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
-            if is_api:
-                return "", f"Error. error information is {str(e)}"
-            else:
-                return gr.update(), gr.update(), f"Error. error information is {str(e)}"
+        else:
+            sample = self.pipeline(
+                prompt_textbox,
+                negative_prompt     = negative_prompt_textbox,
+                num_inference_steps = sample_step_slider,
+                guidance_scale      = cfg_scale_slider,
+                width               = width_slider,
+                height              = height_slider,
+                video_length        = length_slider if not is_image else 1,
+                generator           = generator
+            ).videos
+        # except Exception as e:
+        #     gc.collect()
+        #     torch.cuda.empty_cache()
+        #     torch.cuda.ipc_collect()
+        #     if self.lora_model_path != "none":
+        #         self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
+        #     if is_api:
+        #         return "", f"Error. error information is {str(e)}"
+        #     else:
+        #         return gr.update(), gr.update(), f"Error. error information is {str(e)}"
 
         gc.collect()
         torch.cuda.empty_cache()
@@ -501,8 +542,8 @@ def ui(low_gpu_memory_mode, weight_dtype):
             with gr.Row():
                 easyanimate_edition_dropdown = gr.Dropdown(
                     label="The config of EasyAnimate Edition (EasyAnimate版本配置)",
-                    choices=["v1", "v2", "v3"],
-                    value="v3",
+                    choices=["v1", "v2", "v3", "v4"],
+                    value="v4",
                     interactive=True,
                 )
             gr.Markdown(
@@ -590,8 +631,8 @@ def ui(low_gpu_memory_mode, weight_dtype):
                         value="Generate by",
                         show_label=False,
                     )
-                    width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=128, maximum=1280, step=16)
-                    height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=128, maximum=1280, step=16)
+                    width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=128, maximum=1344, step=16)
+                    height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=128, maximum=1344, step=16)
                     base_resolution  = gr.Radio(label="Base Resolution of Pretrained Models", value=512, choices=[512, 768, 960], visible=False)
 
                     with gr.Group():
@@ -606,7 +647,10 @@ def ui(low_gpu_memory_mode, weight_dtype):
                             partial_video_length = gr.Slider(label="Partial video generation length (每个部分的视频生成帧数)", value=72, minimum=8,   maximum=144,  step=8, visible=False)
                     
                     with gr.Accordion("Image to Video (图片到视频)", open=False):
-                        start_image = gr.Image(label="The image at the beginning of the video (图片到视频的开始图片)", show_label=True, elem_id="i2v_start", sources="upload", type="filepath")
+                        start_image = gr.Image(
+                            label="The image at the beginning of the video (图片到视频的开始图片)",  show_label=True, 
+                            elem_id="i2v_start", sources="upload", type="filepath", 
+                        )
                         
                         template_gallery_path = ["asset/1.png", "asset/2.png", "asset/3.png", "asset/4.png", "asset/5.png"]
                         def select_template(evt: gr.SelectData):
@@ -729,60 +773,85 @@ class EasyAnimateController_Modelscope:
 
         # Config and model path
         self.edition = edition
+        self.weight_dtype = weight_dtype
         self.inference_config = OmegaConf.load(config_path)
         # Get Transformer
         transformer_additional_kwargs = OmegaConf.to_container(self.inference_config['transformer_additional_kwargs'])
-        if weight_dtype == torch.float16:
+        if self.weight_dtype == torch.float16:
             transformer_additional_kwargs["upcast_attention"] = True
-        self.transformer = Transformer3DModel.from_pretrained_2d(
+        if self.inference_config.get('enable_multi_text_encoder', False):
+            Choosen_Transformer3DModel = HunyuanTransformer3DModel
+        else:
+            Choosen_Transformer3DModel = Transformer3DModel
+        self.transformer = Choosen_Transformer3DModel.from_pretrained_2d(
             model_name, 
-            subfolder="transformer",
+            subfolder="transformer", 
             transformer_additional_kwargs=transformer_additional_kwargs
-        ).to(weight_dtype)
+        ).to(self.weight_dtype)
+        
         if OmegaConf.to_container(self.inference_config['vae_kwargs'])['enable_magvit']:
             Choosen_AutoencoderKL = AutoencoderKLMagvit
         else:
             Choosen_AutoencoderKL = AutoencoderKL
         self.vae = Choosen_AutoencoderKL.from_pretrained(
             model_name, 
-            subfolder="vae"
-        ).to(weight_dtype)
-        if OmegaConf.to_container(self.inference_config['vae_kwargs'])['enable_magvit'] and weight_dtype == torch.float16:
+            subfolder="vae", 
+        ).to(self.weight_dtype)
+        if OmegaConf.to_container(self.inference_config['vae_kwargs'])['enable_magvit'] and self.weight_dtype == torch.float16:
             self.vae.upcast_vae = True
-        self.tokenizer = T5Tokenizer.from_pretrained(
-            model_name, 
-            subfolder="tokenizer"
-        )
-        self.text_encoder = T5EncoderModel.from_pretrained(
-            model_name, 
-            subfolder="text_encoder", 
-            torch_dtype=weight_dtype
-        )
+
         # Get pipeline
-        if self.transformer.config.in_channels != 12:
-            self.pipeline = EasyAnimatePipeline(
-                vae=self.vae, 
-                text_encoder=self.text_encoder, 
-                tokenizer=self.tokenizer, 
-                transformer=self.transformer,
-                scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
-            )
+        if self.inference_config.get('enable_multi_text_encoder', False):
+            if self.transformer.config.in_channels != self.vae.config.latent_channels:
+                clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+                    model_name, subfolder="image_encoder"
+                ).to("cuda", self.weight_dtype)
+                clip_image_processor = CLIPImageProcessor.from_pretrained(
+                    model_name, subfolder="image_encoder"
+                )
+                self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
+                    model_name,
+                    vae=self.vae, 
+                    transformer=self.transformer,
+                    scheduler=scheduler_dict["Euler"].from_pretrained(model_name, subfolder="scheduler"),
+                    clip_image_encoder=clip_image_encoder,
+                    clip_image_processor=clip_image_processor,
+                )
+            else:
+                self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
+                    model_name,
+                    vae=self.vae, 
+                    transformer=self.transformer,
+                    scheduler=scheduler_dict["Euler"].from_pretrained(model_name, subfolder="scheduler"),
+                )
         else:
-            clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
-                model_name, subfolder="image_encoder"
-            ).to("cuda", weight_dtype)
-            clip_image_processor = CLIPImageProcessor.from_pretrained(
-                model_name, subfolder="image_encoder"
-            )
-            self.pipeline = EasyAnimateInpaintPipeline(
-                vae=self.vae, 
-                text_encoder=self.text_encoder, 
-                tokenizer=self.tokenizer, 
-                transformer=self.transformer,
-                scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs)),
-                clip_image_encoder=clip_image_encoder,
-                clip_image_processor=clip_image_processor,
-            )
+            self.tokenizer = T5Tokenizer.from_pretrained(model_name, subfolder="tokenizer")
+            self.text_encoder = T5EncoderModel.from_pretrained(model_name, subfolder="text_encoder", torch_dtype=self.weight_dtype)
+
+            if self.transformer.config.in_channels != self.vae.config.latent_channels:
+                clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+                    model_name, subfolder="image_encoder"
+                ).to("cuda", self.weight_dtype)
+                clip_image_processor = CLIPImageProcessor.from_pretrained(
+                    model_name, subfolder="image_encoder"
+                )
+                self.pipeline = EasyAnimateInpaintPipeline(
+                    vae=self.vae, 
+                    text_encoder=self.text_encoder, 
+                    tokenizer=self.tokenizer, 
+                    transformer=self.transformer,
+                    scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs)),
+                    clip_image_encoder=clip_image_encoder,
+                    clip_image_processor=clip_image_processor,
+                )
+            else:
+                self.pipeline = EasyAnimatePipeline(
+                    vae=self.vae, 
+                    text_encoder=self.text_encoder, 
+                    tokenizer=self.tokenizer, 
+                    transformer=self.transformer,
+                    scheduler=scheduler_dict["Euler"](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
+                )
         if low_gpu_memory_mode:
             self.pipeline.enable_sequential_cpu_offload()
         else:
@@ -850,7 +919,7 @@ class EasyAnimateController_Modelscope:
             closest_size, closest_ratio = get_closest_ratio(original_height, original_width, ratios=aspect_ratio_sample_size)
             height_slider, width_slider = [int(x / 16) * 16 for x in closest_size]
 
-        if self.transformer.config.in_channels != 12 and start_image is not None:
+        if self.transformer.config.in_channels == self.vae.config.latent_channels and start_image is not None:
             raise gr.Error(f"Please select an image to video pretrained model while using image to video.")
         
         if start_image is None and end_image is not None:
@@ -858,9 +927,9 @@ class EasyAnimateController_Modelscope:
 
         is_image = True if generation_method == "Image Generation" else False
 
-        if is_xformers_available(): self.transformer.enable_xformers_memory_efficient_attention()
+        if is_xformers_available() and not self.inference_config.get('enable_multi_text_encoder', False): self.transformer.enable_xformers_memory_efficient_attention()
 
-        self.pipeline.scheduler = scheduler_dict[sampler_dropdown](**OmegaConf.to_container(self.inference_config.noise_scheduler_kwargs))
+        self.pipeline.scheduler = scheduler_dict[sampler_dropdown].from_pretrained(diffusion_transformer_dropdown, subfolder="scheduler")
         if self.lora_model_path != "none":
             # lora part
             self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
@@ -870,7 +939,7 @@ class EasyAnimateController_Modelscope:
         generator = torch.Generator(device="cuda").manual_seed(int(seed_textbox))
         
         try:
-            if self.transformer.config.in_channels == 12:
+            if self.transformer.config.in_channels != self.vae.config.latent_channels:
                 input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
 
                 sample = self.pipeline(

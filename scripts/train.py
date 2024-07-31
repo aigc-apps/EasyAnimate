@@ -20,8 +20,8 @@ import gc
 import logging
 import math
 import os
-import pickle
 import shutil
+import pickle
 import sys
 
 import accelerate
@@ -76,6 +76,8 @@ from easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
 from easyanimate.models.transformer2d import Transformer2DModel
 from easyanimate.models.transformer3d import (HunyuanTransformer3DModel,
                                               Transformer3DModel)
+from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import EasyAnimatePipeline_Multi_Text_Encoder
+from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import EasyAnimatePipeline_Multi_Text_Encoder_Inpaint
 from easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
 from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
     EasyAnimateInpaintPipeline
@@ -85,7 +87,7 @@ from easyanimate.pipeline.pipeline_pixart_magvit import \
     PixArtAlphaMagvitPipeline
 from easyanimate.utils import gaussian_diffusion as gd
 from easyanimate.utils.respace import SpacedDiffusion, space_timesteps
-from easyanimate.utils.utils import save_videos_grid
+from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 
 if is_wandb_available():
     import wandb
@@ -96,45 +98,83 @@ check_min_version("0.18.0.dev0")
 
 logger = get_logger(__name__, log_level="INFO")
 
-def log_validation(vae, text_encoder, tokenizer, transformer3d, config, args, accelerator, weight_dtype, global_step):
+def log_validation(vae, text_encoder, text_encoder_2, tokenizer, tokenizer_2, transformer3d, config, args, accelerator, weight_dtype, global_step):
     try:
         logger.info("Running validation... ")
 
-        transformer3d_val = Transformer3DModel.from_pretrained_2d(
+        # Get Transformer
+        if config.get('enable_multi_text_encoder', False):
+            Choosen_Transformer3DModel = HunyuanTransformer3DModel
+        else:
+            Choosen_Transformer3DModel = Transformer3DModel
+            
+        transformer3d_val = Choosen_Transformer3DModel.from_pretrained_2d(
             args.pretrained_model_name_or_path, subfolder="transformer",
             transformer_additional_kwargs=OmegaConf.to_container(config['transformer_additional_kwargs'])
         ).to(weight_dtype)
         transformer3d_val.load_state_dict(accelerator.unwrap_model(transformer3d).state_dict())
 
-        if args.train_mode != "normal":
-            clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
-                args.pretrained_model_name_or_path, subfolder="image_encoder"
-            )
-            clip_image_processor = CLIPImageProcessor.from_pretrained(
-                args.pretrained_model_name_or_path, subfolder="image_encoder"
-            )
-            pipeline = EasyAnimateInpaintPipeline.from_pretrained(
-                args.pretrained_model_name_or_path, 
-                vae=accelerator.unwrap_model(vae).to(weight_dtype), 
-                text_encoder=accelerator.unwrap_model(text_encoder),
-                tokenizer=tokenizer,
-                transformer=transformer3d_val,
-                torch_dtype=weight_dtype,
-                clip_image_encoder=clip_image_encoder,
-                clip_image_processor=clip_image_processor,
-            )
+        if config.get('enable_multi_text_encoder', False):
+            if args.train_mode != "normal":
+                clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+                    args.pretrained_model_name_or_path, subfolder="image_encoder"
+                )
+                clip_image_processor = CLIPImageProcessor.from_pretrained(
+                    args.pretrained_model_name_or_path, subfolder="image_encoder"
+                )
+                pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
+                    args.pretrained_model_name_or_path, 
+                    vae=accelerator.unwrap_model(vae).to(weight_dtype), 
+                    text_encoder=accelerator.unwrap_model(text_encoder),
+                    text_encoder_2=accelerator.unwrap_model(text_encoder_2),
+                    tokenizer=tokenizer,
+                    tokenizer_2=tokenizer_2,
+                    transformer=transformer3d_val,
+                    torch_dtype=weight_dtype,
+                    clip_image_encoder=clip_image_encoder,
+                    clip_image_processor=clip_image_processor,
+                )
+            else:
+                pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
+                    args.pretrained_model_name_or_path, 
+                    vae=accelerator.unwrap_model(vae).to(weight_dtype), 
+                    text_encoder=accelerator.unwrap_model(text_encoder),
+                    text_encoder_2=accelerator.unwrap_model(text_encoder_2),
+                    tokenizer=tokenizer,
+                    tokenizer_2=tokenizer_2,
+                    transformer=transformer3d_val,
+                    torch_dtype=weight_dtype
+                )
         else:
-            pipeline = EasyAnimatePipeline.from_pretrained(
-                args.pretrained_model_name_or_path, 
-                vae=accelerator.unwrap_model(vae).to(weight_dtype), 
-                text_encoder=accelerator.unwrap_model(text_encoder),
-                tokenizer=tokenizer,
-                transformer=transformer3d_val,
-                torch_dtype=weight_dtype
-            )
+            if args.train_mode != "normal":
+                clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+                    args.pretrained_model_name_or_path, subfolder="image_encoder"
+                )
+                clip_image_processor = CLIPImageProcessor.from_pretrained(
+                    args.pretrained_model_name_or_path, subfolder="image_encoder"
+                )
+                pipeline = EasyAnimateInpaintPipeline.from_pretrained(
+                    args.pretrained_model_name_or_path, 
+                    vae=accelerator.unwrap_model(vae).to(weight_dtype), 
+                    text_encoder=accelerator.unwrap_model(text_encoder),
+                    tokenizer=tokenizer,
+                    transformer=transformer3d_val,
+                    torch_dtype=weight_dtype,
+                    clip_image_encoder=clip_image_encoder,
+                    clip_image_processor=clip_image_processor,
+                )
+            else:
+                pipeline = EasyAnimatePipeline.from_pretrained(
+                    args.pretrained_model_name_or_path, 
+                    vae=accelerator.unwrap_model(vae).to(weight_dtype), 
+                    text_encoder=accelerator.unwrap_model(text_encoder),
+                    tokenizer=tokenizer,
+                    transformer=transformer3d_val,
+                    torch_dtype=weight_dtype
+                )
         pipeline = pipeline.to(accelerator.device)
 
-        if args.enable_xformers_memory_efficient_attention:
+        if args.enable_xformers_memory_efficient_attention and not config.get('enable_multi_text_encoder', False):
             pipeline.enable_xformers_memory_efficient_attention()
 
         if args.seed is None:
@@ -511,6 +551,24 @@ def parse_args():
         "--random_frame_crop", action="store_true", help="Whether enable random frame crop sample in datasets."
     )
     parser.add_argument(
+        "--random_hw_adapt", action="store_true", help="Whether enable random adapt height and width in datasets."
+    )
+    parser.add_argument(
+        "--training_with_video_token_length", action="store_true", help="The training stage of the model in training.",
+    )
+    parser.add_argument(
+        "--noise_share_in_frames", action="store_true", help="Whether enable noise share in frames."
+    )
+    parser.add_argument(
+        "--noise_share_in_frames_ratio", type=float, default=0.5, help="Noise share ratio.",
+    )
+    parser.add_argument(
+        "--motion_sub_loss", action="store_true", help="Whether enable motion sub loss."
+    )
+    parser.add_argument(
+        "--motion_sub_loss_ratio", type=float, default=0.25, help="The ratio of motion sub loss."
+    )
+    parser.add_argument(
         "--train_sampling_steps",
         type=int,
         default=1000,
@@ -722,6 +780,7 @@ def main():
         tokenizer = T5Tokenizer.from_pretrained(
             args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
         )
+        tokenizer_2 = None
 
     def deepspeed_zero_init_disabled_context_manager():
         """
@@ -763,6 +822,7 @@ def main():
                 args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision, variant=args.variant,
                 torch_dtype=weight_dtype
             )
+            text_encoder_2 = None
 
         vae = Choosen_AutoencoderKL.from_pretrained(
             args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision, variant=args.variant,
@@ -951,21 +1011,28 @@ def main():
         {'params': [], 'lr': args.learning_rate},
         {'params': [], 'lr': args.learning_rate / 2},
     ]
+    in_already = []
     for name, param in transformer3d.named_parameters():
         high_lr_flag = False
+        if name in in_already:
+            continue
         for trainable_module_name in args.trainable_modules:
             if trainable_module_name in name:
+                in_already.append(name)
                 high_lr_flag = True
                 trainable_params_optim[0]['params'].append(param)
                 if accelerator.is_main_process:
                     print(f"Set {name} to lr : {args.learning_rate}")
+                break
         if high_lr_flag:
             continue
         for trainable_module_name in args.trainable_modules_low_learning_rate:
             if trainable_module_name in name:
+                in_already.append(name)
                 trainable_params_optim[1]['params'].append(param)
                 if accelerator.is_main_process:
                     print(f"Set {name} to lr : {args.learning_rate / 2}")
+                break
 
     if args.use_came:
         optimizer = optimizer_cls(
@@ -1005,6 +1072,49 @@ def main():
             batch_size=args.train_batch_size, train_folder = args.train_data_dir, drop_last=True,
             aspect_ratios=aspect_ratio_sample_size,
         )
+
+        def get_random_downsample_ratio(sample_size, is_image=True):
+            def create_special_list(length):
+                if length == 1:
+                    return [1.0]
+                if length >= 2:
+                    first_element = 0.75
+                    remaining_sum = 1.0 - first_element
+                    other_elements_value = remaining_sum / (length - 1)
+                    special_list = [first_element] + [other_elements_value] * (length - 1)
+                    return special_list
+                    
+            if sample_size >= 1536:
+                number_list = [1, 1.25, 1.5, 2, 2.5, 3] + [args.image_sample_size / args.video_sample_size] if is_image else []
+            elif sample_size >= 1024:
+                number_list = [1, 1.25, 1.5, 2] + [args.image_sample_size / args.video_sample_size] if is_image else []
+            elif sample_size >= 768:
+                number_list = [1, 1.25, 1.5] + [args.image_sample_size / args.video_sample_size] if is_image else []
+            elif sample_size >= 512:
+                number_list = [1] + [args.image_sample_size / args.video_sample_size] if is_image else []
+            else:
+                number_list = [1]
+            number_list_prob = np.array(create_special_list(len(number_list)))
+            if rng is None:
+                return np.random.choice(number_list, p = number_list_prob)
+            else:
+                return rng.choice(number_list, p = number_list_prob)
+
+        def get_length_to_frame_num(token_length):
+            if args.image_sample_size > args.video_sample_size:
+                sample_sizes = list(range(args.video_sample_size, args.image_sample_size + 1, 64))
+            else:
+                sample_sizes = [args.video_sample_size]
+            
+            length_to_frame_num = {
+                sample_size: min(token_length / sample_size / sample_size, args.video_sample_n_frames) for sample_size in sample_sizes
+            }
+            return length_to_frame_num
+
+        length_to_frame_num = get_length_to_frame_num(
+            args.video_sample_n_frames * args.video_sample_size * args.video_sample_size, 
+        )
+
         def collate_fn(examples):
             # Create new output
             new_examples                 = {}
@@ -1018,7 +1128,34 @@ def main():
 
             # Get ratio
             pixel_value     = examples[0]["pixel_values"]
+            data_type       = examples[0]["data_type"]
             f, h, w, c      = np.shape(pixel_value)
+            if data_type == 'image':
+                random_downsample_ratio = 1 if not args.random_hw_adapt else get_random_downsample_ratio(args.image_sample_size)
+
+                aspect_ratio_sample_size = {key : [x / 512 * args.image_sample_size / random_downsample_ratio for x in ASPECT_RATIO_512[key]] for key in ASPECT_RATIO_512.keys()}
+                aspect_ratio_random_crop_sample_size = {key : [x / 512 * args.image_sample_size / random_downsample_ratio for x in ASPECT_RATIO_RANDOM_CROP_512[key]] for key in ASPECT_RATIO_RANDOM_CROP_512.keys()}
+                
+                batch_video_length = args.video_sample_n_frames + sample_n_frames_bucket_interval
+            else:
+                if args.random_hw_adapt:
+                    if args.training_with_video_token_length:
+                        if rng is None:
+                            local_video_sample_size = np.random.choice(list(length_to_frame_num.keys()))
+                        else:
+                            local_video_sample_size = rng.choice(list(length_to_frame_num.keys()))
+                        batch_video_length = length_to_frame_num[local_video_sample_size]
+                        random_downsample_ratio = args.video_sample_size / local_video_sample_size
+                    else:
+                        random_downsample_ratio = get_random_downsample_ratio(args.video_sample_size, is_image=False)
+                        batch_video_length = args.video_sample_n_frames + sample_n_frames_bucket_interval
+                else:
+                    random_downsample_ratio = 1
+                    batch_video_length = args.video_sample_n_frames + sample_n_frames_bucket_interval
+
+                aspect_ratio_sample_size = {key : [x / 512 * args.video_sample_size / random_downsample_ratio for x in ASPECT_RATIO_512[key]] for key in ASPECT_RATIO_512.keys()}
+                aspect_ratio_random_crop_sample_size = {key : [x / 512 * args.video_sample_size / random_downsample_ratio for x in ASPECT_RATIO_RANDOM_CROP_512[key]] for key in ASPECT_RATIO_RANDOM_CROP_512.keys()}
+
             closest_size, closest_ratio = get_closest_ratio(h, w, ratios=aspect_ratio_sample_size)
             closest_size = [int(x / 16) * 16 for x in closest_size]
             if args.random_ratio_crop:
@@ -1032,8 +1169,6 @@ def main():
                     ]
                 random_sample_size = [int(x / 16) * 16 for x in random_sample_size]
 
-            # For!
-            batch_video_length = args.video_sample_n_frames + sample_n_frames_bucket_interval
             for example in examples:
                 if args.random_ratio_crop:
                     # To 0~1
@@ -1084,13 +1219,21 @@ def main():
                     new_examples["mask_pixel_values"].append(mask_pixel_values)
                     new_examples["mask"].append(mask)
 
-                    clip_index = np.random.randint(0, len(new_examples["pixel_values"][-1]))
+                    def get_random_clip_index(low, high):
+                        if high - low <= 1.1:
+                            return low
+                        values = np.arange(low, high)
+                        probabilities = np.ones(len(values)) * 0.5 / (len(values) - 1)
+                        probabilities[0] = 0.5
+                        return np.random.choice(values, p=probabilities)
+
+                    clip_index = get_random_clip_index(0, len(new_examples["pixel_values"][-1]))
                     clip_pixel_values = new_examples["pixel_values"][-1][clip_index].permute(1, 2, 0).contiguous()
                     clip_pixel_values = (clip_pixel_values * 0.5 + 0.5) * 255
                     new_examples["clip_pixel_values"].append(clip_pixel_values)
 
                     ref_pixel_values = new_examples["pixel_values"][-1][clip_index].unsqueeze(0)
-                    if np.random.rand() < 0.50:
+                    if np.random.rand() < 0.50 or batch_video_length == 1 or (mask == 1).all():
                         ref_pixel_values = torch.ones_like(ref_pixel_values) * -1
                     new_examples["ref_pixel_values"].append(ref_pixel_values)
   
@@ -1251,19 +1394,38 @@ def main():
                     for idx, (clip_pixel_value, pixel_value, ref_pixel_value, text) in enumerate(zip(clip_pixel_values, mask_pixel_values, ref_pixel_values, texts)):
                         pixel_value = pixel_value[None, ...]
                         ref_pixel_value = ref_pixel_value[None, ...]
-                        Image.fromarray(np.uint8(clip_pixel_value)).save(f"{args.output_dir}/sanity_check/clip_{'-'.join(text.replace('/', '').split()[:10]) if not text == '' else f'{global_step}-{idx}'}.png")
-                        save_videos_grid(pixel_value, f"{args.output_dir}/sanity_check/mask_{'-'.join(text.replace('/', '').split()[:10]) if not text == '' else f'{global_step}-{idx}'}.gif", rescale=True)
-                        save_videos_grid(ref_pixel_value, f"{args.output_dir}/sanity_check/ref_{'-'.join(text.replace('/', '').split()[:10]) if not text == '' else f'{global_step}-{idx}'}.gif", rescale=True)
+                        Image.fromarray(np.uint8(clip_pixel_value)).save(f"{args.output_dir}/sanity_check/clip_{gif_name[:10] if not text == '' else f'{global_step}-{idx}'}.png")
+                        save_videos_grid(pixel_value, f"{args.output_dir}/sanity_check/mask_{gif_name[:10] if not text == '' else f'{global_step}-{idx}'}.gif", rescale=True)
+                        save_videos_grid(ref_pixel_value, f"{args.output_dir}/sanity_check/ref_{gif_name[:10] if not text == '' else f'{global_step}-{idx}'}.gif", rescale=True)
 
             with accelerator.accumulate(transformer3d):
                 # Convert images to latent space
                 pixel_values = batch["pixel_values"].to(weight_dtype)
+                if args.training_with_video_token_length:
+                    if args.video_sample_n_frames * args.video_sample_size * args.video_sample_size // 16 >= pixel_values.size()[2] * pixel_values.size()[3] * pixel_values.size()[4]:
+                        pixel_values = torch.tile(pixel_values, (4, 1, 1, 1, 1))
+                        batch['text'] = batch['text'] * 4
+                    elif args.video_sample_n_frames * args.video_sample_size * args.video_sample_size // 4 >= pixel_values.size()[2] * pixel_values.size()[3] * pixel_values.size()[4]:
+                        pixel_values = torch.tile(pixel_values, (2, 1, 1, 1, 1))
+                        batch['text'] = batch['text'] * 2
+                    
                 if args.train_mode != "normal":
                     clip_pixel_values = batch["clip_pixel_values"]
                     ref_pixel_values = batch["ref_pixel_values"].to(weight_dtype)
                     mask_pixel_values = batch["mask_pixel_values"].to(weight_dtype)
                     mask = batch["mask"].to(weight_dtype)
-                
+                    if args.training_with_video_token_length:
+                        if args.video_sample_n_frames * args.video_sample_size * args.video_sample_size // 16 >= pixel_values.size()[2] * pixel_values.size()[3] * pixel_values.size()[4]:
+                            clip_pixel_values = torch.tile(clip_pixel_values, (4, 1, 1, 1))
+                            ref_pixel_values = torch.tile(ref_pixel_values, (4, 1, 1, 1, 1))
+                            mask_pixel_values = torch.tile(mask_pixel_values, (4, 1, 1, 1, 1))
+                            mask = torch.tile(mask, (4, 1, 1, 1, 1))
+                        elif args.video_sample_n_frames * args.video_sample_size * args.video_sample_size // 4 >= pixel_values.size()[2] * pixel_values.size()[3] * pixel_values.size()[4]:
+                            clip_pixel_values = torch.tile(clip_pixel_values, (2, 1, 1, 1))
+                            ref_pixel_values = torch.tile(ref_pixel_values, (2, 1, 1, 1, 1))
+                            mask_pixel_values = torch.tile(mask_pixel_values, (2, 1, 1, 1, 1))
+                            mask = torch.tile(mask, (2, 1, 1, 1, 1))
+
                 def create_special_list(length):
                     if length == 1:
                         return [1.0]
@@ -1296,30 +1458,15 @@ def main():
                 with torch.no_grad():
                     if vae.quant_conv.weight.ndim==5:
                         # This way is quicker when batch grows up
-                        if vae.slice_compression_vae:
-                            pixel_values = rearrange(pixel_values, "b f c h w -> b c f h w")
-                            bs = args.vae_mini_batch
-                            new_pixel_values = []
-                            for i in range(0, pixel_values.shape[0], bs):
-                                pixel_values_bs = pixel_values[i : i + bs]
-                                pixel_values_bs = vae.encode(pixel_values_bs)[0]
-                                pixel_values_bs = pixel_values_bs.sample()
-                                new_pixel_values.append(pixel_values_bs)
-                            latents = torch.cat(new_pixel_values, dim = 0)
-                        else:
-                            pixel_values = rearrange(pixel_values, "b f c h w -> b c f h w")
-                            bs = args.vae_mini_batch
-                            new_pixel_values = []
-                            for i in range(0, pixel_values.shape[0], bs):
-                                new_pixel_values_mini_batch = []
-                                for j in range(0, pixel_values.shape[2], sample_n_frames_bucket_interval):
-                                    pixel_values_bs = pixel_values[i : i + bs, :, j: j + sample_n_frames_bucket_interval, :, :]
-                                    pixel_values_bs = vae.encode(pixel_values_bs)[0]
-                                    pixel_values_bs = pixel_values_bs.sample()
-                                    new_pixel_values_mini_batch.append(pixel_values_bs)
-                                new_pixel_values_mini_batch = torch.cat(new_pixel_values_mini_batch, dim = 2)
-                                new_pixel_values.append(new_pixel_values_mini_batch)
-                            latents = torch.cat(new_pixel_values, dim = 0)
+                        pixel_values = rearrange(pixel_values, "b f c h w -> b c f h w")
+                        bs = args.vae_mini_batch
+                        new_pixel_values = []
+                        for i in range(0, pixel_values.shape[0], bs):
+                            pixel_values_bs = pixel_values[i : i + bs]
+                            pixel_values_bs = vae.encode(pixel_values_bs)[0]
+                            pixel_values_bs = pixel_values_bs.sample()
+                            new_pixel_values.append(pixel_values_bs)
+                        latents = torch.cat(new_pixel_values, dim = 0)
                     else:
                         # This way is quicker when batch grows up
                         pixel_values = rearrange(pixel_values, "b f c h w -> (b f) c h w")
@@ -1338,99 +1485,44 @@ def main():
                     if args.train_mode != "normal":
                         if vae.quant_conv.weight.ndim==5:
                             # This way is quicker when batch grows up
-                            if vae.slice_compression_vae:
-                                if config.get('enable_multi_text_encoder', False):
-                                    ref_pixel_values = rearrange(ref_pixel_values, "b f c h w -> b c f h w")
-                                    bs = args.vae_mini_batch
-                                    new_ref_pixel_values = []
-                                    for i in range(0, ref_pixel_values.shape[0], bs):
-                                        ref_pixel_values_bs = ref_pixel_values[i : i + bs]
-                                        ref_pixel_values_bs = vae.encode(ref_pixel_values_bs)[0]
-                                        ref_pixel_values_bs = ref_pixel_values_bs.sample()
-                                        new_ref_pixel_values.append(ref_pixel_values_bs)
-                                    ref_latents = torch.cat(new_ref_pixel_values, dim = 0)
-                                else:
-                                    ref_latents = None
-
-                                mask_pixel_values = rearrange(mask_pixel_values, "b f c h w -> b c f h w")
+                            if config.get('enable_multi_text_encoder', False):
+                                ref_pixel_values = rearrange(ref_pixel_values, "b f c h w -> b c f h w")
                                 bs = args.vae_mini_batch
-                                new_mask_pixel_values = []
-                                for i in range(0, mask_pixel_values.shape[0], bs):
-                                    mask_pixel_values_bs = mask_pixel_values[i : i + bs]
-                                    mask_pixel_values_bs = vae.encode(mask_pixel_values_bs)[0]
-                                    mask_pixel_values_bs = mask_pixel_values_bs.sample()
-                                    new_mask_pixel_values.append(mask_pixel_values_bs)
-                                mask_latents = torch.cat(new_mask_pixel_values, dim = 0)
-
-                                mask = rearrange(mask, "b f c h w -> b c f h w")
-                                mask = torch.tile(mask, [1, 3, 1, 1, 1])
-                                bs = args.vae_mini_batch
-                                new_mask = []
-                                for i in range(0, mask.shape[0], bs):
-                                    mask_bs = mask[i : i + bs]
-                                    mask_bs = vae.encode(mask_bs)[0]
-                                    mask_bs = mask_bs.sample()
-                                    new_mask.append(mask_bs)
-                                mask = torch.cat(new_mask, dim = 0)
-                                if ref_latents is not None:
-                                    ref_latents = ref_latents.expand_as(mask_latents)
-                                    inpaint_latents = torch.concat([mask, mask_latents, ref_latents], dim=1)
-                                else:
-                                    inpaint_latents = torch.concat([mask, mask_latents], dim=1)
+                                new_ref_pixel_values = []
+                                for i in range(0, ref_pixel_values.shape[0], bs):
+                                    ref_pixel_values_bs = ref_pixel_values[i : i + bs]
+                                    ref_pixel_values_bs = vae.encode(ref_pixel_values_bs)[0]
+                                    ref_pixel_values_bs = ref_pixel_values_bs.sample()
+                                    new_ref_pixel_values.append(ref_pixel_values_bs)
+                                ref_latents = torch.cat(new_ref_pixel_values, dim = 0)
                             else:
-                                if config.get('enable_multi_text_encoder', False):
-                                    # This way is quicker when batch grows up
-                                    ref_pixel_values = rearrange(ref_pixel_values, "b f c h w -> b c f h w")
-                                    bs = args.vae_mini_batch
-                                    new_ref_pixel_values = []
-                                    for i in range(0, ref_pixel_values.shape[0], bs):
-                                        new_ref_pixel_values_mini_batch = []
-                                        for j in range(0, ref_pixel_values.shape[2], sample_n_frames_bucket_interval):
-                                            ref_pixel_values_bs = ref_pixel_values[i : i + bs, :, j: j + sample_n_frames_bucket_interval, :, :]
-                                            ref_pixel_values_bs = vae.encode(ref_pixel_values_bs)[0]
-                                            ref_pixel_values_bs = ref_pixel_values_bs.sample()
-                                            new_ref_pixel_values_mini_batch.append(ref_pixel_values_bs)
-                                        new_ref_pixel_values_mini_batch = torch.cat(new_ref_pixel_values_mini_batch, dim = 2)
-                                        new_ref_pixel_values.append(new_ref_pixel_values_mini_batch)
-                                    ref_latents = torch.cat(new_ref_pixel_values, dim = 0)
-                                else:
-                                    ref_latents = None
+                                ref_latents = None
 
-                                # This way is quicker when batch grows up
-                                mask_pixel_values = rearrange(mask_pixel_values, "b f c h w -> b c f h w")
-                                bs = args.vae_mini_batch
-                                new_mask_pixel_values = []
-                                for i in range(0, mask_pixel_values.shape[0], bs):
-                                    new_mask_pixel_values_mini_batch = []
-                                    for j in range(0, mask_pixel_values.shape[2], sample_n_frames_bucket_interval):
-                                        mask_pixel_values_bs = mask_pixel_values[i : i + bs, :, j: j + sample_n_frames_bucket_interval, :, :]
-                                        mask_pixel_values_bs = vae.encode(mask_pixel_values_bs)[0]
-                                        mask_pixel_values_bs = mask_pixel_values_bs.sample()
-                                        new_mask_pixel_values_mini_batch.append(mask_pixel_values_bs)
-                                    new_mask_pixel_values_mini_batch = torch.cat(new_mask_pixel_values_mini_batch, dim = 2)
-                                    new_mask_pixel_values.append(new_mask_pixel_values_mini_batch)
-                                mask_latents = torch.cat(new_mask_pixel_values, dim = 0)
+                            mask_pixel_values = rearrange(mask_pixel_values, "b f c h w -> b c f h w")
+                            bs = args.vae_mini_batch
+                            new_mask_pixel_values = []
+                            for i in range(0, mask_pixel_values.shape[0], bs):
+                                mask_pixel_values_bs = mask_pixel_values[i : i + bs]
+                                mask_pixel_values_bs = vae.encode(mask_pixel_values_bs)[0]
+                                mask_pixel_values_bs = mask_pixel_values_bs.sample()
+                                new_mask_pixel_values.append(mask_pixel_values_bs)
+                            mask_latents = torch.cat(new_mask_pixel_values, dim = 0)
 
-                                # This way is quicker when batch grows up
-                                mask = rearrange(mask, "b f c h w -> b c f h w")
-                                mask = torch.tile(mask, [1, 3, 1, 1, 1])
-                                bs = args.vae_mini_batch
-                                new_mask = []
-                                for i in range(0, mask.shape[0], bs):
-                                    new_mask_mini_batch = []
-                                    for j in range(0, mask.shape[2], sample_n_frames_bucket_interval):
-                                        mask_bs = mask[i : i + bs, :, j: j + sample_n_frames_bucket_interval, :, :]
-                                        mask_bs = vae.encode(mask_bs)[0]
-                                        mask_bs = mask_bs.sample()
-                                        new_mask_mini_batch.append(mask_bs)
-                                    new_mask_mini_batch = torch.cat(new_mask_mini_batch, dim = 2)
-                                    new_mask.append(new_mask_mini_batch)
-                                mask = torch.cat(new_mask, dim = 0)
-                                if ref_latents is not None:
-                                    ref_latents = ref_latents.expand_as(mask_latents)
-                                    inpaint_latents = torch.concat([mask, mask_latents, ref_latents], dim=1)
-                                else:
-                                    inpaint_latents = torch.concat([mask, mask_latents], dim=1)
+                            mask = rearrange(mask, "b f c h w -> b c f h w")
+                            mask = torch.tile(mask, [1, 3, 1, 1, 1])
+                            bs = args.vae_mini_batch
+                            new_mask = []
+                            for i in range(0, mask.shape[0], bs):
+                                mask_bs = mask[i : i + bs]
+                                mask_bs = vae.encode(mask_bs)[0]
+                                mask_bs = mask_bs.sample()
+                                new_mask.append(mask_bs)
+                            mask = torch.cat(new_mask, dim = 0)
+                            if ref_latents is not None:
+                                ref_latents = ref_latents.expand_as(mask_latents)
+                                inpaint_latents = torch.concat([mask, mask_latents, ref_latents], dim=1)
+                            else:
+                                inpaint_latents = torch.concat([mask, mask_latents], dim=1)
                         else:
                             if config.get('enable_multi_text_encoder', False):
                                 ref_pixel_values = rearrange(ref_pixel_values, "b f c h w -> (b f) c h w")
@@ -1557,10 +1649,24 @@ def main():
                     torch.cuda.empty_cache()
 
                 bsz = latents.shape[0]
-                noise = torch.randn(latents.size(), device=latents.device, generator=torch_rng)
+                if args.noise_share_in_frames:
+                    def generate_noise(bs, channel, length, height, width, ratio=0.5, generator=None, device="cuda", dtype=None):
+                        noise = torch.randn(bs, channel, length, height, width, generator=generator, device=device, dtype=dtype)
+                        for i in range(1, length):
+                            noise[:, :, i, :, :] = ratio * noise[:, :, i - 1, :, :] + (1 - ratio) * noise[:, :, i, :, :]
+                        return noise
+                    noise = generate_noise(*latents.size(), ratio=args.noise_share_in_frames_ratio, device=latents.device, generator=torch_rng, dtype=weight_dtype)
+                else:
+                    noise = torch.randn(latents.size(), device=latents.device, generator=torch_rng, dtype=weight_dtype)
                 # Sample a random timestep for each image
                 timesteps = generate_timestep_with_lognorm(0, args.train_sampling_steps, (bsz,), device=latents.device, generator=torch_rng)
                 timesteps = timesteps.long()
+                if args.low_vram:
+                    transformer3d.to('cpu')
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    torch.cuda.ipc_collect()
+                    transformer3d.to('cuda')
 
                 if config.get('enable_multi_text_encoder', False):
                     height, width = batch["pixel_values"].size()[-2], batch["pixel_values"].size()[-1]
@@ -1614,6 +1720,12 @@ def main():
                     )[0]
                     noise_pred, _ = noise_pred.chunk(2, dim=1)
                     loss = F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
+
+                    if args.motion_sub_loss and noise_pred.size()[2] > 2:
+                        gt_sub_noise = noise_pred[:, :, 1:].float() - noise_pred[:, :, :-1].float()
+                        pre_sub_noise = target[:, :, 1:].float() - target[:, :, :-1].float()
+                        sub_loss = F.mse_loss(gt_sub_noise, pre_sub_noise, reduction="mean")
+                        loss = loss * (1 - args.motion_sub_loss_ratio) + sub_loss * args.motion_sub_loss_ratio
                 else:
                     added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
                     if unwrap_model(transformer3d).config.sample_size == 128:
@@ -1648,22 +1760,25 @@ def main():
                 # Backpropagate
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
-                    trainable_params_grads = [p.grad for p in trainable_params if p.grad is not None]
-                    trainable_params_total_norm = torch.norm(torch.stack([torch.norm(g.detach(), 2) for g in trainable_params_grads]), 2)
-                    max_grad_norm = linear_decay(args.max_grad_norm * args.initial_grad_norm_ratio, args.max_grad_norm, args.abnormal_norm_clip_start, global_step)
-                    if trainable_params_total_norm / max_grad_norm > 5 and global_step > args.abnormal_norm_clip_start:
-                        actual_max_grad_norm = max_grad_norm / min((trainable_params_total_norm / max_grad_norm), 10)
+                    if not args.use_deepspeed:
+                        trainable_params_grads = [p.grad for p in trainable_params if p.grad is not None]
+                        trainable_params_total_norm = torch.norm(torch.stack([torch.norm(g.detach(), 2) for g in trainable_params_grads]), 2)
+                        max_grad_norm = linear_decay(args.max_grad_norm * args.initial_grad_norm_ratio, args.max_grad_norm, args.abnormal_norm_clip_start, global_step)
+                        if trainable_params_total_norm / max_grad_norm > 5 and global_step > args.abnormal_norm_clip_start:
+                            actual_max_grad_norm = max_grad_norm / min((trainable_params_total_norm / max_grad_norm), 10)
+                        else:
+                            actual_max_grad_norm = max_grad_norm
                     else:
-                        actual_max_grad_norm = max_grad_norm
+                        actual_max_grad_norm = args.max_grad_norm
 
-                    if args.report_model_info and accelerator.is_main_process:
+                    if not args.use_deepspeed and args.report_model_info and accelerator.is_main_process:
                         if trainable_params_total_norm > 1 and global_step > args.abnormal_norm_clip_start:
                             for name, param in transformer3d.named_parameters():
                                 if param.requires_grad:
                                     writer.add_scalar(f'gradients/before_clip_norm/{name}', param.grad.norm(), global_step=global_step)
 
                     norm_sum = accelerator.clip_grad_norm_(trainable_params, actual_max_grad_norm)
-                    if args.report_model_info and accelerator.is_main_process:
+                    if not args.use_deepspeed and args.report_model_info and accelerator.is_main_process:
                         writer.add_scalar(f'gradients/norm_sum', norm_sum, global_step=global_step)
                         writer.add_scalar(f'gradients/actual_max_grad_norm', actual_max_grad_norm, global_step=global_step)
                 optimizer.step()
@@ -1715,7 +1830,9 @@ def main():
                         log_validation(
                             vae,
                             text_encoder,
+                            text_encoder_2,
                             tokenizer,
+                            tokenizer_2,
                             transformer3d,
                             config,
                             args,
@@ -1742,7 +1859,9 @@ def main():
                 log_validation(
                     vae,
                     text_encoder,
+                    text_encoder_2,
                     tokenizer,
+                    tokenizer_2,
                     transformer3d,
                     config,
                     args,

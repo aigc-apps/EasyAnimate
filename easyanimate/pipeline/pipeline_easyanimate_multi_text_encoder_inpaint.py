@@ -536,22 +536,11 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
             bs = 1
             mini_batch_encoder = self.vae.mini_batch_encoder
             new_mask = []
-            if self.vae.slice_compression_vae:
-                for i in range(0, mask.shape[0], bs):
-                    mask_bs = mask[i : i + bs]
-                    mask_bs = self.vae.encode(mask_bs)[0]
-                    mask_bs = mask_bs.sample()
-                    new_mask.append(mask_bs)
-            else:
-                for i in range(0, mask.shape[0], bs):
-                    new_mask_mini_batch = []
-                    for j in range(0, mask.shape[2], mini_batch_encoder):
-                        mask_bs = mask[i : i + bs, :, j: j + mini_batch_encoder, :, :]
-                        mask_bs = self.vae.encode(mask_bs)[0]
-                        mask_bs = mask_bs.sample()
-                        new_mask_mini_batch.append(mask_bs)
-                    new_mask_mini_batch = torch.cat(new_mask_mini_batch, dim = 2)
-                    new_mask.append(new_mask_mini_batch)
+            for i in range(0, mask.shape[0], bs):
+                mask_bs = mask[i : i + bs]
+                mask_bs = self.vae.encode(mask_bs)[0]
+                mask_bs = mask_bs.sample()
+                new_mask.append(mask_bs)
             mask = torch.cat(new_mask, dim = 0)
             mask = mask * self.vae.config.scaling_factor
 
@@ -567,24 +556,12 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
         masked_image = masked_image.to(device=device, dtype=self.vae.dtype)
         if self.vae.quant_conv.weight.ndim==5:
             bs = 1
-            mini_batch_encoder = self.vae.mini_batch_encoder
             new_mask_pixel_values = []
-            if self.vae.slice_compression_vae:
-                for i in range(0, masked_image.shape[0], bs):
-                    mask_pixel_values_bs = masked_image[i : i + bs]
-                    mask_pixel_values_bs = self.vae.encode(mask_pixel_values_bs)[0]
-                    mask_pixel_values_bs = mask_pixel_values_bs.sample()
-                    new_mask_pixel_values.append(mask_pixel_values_bs)
-            else:
-                for i in range(0, masked_image.shape[0], bs):
-                    new_mask_pixel_values_mini_batch = []
-                    for j in range(0, masked_image.shape[2], mini_batch_encoder):
-                        mask_pixel_values_bs = masked_image[i : i + bs, :, j: j + mini_batch_encoder, :, :]
-                        mask_pixel_values_bs = self.vae.encode(mask_pixel_values_bs)[0]
-                        mask_pixel_values_bs = mask_pixel_values_bs.sample()
-                        new_mask_pixel_values_mini_batch.append(mask_pixel_values_bs)
-                    new_mask_pixel_values_mini_batch = torch.cat(new_mask_pixel_values_mini_batch, dim = 2)
-                    new_mask_pixel_values.append(new_mask_pixel_values_mini_batch)
+            for i in range(0, masked_image.shape[0], bs):
+                mask_pixel_values_bs = masked_image[i : i + bs]
+                mask_pixel_values_bs = self.vae.encode(mask_pixel_values_bs)[0]
+                mask_pixel_values_bs = mask_pixel_values_bs.sample()
+                new_mask_pixel_values.append(mask_pixel_values_bs)
             masked_image_latents = torch.cat(new_mask_pixel_values, dim = 0)
             masked_image_latents = masked_image_latents * self.vae.config.scaling_factor
 
@@ -605,22 +582,11 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
             bs = 1
             mini_batch_encoder = self.vae.mini_batch_encoder
             new_ref_pixel_values = []
-            if self.vae.slice_compression_vae:
-                for i in range(0, ref_video.shape[0], bs):
-                    ref_pixel_values_bs = ref_video[i : i + bs]
-                    ref_pixel_values_bs = self.vae.encode(ref_pixel_values_bs)[0]
-                    ref_pixel_values_bs = ref_pixel_values_bs.sample()
-                    new_ref_pixel_values.append(ref_pixel_values_bs)
-            else:
-                for i in range(0, ref_video.shape[0], bs):
-                    new_ref_pixel_values_mini_batch = []
-                    for j in range(0, ref_video.shape[2], mini_batch_encoder):
-                        ref_pixel_values_bs = ref_video[i : i + bs, :, j: j + mini_batch_encoder, :, :]
-                        ref_pixel_values_bs = self.vae.encode(ref_pixel_values_bs)[0]
-                        ref_pixel_values_bs = ref_pixel_values_bs.sample()
-                        new_ref_pixel_values_mini_batch.append(ref_pixel_values_bs)
-                    new_ref_pixel_values_mini_batch = torch.cat(new_ref_pixel_values_mini_batch, dim = 2)
-                    new_ref_pixel_values.append(new_ref_pixel_values_mini_batch)
+            for i in range(0, ref_video.shape[0], bs):
+                ref_pixel_values_bs = ref_video[i : i + bs]
+                ref_pixel_values_bs = self.vae.encode(ref_pixel_values_bs)[0]
+                ref_pixel_values_bs = ref_pixel_values_bs.sample()
+                new_ref_pixel_values.append(ref_pixel_values_bs)
             ref_video_latents = torch.cat(new_ref_pixel_values, dim = 0)
             ref_video_latents = ref_video_latents * self.vae.config.scaling_factor
 
@@ -671,24 +637,12 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
             video = video.to(device=device, dtype=self.vae.dtype)
             if self.vae.quant_conv.weight.ndim==5:
                 bs = 1
-                mini_batch_encoder = self.vae.mini_batch_encoder
                 new_video = []
-                if self.vae.slice_compression_vae:
-                    for i in range(0, video.shape[0], bs):
-                        video_bs = video[i : i + bs]
-                        video_bs = self.vae.encode(video_bs)[0]
-                        video_bs = video_bs.sample()
-                        new_video.append(video_bs)
-                else:
-                    for i in range(0, video.shape[0], bs):
-                        new_video_mini_batch = []
-                        for j in range(0, video.shape[2], mini_batch_encoder):
-                            video_bs = video[i : i + bs, :, j: j + mini_batch_encoder, :, :]
-                            video_bs = self.vae.encode(video_bs)[0]
-                            video_bs = video_bs.sample()
-                            new_video_mini_batch.append(video_bs)
-                        new_video_mini_batch = torch.cat(new_video_mini_batch, dim = 2)
-                        new_video.append(new_video_mini_batch)
+                for i in range(0, video.shape[0], bs):
+                    video_bs = video[i : i + bs]
+                    video_bs = self.vae.encode(video_bs)[0]
+                    video_bs = video_bs.sample()
+                    new_video.append(video_bs)
                 video = torch.cat(new_video, dim = 0)
                 video = video * self.vae.config.scaling_factor
 
@@ -729,57 +683,23 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
         prefix_index_before = mini_batch_encoder // 2
         prefix_index_after = mini_batch_encoder - prefix_index_before
         pixel_values = video[:, :, prefix_index_before:-prefix_index_after]
-        
-        pixel_values = pixel_values.to(self.vae.quant_conv.weight.dtype)
-        if self.vae.slice_compression_vae:
-            latents = self.vae.encode(pixel_values)[0]
-            latents = latents.sample()
-        else:
-            new_pixel_values = []
-            for i in range(0, pixel_values.shape[2], mini_batch_encoder):
-                with torch.no_grad():
-                    pixel_values_bs = pixel_values[:, :, i: i + mini_batch_encoder, :, :]
-                    pixel_values_bs = self.vae.encode(pixel_values_bs)[0]
-                    pixel_values_bs = pixel_values_bs.sample()
-                    new_pixel_values.append(pixel_values_bs)
-            latents = torch.cat(new_pixel_values, dim = 2)
-        
-        latents = latents.float()
-        if self.vae.slice_compression_vae:
-            middle_video = self.vae.decode(latents)[0]
-        else:
-            middle_video = []
-            for i in range(0, latents.shape[2], mini_batch_decoder):
-                with torch.no_grad():
-                    start_index = i
-                    end_index = i + mini_batch_decoder
-                    latents_bs = self.vae.decode(latents[:, :, start_index:end_index, :, :])[0]
-                    middle_video.append(latents_bs)
-            middle_video = torch.cat(middle_video, 2)
+
+        # Encode middle videos
+        latents = self.vae.encode(pixel_values)[0]
+        latents = latents.mode()
+        middle_video = self.vae.decode(latents)[0]
+
         video[:, :, prefix_index_before:-prefix_index_after] = (video[:, :, prefix_index_before:-prefix_index_after] + middle_video) / 2
         return video
-    
+
 
     def decode_latents(self, latents):
-        self.vae.decoder = self.vae.decoder.float()
-        self.vae.post_quant_conv = self.vae.post_quant_conv.float()
-        latents = latents.float()
         video_length = latents.shape[2]
         latents = 1 / self.vae.config.scaling_factor * latents
         if self.vae.quant_conv.weight.ndim==5:
             mini_batch_encoder = self.vae.mini_batch_encoder
             mini_batch_decoder = self.vae.mini_batch_decoder
-            if self.vae.slice_compression_vae:
-                video = self.vae.decode(latents)[0]
-            else:
-                video = []
-                for i in range(0, latents.shape[2], mini_batch_decoder):
-                    with torch.no_grad():
-                        start_index = i
-                        end_index = i + mini_batch_decoder
-                        latents_bs = self.vae.decode(latents[:, :, start_index:end_index, :, :])[0]
-                        video.append(latents_bs)
-                video = torch.cat(video, 2)
+            video = self.vae.decode(latents)[0]
             video = video.clamp(-1, 1)
             video = self.smooth_output(video, mini_batch_encoder, mini_batch_decoder).cpu().clamp(-1, 1)
         else:
@@ -856,6 +776,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
         crops_coords_top_left: Tuple[int, int] = (0, 0),
         use_resolution_binning: bool = False,
         clip_image: Image = None,
+        clip_apply_ratio: float = 0.50,
         strength: float = 1.0,
     ):
         r"""
@@ -1249,8 +1170,12 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
                 latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
-                clip_encoder_hidden_states_actual_input = clip_encoder_hidden_states_input
-                clip_attention_mask_actual_input = clip_attention_mask_input
+                if i < len(timesteps) * (1 - clip_apply_ratio) and clip_encoder_hidden_states_input is not None:
+                    clip_encoder_hidden_states_actual_input = torch.zeros_like(clip_encoder_hidden_states_input)
+                    clip_attention_mask_actual_input = torch.zeros_like(clip_attention_mask_input)
+                else:
+                    clip_encoder_hidden_states_actual_input = clip_encoder_hidden_states_input
+                    clip_attention_mask_actual_input = clip_attention_mask_input
                 
                 current_timestep = t
                 if not torch.is_tensor(current_timestep):

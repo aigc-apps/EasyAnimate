@@ -518,42 +518,22 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         latents = latents * self.scheduler.init_noise_sigma
         return latents
 
+
     def smooth_output(self, video, mini_batch_encoder, mini_batch_decoder):
         if video.size()[2] <= mini_batch_encoder:
             return video
         prefix_index_before = mini_batch_encoder // 2
         prefix_index_after = mini_batch_encoder - prefix_index_before
         pixel_values = video[:, :, prefix_index_before:-prefix_index_after]
-        
-        pixel_values = pixel_values.to(self.vae.quant_conv.weight.dtype)
-        if self.vae.slice_compression_vae:
-            latents = self.vae.encode(pixel_values)[0]
-            latents = latents.sample()
-        else:
-            new_pixel_values = []
-            for i in range(0, pixel_values.shape[2], mini_batch_encoder):
-                with torch.no_grad():
-                    pixel_values_bs = pixel_values[:, :, i: i + mini_batch_encoder, :, :]
-                    pixel_values_bs = self.vae.encode(pixel_values_bs)[0]
-                    pixel_values_bs = pixel_values_bs.sample()
-                    new_pixel_values.append(pixel_values_bs)
-            latents = torch.cat(new_pixel_values, dim = 2)
-        
-        latents = latents.float()
-        if self.vae.slice_compression_vae:
-            middle_video = self.vae.decode(latents)[0]
-        else:
-            middle_video = []
-            for i in range(0, latents.shape[2], mini_batch_decoder):
-                with torch.no_grad():
-                    start_index = i
-                    end_index = i + mini_batch_decoder
-                    latents_bs = self.vae.decode(latents[:, :, start_index:end_index, :, :])[0]
-                    middle_video.append(latents_bs)
-            middle_video = torch.cat(middle_video, 2)
+
+        # Encode middle videos
+        latents = self.vae.encode(pixel_values)[0]
+        latents = latents.mode()
+        # Decode middle videos
+        middle_video = self.vae.decode(latents)[0]
+
         video[:, :, prefix_index_before:-prefix_index_after] = (video[:, :, prefix_index_before:-prefix_index_after] + middle_video) / 2
         return video
-    
 
     def decode_latents(self, latents):
         self.vae.decoder = self.vae.decoder.float()
@@ -564,17 +544,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         if self.vae.quant_conv.weight.ndim==5:
             mini_batch_encoder = self.vae.mini_batch_encoder
             mini_batch_decoder = self.vae.mini_batch_decoder
-            if self.vae.slice_compression_vae:
-                video = self.vae.decode(latents)[0]
-            else:
-                video = []
-                for i in range(0, latents.shape[2], mini_batch_decoder):
-                    with torch.no_grad():
-                        start_index = i
-                        end_index = i + mini_batch_decoder
-                        latents_bs = self.vae.decode(latents[:, :, start_index:end_index, :, :])[0]
-                        video.append(latents_bs)
-                video = torch.cat(video, 2)
+            video = self.vae.decode(latents)[0]
             video = video.clamp(-1, 1)
             video = self.smooth_output(video, mini_batch_encoder, mini_batch_decoder).cpu().clamp(-1, 1)
         else:
