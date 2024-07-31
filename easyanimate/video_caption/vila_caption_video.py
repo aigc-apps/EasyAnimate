@@ -234,7 +234,18 @@ def main(args):
 
     elif args.precision == "W4A16":
         from tinychat.utils.load_quant import load_awq_model
-        # TODO: Auto load quant_path from the 3b/8b/13b/40b model.
+        # Auto load quant_path from the 3b/8b/13b/40b model.
+        if args.quant_path is None:
+            if "VILA1.5-3b-s2-AWQ" in args.model_path:
+                args.quant_path = os.path.join(args.model_path, "llm/vila-1.5-3b-s2-w4-g128-awq-v2.pt")
+            elif "VILA1.5-3b-AWQ" in args.model_path:
+                args.quant_path = os.path.join(args.model_path, "llm/vila-1.5-3b-w4-g128-awq-v2.pt")
+            elif "Llama-3-VILA1.5-8b-AWQ" in args.model_path:
+                args.quant_path = os.path.join(args.model_path, "llm/llama-3-vila1.5-8b-w4-g128-awq-v2.pt")
+            elif "VILA1.5-13b-AWQ" in args.model_path:
+                args.quant_path = os.path.join(args.model_path, "llm/vila-1.5-13b-w4-g128-awq-v2.pt")
+            elif "VILA1.5-40b-AWQ" in args.model_path:
+                args.quant_path = os.path.join(args.model_path, "llm/vila-1.5-40b-w4-g128-awq-v2.pt")
         model.llm = load_awq_model(model.llm, args.quant_path, 4, 128, state.device)
         from tinychat.modules import (
             make_fused_mlp,

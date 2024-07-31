@@ -155,13 +155,13 @@ def main():
         logger.info(f"Load {args.asethetic_score_metadata_path} and filter {len(filtered_video_path_list)} videos.")
 
     state = PartialState()
+    if state.is_main_process:
+        # Check if the model is downloaded in the main process.
+        ocr_reader = init_ocr_reader(device="cpu")
+    state.wait_for_everyone()
     ocr_reader = init_ocr_reader(device=state.device)
 
-    # The workaround can be removed after https://github.com/huggingface/accelerate/pull/2781 is released.
-    index = len(video_path_list) - len(video_path_list) % state.num_processes
-    logger.info(f"Drop {len(video_path_list) % state.num_processes} videos to avoid duplicates in state.split_between_processes.")
-    video_path_list = video_path_list[:index]
-
+    logger.info(f"{len(video_path_list)} videos are to be processed.")
     result_list = []
     with state.split_between_processes(video_path_list) as splitted_video_path_list:
         for i, video_path in enumerate(tqdm(splitted_video_path_list)):

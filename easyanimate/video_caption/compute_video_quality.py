@@ -101,10 +101,18 @@ def main():
     metric_fns = []
     for metric in args.metrics:
         if hasattr(image_evaluator, metric):  # frame-wise
-            logger.info("Initializing frame-wise evaluator metrics...")
+            if state.is_main_process:
+                logger.info("Initializing frame-wise evaluator metrics...")
+                # Check if the model is downloaded in the main process.
+                getattr(image_evaluator, metric)(device="cpu")
+            state.wait_for_everyone()
             metric_fns.append(getattr(image_evaluator, metric)(device=state.device))
         else:  # video-wise
-            logger.info("Initializing video-wise evaluator metrics...")
+            if state.is_main_process:
+                logger.info("Initializing video-wise evaluator metrics...")
+                # Check if the model is downloaded in the main process.
+                getattr(video_evaluator, metric)(device="cpu")
+            state.wait_for_everyone()
             metric_fns.append(getattr(video_evaluator, metric)(device=state.device))
 
     result_dict = {args.video_path_column: [], "sample_frame_idx": []}

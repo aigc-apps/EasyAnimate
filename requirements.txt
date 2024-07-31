@@ -3,7 +3,7 @@ einops
 safetensors
 timm
 tomesd
-accelerate
+accelerate>=0.31.0
 torch>=2.2.0
 torchdiffeq
 torchsde
