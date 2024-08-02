@@ -188,7 +188,7 @@ def main():
             header = False if os.path.exists(args.saved_path) else True
             result_df.to_csv(args.saved_path, header=header, index=False, mode="a")
         elif args.saved_path.endswith(".jsonl"):
-            result_df.to_json(args.saved_path, orient="records", lines=True, mode="a")
+            result_df.to_json(args.saved_path, orient="records", lines=True, mode="a", force_ascii=False)
         logger.info(f"Save result to {args.saved_path}.")
 
 
