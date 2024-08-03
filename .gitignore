@@ -2,7 +2,8 @@
 models*
 output*
 samples*
-datasets
+datasets*
+asset*
 __pycache__/
 *.py[cod]
 *$py.class

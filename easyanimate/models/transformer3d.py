@@ -827,7 +827,6 @@ class HunyuanTransformer3DModel(ModelMixin, ConfigMixin):
     ):
         super().__init__()
         # 4. Define output layers
-        # 4. Define output layers
         if learn_sigma:
             self.out_channels = in_channels * 2 if out_channels is None else out_channels
         else:
@@ -1081,8 +1080,8 @@ class HunyuanTransformer3DModel(ModelMixin, ConfigMixin):
                     kwargs = {
                         "basic": {"num_frames":video_length, "height":height, "width":width, "clip_encoder_hidden_states":clip_encoder_hidden_states},
                         "hybrid_attention": {"num_frames":video_length, "height":height, "width":width, "clip_encoder_hidden_states":clip_encoder_hidden_states},
+                        "motionmodule": {"num_frames":video_length, "height":height, "width":width},
                         "global_motionmodule": {"num_frames":video_length, "height":height, "width":width},
-                        "hybrid_attention": {"num_frames":video_length, "height":height, "width":width},
                     }[self.basic_block_type]
                     hidden_states = block(
                         hidden_states,
@@ -1188,14 +1187,14 @@ class HunyuanTransformer3DModel(ModelMixin, ConfigMixin):
                 model.state_dict()['pos_embed.proj.weight'][:, :4, :, :] = state_dict['pos_embed.proj.weight']
                 model.state_dict()['pos_embed.proj.weight'][:, 4:, :, :] = 0
                 state_dict['pos_embed.proj.weight'] = model.state_dict()['pos_embed.proj.weight']
-                
+                            
         if model.state_dict()['proj_out.weight'].size() != state_dict['proj_out.weight'].size():
-            new_shape   = model.state_dict()['proj_out.weight'].size()
-            state_dict['proj_out.weight'] = torch.tile(state_dict['proj_out.weight'], [patch_size, 1])
+            model.state_dict()['proj_out.weight'][:state_dict['proj_out.weight'].size()[0], :] = state_dict['proj_out.weight']
+            state_dict['proj_out.weight'] = model.state_dict()['proj_out.weight']
 
         if model.state_dict()['proj_out.bias'].size() != state_dict['proj_out.bias'].size():
-            new_shape   = model.state_dict()['proj_out.bias'].size()
-            state_dict['proj_out.bias'] = torch.tile(state_dict['proj_out.bias'], [patch_size])
+            model.state_dict()['proj_out.bias'][:state_dict['proj_out.bias'].size()[0]] = state_dict['proj_out.bias']
+            state_dict['proj_out.bias'] = model.state_dict()['proj_out.bias']
 
         tmp_state_dict = {} 
         for key in state_dict:

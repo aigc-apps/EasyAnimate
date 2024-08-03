@@ -1739,10 +1739,11 @@ def main():
                         if not args.save_state:
                             safetensor_save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}.safetensors")
                             save_model(safetensor_save_path, accelerator.unwrap_model(network))
+                            logger.info(f"Saved safetensor to {safetensor_save_path}")
                         else:
                             accelerator_save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                             accelerator.save_state(accelerator_save_path)
-                        logger.info(f"Saved state to {accelerator_save_path}")
+                            logger.info(f"Saved state to {accelerator_save_path}")
 
                 if accelerator.is_main_process:
                     if args.validation_prompts is not None and global_step % args.validation_steps == 0:

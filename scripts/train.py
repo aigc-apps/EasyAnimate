@@ -575,6 +575,12 @@ def parse_args():
         help="Run train_sampling_steps.",
     )
     parser.add_argument(
+        "--token_sample_size",
+        type=int,
+        default=512,
+        help="Sample size of the token.",
+    )
+    parser.add_argument(
         "--video_sample_size",
         type=int,
         default=512,
@@ -1102,17 +1108,20 @@ def main():
 
         def get_length_to_frame_num(token_length):
             if args.image_sample_size > args.video_sample_size:
-                sample_sizes = list(range(args.video_sample_size, args.image_sample_size + 1, 64))
+                sample_sizes = list(range(args.video_sample_size, args.image_sample_size + 1, 128))
+
+                if sample_sizes[-1] != args.image_sample_size:
+                    sample_sizes.append(args.image_sample_size)
             else:
                 sample_sizes = [args.video_sample_size]
             
             length_to_frame_num = {
-                sample_size: min(token_length / sample_size / sample_size, args.video_sample_n_frames) for sample_size in sample_sizes
+                sample_size: min(token_length / sample_size / sample_size, args.video_sample_n_frames) // sample_n_frames_bucket_interval * sample_n_frames_bucket_interval for sample_size in sample_sizes
             }
             return length_to_frame_num
 
         length_to_frame_num = get_length_to_frame_num(
-            args.video_sample_n_frames * args.video_sample_size * args.video_sample_size, 
+            args.video_sample_n_frames * args.token_sample_size * args.token_sample_size, 
         )
 
         def collate_fn(examples):
@@ -1206,9 +1215,11 @@ def main():
                     ])
                 new_examples["pixel_values"].append(transform(pixel_values))
                 new_examples["text"].append(example["text"])
-                batch_video_length = min(
-                    batch_video_length,
-                    len(pixel_values) // sample_n_frames_bucket_interval * sample_n_frames_bucket_interval, 
+                batch_video_length = int(
+                    min(
+                        batch_video_length,
+                        len(pixel_values) // sample_n_frames_bucket_interval * sample_n_frames_bucket_interval, 
+                    )
                 )
                 if batch_video_length == 0:
                     batch_video_length = 1
@@ -1233,7 +1244,7 @@ def main():
                     new_examples["clip_pixel_values"].append(clip_pixel_values)
 
                     ref_pixel_values = new_examples["pixel_values"][-1][clip_index].unsqueeze(0)
-                    if np.random.rand() < 0.50 or batch_video_length == 1 or (mask == 1).all():
+                    if batch_video_length == 1 or (mask == 1).all() or np.random.rand() < 0.50:
                         ref_pixel_values = torch.ones_like(ref_pixel_values) * -1
                     new_examples["ref_pixel_values"].append(ref_pixel_values)
   
@@ -1402,25 +1413,25 @@ def main():
                 # Convert images to latent space
                 pixel_values = batch["pixel_values"].to(weight_dtype)
                 if args.training_with_video_token_length:
-                    if args.video_sample_n_frames * args.video_sample_size * args.video_sample_size // 16 >= pixel_values.size()[2] * pixel_values.size()[3] * pixel_values.size()[4]:
+                    if args.video_sample_n_frames * args.token_sample_size * args.token_sample_size // 16 >= pixel_values.size()[1] * pixel_values.size()[3] * pixel_values.size()[4]:
                         pixel_values = torch.tile(pixel_values, (4, 1, 1, 1, 1))
                         batch['text'] = batch['text'] * 4
-                    elif args.video_sample_n_frames * args.video_sample_size * args.video_sample_size // 4 >= pixel_values.size()[2] * pixel_values.size()[3] * pixel_values.size()[4]:
+                    elif args.video_sample_n_frames * args.token_sample_size * args.token_sample_size // 4 >= pixel_values.size()[1] * pixel_values.size()[3] * pixel_values.size()[4]:
                         pixel_values = torch.tile(pixel_values, (2, 1, 1, 1, 1))
                         batch['text'] = batch['text'] * 2
-                    
+                
                 if args.train_mode != "normal":
                     clip_pixel_values = batch["clip_pixel_values"]
                     ref_pixel_values = batch["ref_pixel_values"].to(weight_dtype)
                     mask_pixel_values = batch["mask_pixel_values"].to(weight_dtype)
                     mask = batch["mask"].to(weight_dtype)
                     if args.training_with_video_token_length:
-                        if args.video_sample_n_frames * args.video_sample_size * args.video_sample_size // 16 >= pixel_values.size()[2] * pixel_values.size()[3] * pixel_values.size()[4]:
+                        if args.video_sample_n_frames * args.token_sample_size * args.token_sample_size // 16 >= pixel_values.size()[1] * pixel_values.size()[3] * pixel_values.size()[4]:
                             clip_pixel_values = torch.tile(clip_pixel_values, (4, 1, 1, 1))
                             ref_pixel_values = torch.tile(ref_pixel_values, (4, 1, 1, 1, 1))
                             mask_pixel_values = torch.tile(mask_pixel_values, (4, 1, 1, 1, 1))
                             mask = torch.tile(mask, (4, 1, 1, 1, 1))
-                        elif args.video_sample_n_frames * args.video_sample_size * args.video_sample_size // 4 >= pixel_values.size()[2] * pixel_values.size()[3] * pixel_values.size()[4]:
+                        elif args.video_sample_n_frames * args.token_sample_size * args.token_sample_size // 4 >= pixel_values.size()[1] * pixel_values.size()[3] * pixel_values.size()[4]:
                             clip_pixel_values = torch.tile(clip_pixel_values, (2, 1, 1, 1))
                             ref_pixel_values = torch.tile(ref_pixel_values, (2, 1, 1, 1, 1))
                             mask_pixel_values = torch.tile(mask_pixel_values, (2, 1, 1, 1, 1))
@@ -1586,6 +1597,8 @@ def main():
                     vae.to('cpu')
                     torch.cuda.empty_cache()
                     text_encoder.to(accelerator.device)
+                    if text_encoder_2 is not None:
+                        text_encoder_2.to(accelerator.device)
                 if config.get('enable_multi_text_encoder', False):
                     def encode_prompt(
                         tokenizer,
@@ -1646,6 +1659,8 @@ def main():
 
                 if args.low_vram:
                     text_encoder.to('cpu')
+                    if text_encoder_2 is not None:
+                        text_encoder_2.to('cpu')
                     torch.cuda.empty_cache()
 
                 bsz = latents.shape[0]
@@ -1661,12 +1676,6 @@ def main():
                 # Sample a random timestep for each image
                 timesteps = generate_timestep_with_lognorm(0, args.train_sampling_steps, (bsz,), device=latents.device, generator=torch_rng)
                 timesteps = timesteps.long()
-                if args.low_vram:
-                    transformer3d.to('cpu')
-                    gc.collect()
-                    torch.cuda.empty_cache()
-                    torch.cuda.ipc_collect()
-                    transformer3d.to('cuda')
 
                 if config.get('enable_multi_text_encoder', False):
                     height, width = batch["pixel_values"].size()[-2], batch["pixel_values"].size()[-1]
