@@ -1149,10 +1149,14 @@ def main():
             else:
                 if args.random_hw_adapt:
                     if args.training_with_video_token_length:
+                        local_min_size = np.min(np.array([np.mean(np.array([np.shape(example["pixel_values"])[1], np.shape(example["pixel_values"])[2]])) for example in examples]))
+                        choice_list = [length for length in list(length_to_frame_num.keys()) if length < local_min_size * 1.25]
+                        if len(choice_list) == 0:
+                            choice_list = list(length_to_frame_num.keys())
                         if rng is None:
-                            local_video_sample_size = np.random.choice(list(length_to_frame_num.keys()))
+                            local_video_sample_size = np.random.choice(choice_list)
                         else:
-                            local_video_sample_size = rng.choice(list(length_to_frame_num.keys()))
+                            local_video_sample_size = rng.choice(choice_list)
                         batch_video_length = length_to_frame_num[local_video_sample_size]
                         random_downsample_ratio = args.video_sample_size / local_video_sample_size
                     else:
@@ -1889,12 +1893,10 @@ def main():
         if args.use_ema:
             ema_transformer3d.copy_to(transformer3d.parameters())
 
-        pipeline = EasyAnimatePipeline.from_pretrained(
-            args.pretrained_model_name_or_path,
-            transformer=transformer3d,
-            torch_dtype=weight_dtype
-        )
-        pipeline.save_pretrained(args.output_dir)
+        if args.use_deepspeed or accelerator.is_main_process:
+            save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
+            accelerator.save_state(save_path)
+            logger.info(f"Saved state to {save_path}")
 
     accelerator.end_training()
 

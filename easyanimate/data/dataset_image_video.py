@@ -131,9 +131,13 @@ def get_video_reader_batch(video_reader, batch_index):
 def resize_frame(frame, target_short_side):
     h, w, _ = frame.shape
     if h < w:
+        if target_short_side > h:
+            return frame
         new_h = target_short_side
         new_w = int(target_short_side * w / h)
     else:
+        if target_short_side > w:
+            return frame
         new_w = target_short_side
         new_h = int(target_short_side * h / w)
     
