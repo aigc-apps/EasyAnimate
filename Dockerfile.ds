@@ -28,10 +28,20 @@ RUN pip install pandas>=2.0.0 auto_gptq sglang[srt] func_timeout -i https://mirr
 RUN pip install -e git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers
 RUN pip install pytorch_lightning==1.9.4 func_timeout -i https://mirrors.aliyun.com/pypi/simple/
 
+# Install PyTorch/XLA 
+RUN pip install torch~=2.4.0 torch_xla[tpu]~=2.4.0 torchvision -f https://storage.googleapis.com/libtpu-releases/index.html
+
+RUN python -m pip uninstall -y tensorflow tensorflow-cpu
+RUN python -m pip uninstall -y jax jaxlib
+
+
 # install requirements
 COPY ./requirements.txt /root/requirements.txt
 RUN pip install -r /root/requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 RUN rm -rf /root/requirements.txt
+
+
+
 
 ENV PYTHONUNBUFFERED 1
 ENV NVIDIA_DISABLE_REQUIRE 1
