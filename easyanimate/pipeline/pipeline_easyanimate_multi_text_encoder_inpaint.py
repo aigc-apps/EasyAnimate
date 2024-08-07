@@ -250,6 +250,13 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
             vae_scale_factor=self.vae_scale_factor, do_normalize=False, do_binarize=True, do_convert_grayscale=True
         )
 
+    def enable_sequential_cpu_offload(self,):
+        super().enable_sequential_cpu_offload()
+        if hasattr(self.transformer, "clip_projection") and self.transformer.clip_projection is not None:
+            import accelerate
+            accelerate.hooks.remove_hook_from_module(self.transformer.clip_projection, recurse=True)
+            self.transformer.clip_projection = self.transformer.clip_projection.to("cuda")
+
     def encode_prompt(
         self,
         prompt: str,
@@ -701,7 +708,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
             mini_batch_decoder = self.vae.mini_batch_decoder
             video = self.vae.decode(latents)[0]
             video = video.clamp(-1, 1)
-            video = self.smooth_output(video, mini_batch_encoder, mini_batch_decoder).cpu().clamp(-1, 1)
+            # video = self.smooth_output(video, mini_batch_encoder, mini_batch_decoder).cpu().clamp(-1, 1)
         else:
             latents = rearrange(latents, "b c f h w -> (b f) c h w")
             video = []
@@ -1042,34 +1049,11 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
             ref_video = None
 
         if mask_video is not None:
-            # Prepare mask latent variables
-            video_length = video.shape[2]
-            mask_condition = self.mask_processor.preprocess(rearrange(mask_video, "b c f h w -> (b f) c h w"), height=height, width=width) 
-            mask_condition = mask_condition.to(dtype=torch.float32)
-            mask_condition = rearrange(mask_condition, "(b f) c h w -> b c f h w", f=video_length)
-            
-            if num_channels_transformer != num_channels_latents:
-                mask_condition_tile = torch.tile(mask_condition, [1, 3, 1, 1, 1])
-                if masked_video_latents is None:
-                    masked_video = init_video * (mask_condition_tile < 0.5) + torch.ones_like(init_video) * (mask_condition_tile > 0.5) * -1
-                else:
-                    masked_video = masked_video_latents
+            if (mask_video == 255).all():
+                mask_latents = torch.zeros_like(latents).to(latents.device, latents.dtype)
+                masked_video_latents = torch.zeros_like(latents).to(latents.device, latents.dtype)
+                ref_video_latents = torch.zeros_like(latents).to(latents.device, latents.dtype)
 
-                mask_latents, masked_video_latents, ref_video_latents = self.prepare_mask_latents(
-                    mask_condition_tile,
-                    masked_video,
-                    ref_video,
-                    batch_size,
-                    height,
-                    width,
-                    prompt_embeds.dtype,
-                    device,
-                    generator,
-                    self.do_classifier_free_guidance,
-                )
-                mask = torch.tile(mask_condition, [1, num_channels_latents, 1, 1, 1])
-                mask = F.interpolate(mask, size=latents.size()[-3:], mode='trilinear', align_corners=True).to(latents.device, latents.dtype)
-                
                 mask_input = torch.cat([mask_latents] * 2) if self.do_classifier_free_guidance else mask_latents
                 masked_video_latents_input = (
                     torch.cat([masked_video_latents] * 2) if self.do_classifier_free_guidance else masked_video_latents
@@ -1079,10 +1063,47 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
                 )
                 inpaint_latents = torch.cat([mask_input, masked_video_latents_input, ref_video_latents], dim=1).to(latents.dtype)
             else:
-                mask = torch.tile(mask_condition, [1, num_channels_latents, 1, 1, 1])
-                mask = F.interpolate(mask, size=latents.size()[-3:], mode='trilinear', align_corners=True).to(latents.device, latents.dtype)
+                # Prepare mask latent variables
+                video_length = video.shape[2]
+                mask_condition = self.mask_processor.preprocess(rearrange(mask_video, "b c f h w -> (b f) c h w"), height=height, width=width) 
+                mask_condition = mask_condition.to(dtype=torch.float32)
+                mask_condition = rearrange(mask_condition, "(b f) c h w -> b c f h w", f=video_length)
                 
-                inpaint_latents = None
+                if num_channels_transformer != num_channels_latents:
+                    mask_condition_tile = torch.tile(mask_condition, [1, 3, 1, 1, 1])
+                    if masked_video_latents is None:
+                        masked_video = init_video * (mask_condition_tile < 0.5) + torch.ones_like(init_video) * (mask_condition_tile > 0.5) * -1
+                    else:
+                        masked_video = masked_video_latents
+
+                    mask_latents, masked_video_latents, ref_video_latents = self.prepare_mask_latents(
+                        mask_condition_tile,
+                        masked_video,
+                        ref_video,
+                        batch_size,
+                        height,
+                        width,
+                        prompt_embeds.dtype,
+                        device,
+                        generator,
+                        self.do_classifier_free_guidance,
+                    )
+                    mask = torch.tile(mask_condition, [1, num_channels_latents, 1, 1, 1])
+                    mask = F.interpolate(mask, size=latents.size()[-3:], mode='trilinear', align_corners=True).to(latents.device, latents.dtype)
+                    
+                    mask_input = torch.cat([mask_latents] * 2) if self.do_classifier_free_guidance else mask_latents
+                    masked_video_latents_input = (
+                        torch.cat([masked_video_latents] * 2) if self.do_classifier_free_guidance else masked_video_latents
+                    )
+                    ref_video_latents = (
+                        torch.cat([ref_video_latents] * 2) if self.do_classifier_free_guidance else ref_video_latents
+                    )
+                    inpaint_latents = torch.cat([mask_input, masked_video_latents_input, ref_video_latents], dim=1).to(latents.dtype)
+                else:
+                    mask = torch.tile(mask_condition, [1, num_channels_latents, 1, 1, 1])
+                    mask = F.interpolate(mask, size=latents.size()[-3:], mode='trilinear', align_corners=True).to(latents.device, latents.dtype)
+                    
+                    inpaint_latents = None
         else:
             if num_channels_transformer != num_channels_latents:
                 mask = torch.zeros_like(latents).to(latents.device, latents.dtype)
