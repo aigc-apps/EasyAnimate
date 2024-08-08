@@ -92,6 +92,90 @@ from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 if is_wandb_available():
     import wandb
 
+rotary_pos_embed_cache = {}
+def _get_2d_rotary_pos_embed_cached(embed_dim, crops_coords, grid_size):
+    tmp_key = (embed_dim, crops_coords, grid_size)
+    print('embed_dim=%d crops_coords=%s grid_size=%s in_cache=%d cache_size=%d' % (
+        embed_dim, crops_coords, grid_size, tmp_key in rotary_pos_embed_cache, len(rotary_pos_embed_cache)))
+    if tmp_key not in rotary_pos_embed_cache:
+        tmp_embed = get_2d_rotary_pos_embed(embed_dim, crops_coords, grid_size)
+        tmp_embed_gpu = (tmp_embed[0].cuda(), tmp_embed[1].cuda())
+        print('\tembed_dim=%d data_size=%s' % (embed_dim, tmp_embed[0].shape))
+        rotary_pos_embed_cache[tmp_key] = tmp_embed_gpu
+        return tmp_embed_gpu
+    else:
+        return rotary_pos_embed_cache[tmp_key]
+
+def encode_prompt(tokenizer, text_encoder, 
+    prompt: str,
+    device: torch.device,
+    dtype: torch.dtype,
+    max_sequence_length = None,
+    text_encoder_index = 0,
+):
+    if max_sequence_length is None:
+        if text_encoder_index == 0:
+            max_length = 77
+        if text_encoder_index == 1:
+            max_length = 256
+    else:
+        max_length = max_sequence_length
+
+    text_inputs = tokenizer(
+        prompt,
+        padding="max_length",
+        max_length=max_length,
+        truncation=True,
+        return_attention_mask=True,
+        return_tensors="pt",
+    )
+
+    if device is not None:
+        text_input_ids = text_inputs.input_ids.to(device)
+        prompt_attention_mask = text_inputs.attention_mask.to(device)
+    else:
+        text_input_ids = text_inputs.input_ids
+        prompt_attention_mask = text_inputs.attention_mask
+    
+    prompt_embeds = text_encoder(
+        text_input_ids,
+        attention_mask=prompt_attention_mask,
+    )[0]
+    prompt_embeds = prompt_embeds.to(dtype=dtype, device=device)
+    return prompt_embeds, prompt_attention_mask
+
+
+
+def get_random_downsample_ratio(sample_size, is_image=True, all_choices=False):
+    def _create_special_list(length):
+        if length == 1:
+            return [1.0]
+        if length >= 2:
+            first_element = 0.75
+            remaining_sum = 1.0 - first_element
+            other_elements_value = remaining_sum / (length - 1)
+            special_list = [first_element] + [other_elements_value] * (length - 1)
+            return special_list
+            
+    if sample_size >= 1536:
+        number_list = [1, 1.25, 1.5, 2, 2.5, 3] + [args.image_sample_size / args.video_sample_size] if is_image else []
+    elif sample_size >= 1024:
+        number_list = [1, 1.25, 1.5, 2] + [args.image_sample_size / args.video_sample_size] if is_image else []
+    elif sample_size >= 768:
+        number_list = [1, 1.25, 1.5] + [args.image_sample_size / args.video_sample_size] if is_image else []
+    elif sample_size >= 512:
+        number_list = [1] + [args.image_sample_size / args.video_sample_size] if is_image else []
+    else:
+        number_list = [1]
+
+    if all_choices:
+        return number_list
+
+    number_list_prob = np.array(_create_special_list(len(number_list)))
+    if rng is None:
+        return np.random.choice(number_list, p = number_list_prob)
+    else:
+        return rng.choice(number_list, p = number_list_prob)
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.18.0.dev0")
@@ -1070,6 +1154,26 @@ def main():
     
     if args.enable_bucket:
         aspect_ratio_sample_size = {key : [x / 512 * args.video_sample_size for x in ASPECT_RATIO_512[key]] for key in ASPECT_RATIO_512.keys()}
+
+        # init cache for rope2d embedding 
+        print('precompute rope embedding for all sizes:')
+        attn_head_dim = transformer3d.inner_dim // transformer3d.num_heads
+        patch_size = transformer3d.config.patch_size
+        rope_base_size = 512 // 8 // patch_size
+        for key in ASPECT_RATIO_512:
+          tmp_size = ASPECT_RATIO_512[key]
+          for norm_size in (args.image_sample_size, args.video_sample_size,):
+            downsample_ratio = [1.0]
+            if args.random_hw_adapt:
+              downsample_ratio = get_random_downsample_ratio(norm_size, is_image=False,
+                      all_choices=True)
+            for tmp_ratio in downsample_ratio:
+              grid_h = int(tmp_size[0] / 512 * norm_size/ tmp_ratio) // 8 // patch_size
+              grid_w = int(tmp_size[1] / 512 * norm_size/ tmp_ratio) // 8 // patch_size
+              print('\tprecompute rope embedding for grid_size=(%d, %d)' % (grid_h, grid_w))
+              tmp_coords = get_resize_crop_region_for_grid((grid_h, grid_w), rope_base_size)
+              _get_2d_rotary_pos_embed_cached(attn_head_dim, tmp_coords, (grid_h, grid_w))
+
         aspect_ratio_random_crop_sample_size = {key : [x / 512 * args.video_sample_size for x in ASPECT_RATIO_RANDOM_CROP_512[key]] for key in ASPECT_RATIO_RANDOM_CROP_512.keys()}
 
         batch_sampler_generator = torch.Generator().manual_seed(args.seed)
@@ -1079,32 +1183,7 @@ def main():
             aspect_ratios=aspect_ratio_sample_size,
         )
 
-        def get_random_downsample_ratio(sample_size, is_image=True):
-            def create_special_list(length):
-                if length == 1:
-                    return [1.0]
-                if length >= 2:
-                    first_element = 0.75
-                    remaining_sum = 1.0 - first_element
-                    other_elements_value = remaining_sum / (length - 1)
-                    special_list = [first_element] + [other_elements_value] * (length - 1)
-                    return special_list
-                    
-            if sample_size >= 1536:
-                number_list = [1, 1.25, 1.5, 2, 2.5, 3] + [args.image_sample_size / args.video_sample_size] if is_image else []
-            elif sample_size >= 1024:
-                number_list = [1, 1.25, 1.5, 2] + [args.image_sample_size / args.video_sample_size] if is_image else []
-            elif sample_size >= 768:
-                number_list = [1, 1.25, 1.5] + [args.image_sample_size / args.video_sample_size] if is_image else []
-            elif sample_size >= 512:
-                number_list = [1] + [args.image_sample_size / args.video_sample_size] if is_image else []
-            else:
-                number_list = [1]
-            number_list_prob = np.array(create_special_list(len(number_list)))
-            if rng is None:
-                return np.random.choice(number_list, p = number_list_prob)
-            else:
-                return rng.choice(number_list, p = number_list_prob)
+
 
         def get_length_to_frame_num(token_length):
             if args.image_sample_size > args.video_sample_size:
@@ -1258,6 +1337,34 @@ def main():
                 new_examples["mask"] = torch.stack([example[:batch_video_length] for example in new_examples["mask"]])
                 new_examples["clip_pixel_values"] = torch.stack([example for example in new_examples["clip_pixel_values"]])
                 new_examples["ref_pixel_values"] = torch.stack([example[:batch_video_length] for example in new_examples["ref_pixel_values"]])
+
+
+            if config['enable_multi_text_encoder']:
+                prompt_embeds, prompt_attention_mask = \
+                    encode_prompt(tokenizer, text_encoder, new_examples['text'], None, dtype=weight_dtype, text_encoder_index=0)
+                prompt_embeds_2, prompt_attention_mask_2 = \
+                    encode_prompt(tokenizer_2, text_encoder_2, new_examples['text'], None, dtype=weight_dtype, text_encoder_index=1)
+                new_examples['prompt_embeds'] = prompt_embeds
+                new_examples['prompt_attention_mask'] = prompt_attention_mask
+                new_examples['prompt_embeds_2'] = prompt_embeds_2
+                new_examples['prompt_attention_mask_2'] = prompt_attention_mask_2
+            else:
+                prompt_ids = tokenizer(
+                              batch['text'], 
+                              max_length=args.tokenizer_max_length, 
+                              padding="max_length", 
+                              add_special_tokens=True, 
+                              truncation=True, 
+                              return_tensors="pt"
+                          )
+                encoder_hidden_states = text_encoder(
+                    prompt_ids.input_ids.to(latents.device), 
+                    attention_mask=prompt_ids.attention_mask.to(latents.device), 
+                    return_dict=False
+                )[0]
+                new_examples['encoder_attention_mask'] = prompt_ids.attention_mask
+                new_examples['encoder_hidden_states'] = encoder_hidden_states
+
             return new_examples
         
         # DataLoaders creation:
@@ -1302,9 +1409,6 @@ def main():
         ema_transformer3d.to(accelerator.device)
 
     # Move text_encode and vae to gpu and cast to weight_dtype
-    text_encoder.to(accelerator.device)
-    if config.get('enable_multi_text_encoder', False):
-        text_encoder_2.to(accelerator.device)
     vae.to(accelerator.device, dtype=weight_dtype)
     if args.train_mode != "normal":
         image_encoder.to(accelerator.device, dtype=weight_dtype)
@@ -1600,71 +1704,16 @@ def main():
                 if args.low_vram:
                     vae.to('cpu')
                     torch.cuda.empty_cache()
-                    text_encoder.to(accelerator.device)
-                    if text_encoder_2 is not None:
-                        text_encoder_2.to(accelerator.device)
                 if config.get('enable_multi_text_encoder', False):
-                    def encode_prompt(
-                        tokenizer,
-                        text_encoder, 
-                        prompt: str,
-                        device: torch.device,
-                        dtype: torch.dtype,
-                        max_sequence_length = None,
-                        text_encoder_index = 0,
-                    ):
-                        if max_sequence_length is None:
-                            if text_encoder_index == 0:
-                                max_length = 77
-                            if text_encoder_index == 1:
-                                max_length = 256
-                        else:
-                            max_length = max_sequence_length
-
-                        text_inputs = tokenizer(
-                            prompt,
-                            padding="max_length",
-                            max_length=max_length,
-                            truncation=True,
-                            return_attention_mask=True,
-                            return_tensors="pt",
-                        )
-                        text_input_ids = text_inputs.input_ids.to(device)
-                        prompt_attention_mask = text_inputs.attention_mask.to(device)
-                        
-                        prompt_embeds = text_encoder(
-                            text_input_ids,
-                            attention_mask=prompt_attention_mask,
-                        )[0]
-                        prompt_embeds = prompt_embeds.to(dtype=dtype, device=device)
-                        return prompt_embeds, prompt_attention_mask
-
-                    with torch.no_grad():
-                        prompt_embeds, prompt_attention_mask = \
-                            encode_prompt(tokenizer, text_encoder, batch['text'], latents.device, dtype=weight_dtype, text_encoder_index=0)
-                        prompt_embeds_2, prompt_attention_mask_2 = \
-                            encode_prompt(tokenizer_2, text_encoder_2, batch['text'], latents.device, dtype=weight_dtype, text_encoder_index=1)
-
+                    prompt_embeds = batch['prompt_embeds']
+                    prompt_attention_mask = batch['prompt_attention_mask']
+                    prompt_embeds_2 = batch['prompt_embeds_2']
+                    prompt_attention_mask_2 = batch['prompt_attention_mask_2']
                 else:
-                    with torch.no_grad():
-                        prompt_ids = tokenizer(
-                            batch['text'], 
-                            max_length=args.tokenizer_max_length, 
-                            padding="max_length", 
-                            add_special_tokens=True, 
-                            truncation=True, 
-                            return_tensors="pt"
-                        )
-                        encoder_hidden_states = text_encoder(
-                            prompt_ids.input_ids.to(latents.device), 
-                            attention_mask=prompt_ids.attention_mask.to(latents.device), 
-                            return_dict=False
-                        )[0]
+                    encoder_attention_mask = batch['encoder_attention_mask']
+                    encoder_hidden_states = batch['encoder_hidden_states']
 
                 if args.low_vram:
-                    text_encoder.to('cpu')
-                    if text_encoder_2 is not None:
-                        text_encoder_2.to('cpu')
                     torch.cuda.empty_cache()
 
                 bsz = latents.shape[0]
@@ -1688,7 +1737,7 @@ def main():
                     grid_width = width // 8 // accelerator.unwrap_model(transformer3d).config.patch_size
                     base_size = 512 // 8 // accelerator.unwrap_model(transformer3d).config.patch_size
                     grid_crops_coords = get_resize_crop_region_for_grid((grid_height, grid_width), base_size)
-                    image_rotary_emb = get_2d_rotary_pos_embed(
+                    image_rotary_emb = _get_2d_rotary_pos_embed_cached(
                         accelerator.unwrap_model(transformer3d).inner_dim // accelerator.unwrap_model(transformer3d).num_heads, grid_crops_coords, (grid_height, grid_width)
                     )
 
@@ -1756,7 +1805,7 @@ def main():
                         noise=noise,
                         model_kwargs=dict(
                             encoder_hidden_states=encoder_hidden_states, 
-                            encoder_attention_mask=prompt_ids.attention_mask.to(latents.device), 
+                            encoder_attention_mask=encoder_attention_mask, 
                             added_cond_kwargs=added_cond_kwargs, 
                             inpaint_latents=inpaint_latents if args.train_mode != "normal" else None,
                             clip_encoder_hidden_states=clip_encoder_hidden_states if args.train_mode != "normal" else None,
