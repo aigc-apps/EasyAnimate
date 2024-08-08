@@ -146,7 +146,8 @@ def encode_prompt(tokenizer, text_encoder,
 
 
 
-def get_random_downsample_ratio(sample_size, is_image=True, all_choices=False):
+def get_random_downsample_ratio(sample_size, image_ratio=[],
+                                all_choices=False, rng=None):
     def _create_special_list(length):
         if length == 1:
             return [1.0]
@@ -158,13 +159,13 @@ def get_random_downsample_ratio(sample_size, is_image=True, all_choices=False):
             return special_list
             
     if sample_size >= 1536:
-        number_list = [1, 1.25, 1.5, 2, 2.5, 3] + [args.image_sample_size / args.video_sample_size] if is_image else []
+        number_list = [1, 1.25, 1.5, 2, 2.5, 3] + image_ratio 
     elif sample_size >= 1024:
-        number_list = [1, 1.25, 1.5, 2] + [args.image_sample_size / args.video_sample_size] if is_image else []
+        number_list = [1, 1.25, 1.5, 2] + image_ratio
     elif sample_size >= 768:
-        number_list = [1, 1.25, 1.5] + [args.image_sample_size / args.video_sample_size] if is_image else []
+        number_list = [1, 1.25, 1.5] + image_ratio
     elif sample_size >= 512:
-        number_list = [1] + [args.image_sample_size / args.video_sample_size] if is_image else []
+        number_list = [1] + image_ratio
     else:
         number_list = [1]
 
@@ -438,6 +439,11 @@ def parse_args():
         "--use_came",
         action="store_true",
         help="whether to use came",
+    )
+    parser.add_argument(
+        "--multi_stream",
+        action="store_true",
+        help="whether to use cuda multi-stream",
     )
     parser.add_argument(
         "--train_batch_size", type=int, default=16, help="Batch size (per device) for the training dataloader."
@@ -1165,7 +1171,8 @@ def main():
           for norm_size in (args.image_sample_size, args.video_sample_size,):
             downsample_ratio = [1.0]
             if args.random_hw_adapt:
-              downsample_ratio = get_random_downsample_ratio(norm_size, is_image=False,
+              downsample_ratio = get_random_downsample_ratio(norm_size,
+                      image_ratio=[args.image_sample_size / args.video_sample_size],
                       all_choices=True)
             for tmp_ratio in downsample_ratio:
               grid_h = int(tmp_size[0] / 512 * norm_size/ tmp_ratio) // 8 // patch_size
@@ -1219,7 +1226,7 @@ def main():
             data_type       = examples[0]["data_type"]
             f, h, w, c      = np.shape(pixel_value)
             if data_type == 'image':
-                random_downsample_ratio = 1 if not args.random_hw_adapt else get_random_downsample_ratio(args.image_sample_size)
+                random_downsample_ratio = 1 if not args.random_hw_adapt else get_random_downsample_ratio(args.image_sample_size, image_ratio=[args.image_sample_size / args.video_sample_size], rng=rng)
 
                 aspect_ratio_sample_size = {key : [x / 512 * args.image_sample_size / random_downsample_ratio for x in ASPECT_RATIO_512[key]] for key in ASPECT_RATIO_512.keys()}
                 aspect_ratio_random_crop_sample_size = {key : [x / 512 * args.image_sample_size / random_downsample_ratio for x in ASPECT_RATIO_RANDOM_CROP_512[key]] for key in ASPECT_RATIO_RANDOM_CROP_512.keys()}
@@ -1239,7 +1246,8 @@ def main():
                         batch_video_length = length_to_frame_num[local_video_sample_size]
                         random_downsample_ratio = args.video_sample_size / local_video_sample_size
                     else:
-                        random_downsample_ratio = get_random_downsample_ratio(args.video_sample_size, is_image=False)
+                        random_downsample_ratio = get_random_downsample_ratio(
+                                args.video_sample_size, rng=rng)
                         batch_video_length = args.video_sample_n_frames + sample_n_frames_bucket_interval
                 else:
                     random_downsample_ratio = 1
@@ -1491,6 +1499,14 @@ def main():
         disable=not accelerator.is_local_main_process,
     )
 
+    if args.multi_stream and args.train_mode != "normal":
+        # create extra cuda streams to speedup inpaint vae computation
+        vae_stream_1 = torch.cuda.Stream()
+        vae_stream_2 = torch.cuda.Stream()
+    else:
+        vae_stream_1 = None
+        vae_stream_2 = None
+
     for epoch in range(first_epoch, args.num_train_epochs):
         train_loss = 0.0
         batch_sampler.sampler.generator = torch.Generator().manual_seed(args.seed + epoch)
@@ -1577,15 +1593,22 @@ def main():
                 with torch.no_grad():
                     if vae.quant_conv.weight.ndim==5:
                         # This way is quicker when batch grows up
-                        pixel_values = rearrange(pixel_values, "b f c h w -> b c f h w")
-                        bs = args.vae_mini_batch
-                        new_pixel_values = []
-                        for i in range(0, pixel_values.shape[0], bs):
-                            pixel_values_bs = pixel_values[i : i + bs]
-                            pixel_values_bs = vae.encode(pixel_values_bs)[0]
-                            pixel_values_bs = pixel_values_bs.sample()
-                            new_pixel_values.append(pixel_values_bs)
-                        latents = torch.cat(new_pixel_values, dim = 0)
+                        def _slice_vae(pixel_values):
+                            pixel_values = rearrange(pixel_values, "b f c h w -> b c f h w")
+                            bs = args.vae_mini_batch
+                            new_pixel_values = []
+                            for i in range(0, pixel_values.shape[0], bs):
+                                pixel_values_bs = pixel_values[i : i + bs]
+                                pixel_values_bs = vae.encode(pixel_values_bs)[0]
+                                pixel_values_bs = pixel_values_bs.sample()
+                                new_pixel_values.append(pixel_values_bs)
+                            return torch.cat(new_pixel_values, dim = 0)
+                        if vae_stream_1 is not None:
+                            vae_stream_1.wait_stream(torch.cuda.current_stream())
+                            with torch.cuda.stream(vae_stream_1):
+                                latents = _slice_vae(pixel_values)
+                        else:
+                            latents = _slice_vae(pixel_values)
                     else:
                         # This way is quicker when batch grows up
                         pixel_values = rearrange(pixel_values, "b f c h w -> (b f) c h w")
@@ -1599,10 +1622,28 @@ def main():
                         latents = torch.cat(new_pixel_values, dim = 0)
                         latents = rearrange(latents, "(b f) c h w -> b c f h w", f=video_length)
 
-                    latents = latents * vae.config.scaling_factor
 
                     if args.train_mode != "normal":
                         if vae.quant_conv.weight.ndim==5:
+                            def _mask_slice_vae(mask):
+                                mask = rearrange(mask, "b f c h w -> b c f h w")
+                                mask = torch.tile(mask, [1, 3, 1, 1, 1])
+                                bs = args.vae_mini_batch
+                                new_mask = []
+                                for i in range(0, mask.shape[0], bs):
+                                    mask_bs = mask[i : i + bs]
+                                    mask_bs = vae.encode(mask_bs)[0]
+                                    mask_bs = mask_bs.sample()
+                                    new_mask.append(mask_bs)
+                                return torch.cat(new_mask, dim = 0)
+                            if vae_stream_2 is not None:
+                                vae_stream_2.wait_stream(torch.cuda.current_stream())
+                                with torch.cuda.stream(vae_stream_2):
+                                    mask = _mask_slice_vae(mask)
+                            else:
+                                mask = _mask_slice_vae(mask)
+
+
                             # This way is quicker when batch grows up
                             if config.get('enable_multi_text_encoder', False):
                                 ref_pixel_values = rearrange(ref_pixel_values, "b f c h w -> b c f h w")
@@ -1627,16 +1668,9 @@ def main():
                                 new_mask_pixel_values.append(mask_pixel_values_bs)
                             mask_latents = torch.cat(new_mask_pixel_values, dim = 0)
 
-                            mask = rearrange(mask, "b f c h w -> b c f h w")
-                            mask = torch.tile(mask, [1, 3, 1, 1, 1])
-                            bs = args.vae_mini_batch
-                            new_mask = []
-                            for i in range(0, mask.shape[0], bs):
-                                mask_bs = mask[i : i + bs]
-                                mask_bs = vae.encode(mask_bs)[0]
-                                mask_bs = mask_bs.sample()
-                                new_mask.append(mask_bs)
-                            mask = torch.cat(new_mask, dim = 0)
+                            if vae_stream_2 is not None:
+                                torch.cuda.current_stream().wait_stream(vae_stream_2) 
+
                             if ref_latents is not None:
                                 ref_latents = ref_latents.expand_as(mask_latents)
                                 inpaint_latents = torch.concat([mask, mask_latents, ref_latents], dim=1)
@@ -1704,6 +1738,13 @@ def main():
                 if args.low_vram:
                     vae.to('cpu')
                     torch.cuda.empty_cache()
+
+                # wait for latents = vae.encode(pixel_values) to complete
+                if vae_stream_1 is not None:
+                    torch.cuda.current_stream().wait_stream(vae_stream_1)
+
+                latents = latents * vae.config.scaling_factor
+
                 if config.get('enable_multi_text_encoder', False):
                     prompt_embeds = batch['prompt_embeds']
                     prompt_attention_mask = batch['prompt_attention_mask']
@@ -1712,9 +1753,6 @@ def main():
                 else:
                     encoder_attention_mask = batch['encoder_attention_mask']
                     encoder_hidden_states = batch['encoder_hidden_states']
-
-                if args.low_vram:
-                    torch.cuda.empty_cache()
 
                 bsz = latents.shape[0]
                 if args.noise_share_in_frames:
