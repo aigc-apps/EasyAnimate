@@ -3,6 +3,8 @@ import os
 
 import pandas as pd
 
+from .logger import logger
+
 
 def filter(
     video_path_list,
@@ -30,7 +32,7 @@ def filter(
         filtered_video_path_list = [os.path.basename(video_path) for video_path in filtered_video_path_list]
 
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
-        print(f"Load {basic_metadata_path} and filter {len(filtered_video_path_list)} videos with resolution less than {min_resolution}.")
+        logger.info(f"Load {basic_metadata_path} ({len(basic_df)}) and filter {len(filtered_video_path_list)} videos with resolution less than {min_resolution}.")
     
     if asethetic_score_metadata_path is not None:
         if asethetic_score_metadata_path.endswith(".csv"):
@@ -48,7 +50,7 @@ def filter(
         filtered_video_path_list = [os.path.basename(video_path) for video_path in filtered_video_path_list]
 
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
-        print(f"Load {asethetic_score_metadata_path} and filter {len(filtered_video_path_list)} videos with aesthetic score less than {min_asethetic_score}.")
+        logger.info(f"Load {asethetic_score_metadata_path} ({len(asethetic_score_df)}) and filter {len(filtered_video_path_list)} videos with aesthetic score less than {min_asethetic_score}.")
 
     if text_score_metadata_path is not None:
         if text_score_metadata_path.endswith(".csv"):
@@ -61,7 +63,7 @@ def filter(
         filtered_video_path_list = [os.path.basename(video_path) for video_path in filtered_video_path_list]
 
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
-        print(f"Load {text_score_metadata_path} and filter {len(filtered_video_path_list)} videos with text score greater than {min_text_score}.")
+        logger.info(f"Load {text_score_metadata_path} ({len(text_score_df)}) and filter {len(filtered_video_path_list)} videos with text score greater than {min_text_score}.")
     
     if motion_score_metadata_path is not None:
         if motion_score_metadata_path.endswith(".csv"):
@@ -74,6 +76,6 @@ def filter(
         filtered_video_path_list = [os.path.basename(video_path) for video_path in filtered_video_path_list]
 
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
-        print(f"Load {motion_score_metadata_path} and filter {len(filtered_video_path_list)} videos with motion score smaller than {min_motion_score}.")
+        logger.info(f"Load {motion_score_metadata_path} ({len(motion_score_df)}) and filter {len(filtered_video_path_list)} videos with motion score smaller than {min_motion_score}.")
     
     return video_path_list

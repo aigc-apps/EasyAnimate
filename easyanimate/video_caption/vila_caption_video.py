@@ -274,6 +274,11 @@ def main(args):
     stop_token_ids = get_stop_token_ids(args.model_type, args.model_path)
 
     model.eval()
+
+    index = len(video_path_list) - len(video_path_list) % state.num_processes
+    # Avoid the NCCL timeout in the final gather operation.
+    logger.info(f"Drop {len(video_path_list) % state.num_processes} videos to ensure each process handles the same number of videos.")
+    video_path_list = video_path_list[:index]
     
     result_dict = {args.video_path_column: [], args.caption_column: []}
     with state.split_between_processes(video_path_list) as splitted_video_path_list:
@@ -318,7 +323,6 @@ def main(args):
             
             except Exception as e:
                 logger.warning(f"VILA with {video_path} failed. Error is {e}.")
-                # continue may affect the gather operation and cause the NCCL timeout.
 
             if i != 0 and i % args.saved_freq == 0:
                 state.wait_for_everyone()
@@ -346,6 +350,7 @@ def main(args):
             elif args.saved_path.endswith(".jsonl"):
                 result_df.to_json(args.saved_path, orient="records", lines=True, mode="a", force_ascii=False)
             logger.info(f"Save result to {args.saved_path}.")
+
 
 if __name__ == "__main__":
     args = parse_args()

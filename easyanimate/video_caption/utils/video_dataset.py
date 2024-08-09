@@ -6,8 +6,8 @@ from func_timeout import func_timeout, FunctionTimedOut
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 
-from utils.logger import logger
-from utils.video_utils import extract_frames
+from .logger import logger
+from .video_utils import extract_frames
 
 
 ALL_VIDEO_EXT = set(["mp4", "webm", "mkv", "avi", "flv", "mov"])
