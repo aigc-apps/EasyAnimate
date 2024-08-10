@@ -31,12 +31,19 @@ from easyanimate.pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaint
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 
+import torch_xla as xla
+import torch_xla.core.xla_model as xm
+import time
+
+start = time.time()
+
+device = xm.xla_device()
 # Low gpu memory mode, this is used when the GPU memory is under 16GB
 low_gpu_memory_mode = False
 
 # Config and model path
 config_path = "config/easyanimate_video_slicevae_motion_module_v3.yaml"
-model_name = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512"
+model_name = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960"
 
 # Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" and "DDIM"
 sampler_name = "Euler"
@@ -52,7 +59,7 @@ lora_path = None
 sample_size = [384, 672]
 # In EasyAnimateV1, the video_length of video is 40 ~ 80.
 # In EasyAnimateV2 and V3, the video_length of video is 1 ~ 144. If u want to generate a image, please set the video_length = 1.
-video_length = 144
+video_length = 1
 fps = 24
 
 # Use torch.float16 if GPU does not support torch.bfloat16
@@ -142,7 +149,7 @@ if vae_path is not None:
 if transformer.config.in_channels != vae.config.latent_channels:
     clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
         model_name, subfolder="image_encoder"
-    ).to("cuda", weight_dtype)
+    ).to(device, weight_dtype)
     clip_image_processor = CLIPImageProcessor.from_pretrained(
         model_name, subfolder="image_encoder"
     )
@@ -200,11 +207,11 @@ else:
             torch_dtype=weight_dtype,
         )
 if low_gpu_memory_mode:
-    pipeline.enable_sequential_cpu_offload()
+    pipeline.enable_sequential_cpu_offload(device=device)
 else:
-    pipeline.enable_model_cpu_offload()
+    pipeline.enable_model_cpu_offload(device=device)
 
-generator = torch.Generator(device="cuda").manual_seed(seed)
+generator = torch.Generator(device="cpu").manual_seed(seed)
 
 if lora_path is not None:
     pipeline = merge_lora(pipeline, lora_path, lora_weight)
@@ -232,6 +239,7 @@ with torch.no_grad():
             video=input_video,
             mask_video=input_video_mask,
             clip_image=clip_image,
+            initDevice=device,
         ).videos
     else:
         sample = pipeline(
@@ -243,6 +251,7 @@ with torch.no_grad():
             generator=generator,
             guidance_scale=guidance_scale,
             num_inference_steps=num_inference_steps,
+            initDevice=device,
         ).videos
 
 if lora_path is not None:
@@ -265,3 +274,5 @@ if video_length == 1:
 else:
     video_path = os.path.join(save_path, prefix + ".mp4")
     save_videos_grid(sample, video_path, fps=fps)
+
+print(f"Time Taken: {time.time() - start}")
