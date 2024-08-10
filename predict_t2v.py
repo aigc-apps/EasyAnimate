@@ -36,7 +36,7 @@ low_gpu_memory_mode = False
 
 # Config and model path
 config_path = "config/easyanimate_video_slicevae_motion_module_v3.yaml"
-model_name = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512"
+model_name = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960"
 
 # Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" and "DDIM"
 sampler_name = "Euler"
@@ -142,7 +142,7 @@ if vae_path is not None:
 if transformer.config.in_channels != vae.config.latent_channels:
     clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
         model_name, subfolder="image_encoder"
-    ).to("cuda", weight_dtype)
+    ).to(device, weight_dtype)
     clip_image_processor = CLIPImageProcessor.from_pretrained(
         model_name, subfolder="image_encoder"
     )
@@ -200,11 +200,11 @@ else:
             torch_dtype=weight_dtype,
         )
 if low_gpu_memory_mode:
-    pipeline.enable_sequential_cpu_offload()
+    pipeline.enable_sequential_cpu_offload(device=device)
 else:
-    pipeline.enable_model_cpu_offload()
+    pipeline.enable_model_cpu_offload(device=device)
 
-generator = torch.Generator(device="cuda").manual_seed(seed)
+generator = torch.Generator(device="cpu").manual_seed(seed)
 
 if lora_path is not None:
     pipeline = merge_lora(pipeline, lora_path, lora_weight)
