@@ -5,6 +5,7 @@ import torch
 import gradio as gr
 import tempfile
 import hashlib
+import os
 
 from fastapi import FastAPI
 from io import BytesIO
@@ -53,6 +54,20 @@ def update_diffusion_transformer_api(_: gr.Blocks, app: FastAPI, controller):
 
         return {"message": comment}
 
+def save_base64_video(base64_string):
+    video_data = base64.b64decode(base64_string)
+
+    md5_hash = hashlib.md5(video_data).hexdigest()
+    filename = f"{md5_hash}.mp4"  
+    
+    temp_dir = tempfile.gettempdir()
+    file_path = os.path.join(temp_dir, filename)
+
+    with open(file_path, 'wb') as video_file:
+        video_file.write(video_data)
+
+    return file_path
+
 def infer_forward_api(_: gr.Blocks, app: FastAPI, controller):
     @app.post("/easyanimate/infer_forward")
     def _infer_forward_api(
@@ -78,11 +93,12 @@ def infer_forward_api(_: gr.Blocks, app: FastAPI, controller):
         cfg_scale_slider = datas.get('cfg_scale_slider', 6)
         start_image = datas.get('start_image', None)
         end_image = datas.get('end_image', None)
+        validation_video = datas.get('validation_video', None)
+        denoise_strength = datas.get('denoise_strength', 0.70)
         seed_textbox = datas.get("seed_textbox", 43)
 
         generation_method = "Image Generation" if is_image else generation_method
 
-        temp_directory = tempfile.gettempdir()
         if start_image is not None:
             start_image = base64.b64decode(start_image)
             start_image = [Image.open(BytesIO(start_image))]
@@ -90,6 +106,9 @@ def infer_forward_api(_: gr.Blocks, app: FastAPI, controller):
         if end_image is not None:
             end_image = base64.b64decode(end_image)
             end_image = [Image.open(BytesIO(end_image))]
+
+        if validation_video is not None:
+            validation_video = save_base64_video(validation_video)
 
         try:
             save_sample_path, comment = controller.generate(
@@ -113,6 +132,8 @@ def infer_forward_api(_: gr.Blocks, app: FastAPI, controller):
                 cfg_scale_slider, 
                 start_image,
                 end_image,
+                validation_video,
+                denoise_strength,
                 seed_textbox,
                 is_api = True,
             )

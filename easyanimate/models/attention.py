@@ -659,6 +659,9 @@ class TemporalTransformerBlock(nn.Module):
             if self.pos_embed is not None and self.use_ada_layer_norm_single is None:
                 norm_hidden_states = self.pos_embed(norm_hidden_states)
 
+            if norm_hidden_states.dtype != encoder_hidden_states:
+                encoder_hidden_states = encoder_hidden_states.to(norm_hidden_states.dtype)
+                encoder_attention_mask = encoder_attention_mask.to(norm_hidden_states.dtype)
             attn_output = self.attn2(
                 norm_hidden_states,
                 encoder_hidden_states=encoder_hidden_states,

@@ -157,7 +157,7 @@ def precalculate_safetensors_hashes(tensors, metadata):
 
 class LoRANetwork(torch.nn.Module):
     TRANSFORMER_TARGET_REPLACE_MODULE = ["Transformer2DModel", "Transformer3DModel", "HunyuanTransformer3DModel"]
-    TEXT_ENCODER_TARGET_REPLACE_MODULE = ["T5LayerSelfAttention", "T5LayerFF", "T5Block", "BertEncoder"]
+    TEXT_ENCODER_TARGET_REPLACE_MODULE = ["T5LayerSelfAttention", "T5LayerFF", "BertEncoder"]
     LORA_PREFIX_TRANSFORMER = "lora_unet"
     LORA_PREFIX_TEXT_ENCODER = "lora_te"
     def __init__(

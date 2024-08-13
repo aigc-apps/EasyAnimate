@@ -1,4 +1,4 @@
-export MODEL_NAME="models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512"
+export MODEL_NAME="models/Diffusion_Transformer/EasyAnimateV4-XL-2-InP"
 export DATASET_NAME="datasets/internal_datasets/"
 export DATASET_META_NAME="datasets/internal_datasets/metadata.json"
 export NCCL_IB_DISABLE=1
@@ -10,9 +10,10 @@ accelerate launch --mixed_precision="bf16" scripts/train.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
   --train_data_dir=$DATASET_NAME \
   --train_data_meta=$DATASET_META_NAME \
-  --config_path "config/easyanimate_video_slicevae_motion_module_v3.yaml" \
+  --config_path "config/easyanimate_video_slicevae_multi_text_encoder_v4.yaml" \
   --image_sample_size=512 \
   --video_sample_size=512 \
+  --token_sample_size=512 \
   --video_sample_stride=1 \
   --video_sample_n_frames=144 \
   --train_batch_size=1 \
@@ -31,8 +32,12 @@ accelerate launch --mixed_precision="bf16" scripts/train.py \
   --mixed_precision="bf16" \
   --adam_weight_decay=3e-2 \
   --adam_epsilon=1e-10 \
-  --max_grad_norm=1 \
   --vae_mini_batch=1 \
+  --max_grad_norm=0.05 \
+  --random_hw_adapt \
+  --training_with_video_token_length \
+  --motion_sub_loss \
+  --not_sigma_loss \
   --random_frame_crop \
   --enable_bucket \
   --train_mode="inpaint" \

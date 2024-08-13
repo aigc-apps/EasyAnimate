@@ -27,15 +27,15 @@ from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 low_gpu_memory_mode = False
 
 # Config and model path
-config_path         = "config/easyanimate_video_slicevae_motion_module_v3.yaml"
-model_name          = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512"
+config_path         = "config/easyanimate_video_slicevae_multi_text_encoder_v4.yaml"
+model_name          = "models/Diffusion_Transformer/EasyAnimateV4-XL-2-InP"
 
 # Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" and "DDIM"
 sampler_name        = "Euler"
 
 # Load pretrained model if need
 transformer_path    = None
-# V2 does not need a motion module
+# V2 and V3 does not need a motion module
 motion_module_path  = None 
 vae_path            = None
 lora_path           = None

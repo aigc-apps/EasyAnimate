@@ -546,7 +546,8 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
             mini_batch_decoder = self.vae.mini_batch_decoder
             video = self.vae.decode(latents)[0]
             video = video.clamp(-1, 1)
-            video = self.smooth_output(video, mini_batch_encoder, mini_batch_decoder).cpu().clamp(-1, 1)
+            if not self.vae.cache_compression_vae:
+                video = self.smooth_output(video, mini_batch_encoder, mini_batch_decoder).cpu().clamp(-1, 1)
         else:
             latents = rearrange(latents, "b c f h w -> (b f) c h w")
             video = []
@@ -838,6 +839,11 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         )
         style = style.to(device=device).repeat(batch_size * num_images_per_prompt)
 
+        # Empty vae cache
+        self.transformer = self.transformer.to(device)
+        self.vae = self.vae.to("cpu")
+        torch.cuda.empty_cache()
+
         # 8. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         self._num_timesteps = len(timesteps)
@@ -902,6 +908,11 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
 
                 if XLA_AVAILABLE:
                     xm.mark_step()
+
+        # Make vae to cuda
+        self.transformer = self.transformer.to("cpu")
+        self.vae = self.vae.to(device)
+        torch.cuda.empty_cache()
 
         # Post-processing
         video = self.decode_latents(latents)

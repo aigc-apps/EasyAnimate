@@ -5,6 +5,7 @@ import gc
 import json
 import os
 import random
+import cv2
 from datetime import datetime
 from glob import glob
 
@@ -38,6 +39,7 @@ from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import (
     get_image_to_video_latent,
+    get_video_to_video_latent,
     get_width_and_height_from_image_and_base_resolution, save_videos_grid)
 
 scheduler_dict = {
@@ -289,6 +291,8 @@ class EasyAnimateController:
         cfg_scale_slider, 
         start_image, 
         end_image, 
+        validation_video,
+        denoise_strength,
         seed_textbox,
         is_api = False,
     ):
@@ -309,16 +313,19 @@ class EasyAnimateController:
             print("Update lora model")
             self.update_lora_model(lora_model_dropdown)
         
-        if resize_method == "Resize to the Start Image":
-            if start_image is None:
+        if resize_method == "Resize according to Reference":
+            if start_image is None and validation_video is None:
                 if is_api:
-                    return "", f"Please upload an image when using \"Resize to the Start Image\"."
+                    return "", f"Please upload an image when using \"Resize according to Reference\"."
                 else:
-                    raise gr.Error(f"Please upload an image when using \"Resize to the Start Image\".")
+                    raise gr.Error(f"Please upload an image when using \"Resize according to Reference\".")
 
             aspect_ratio_sample_size    = {key : [x / 512 * base_resolution for x in ASPECT_RATIO_512[key]] for key in ASPECT_RATIO_512.keys()}
             
-            original_width, original_height = start_image[0].size if type(start_image) is list else Image.open(start_image).size
+            if validation_video is not None:
+                original_width, original_height = Image.fromarray(cv2.VideoCapture(validation_video).read()[1]).size
+            else:
+                original_width, original_height = start_image[0].size if type(start_image) is list else Image.open(start_image).size
             closest_size, closest_ratio = get_closest_ratio(original_height, original_width, ratios=aspect_ratio_sample_size)
             height_slider, width_slider = [int(x / 16) * 16 for x in closest_size]
 
@@ -344,7 +351,7 @@ class EasyAnimateController:
 
         if is_xformers_available() and not self.inference_config.get('enable_multi_text_encoder', False): self.transformer.enable_xformers_memory_efficient_attention()
 
-        self.pipeline.scheduler = scheduler_dict[sampler_dropdown].from_pretrained(diffusion_transformer_dropdown, subfolder="scheduler")
+        self.pipeline.scheduler = scheduler_dict[sampler_dropdown].from_config(self.pipeline.scheduler.config)
         if self.lora_model_path != "none":
             # lora part
             self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
@@ -356,6 +363,8 @@ class EasyAnimateController:
         # try:
         if self.transformer.config.in_channels != self.vae.config.latent_channels:
             if generation_method == "Long Video Generation":
+                if validation_video is not None:
+                    raise gr.Error(f"Video to Video is not Support Long Video Generation now.")
                 init_frames = 0
                 last_frames = init_frames + partial_video_length
                 while init_frames < length_slider:
@@ -419,7 +428,12 @@ class EasyAnimateController:
                     init_frames = init_frames + _partial_video_length - overlap_video_length
                     last_frames = init_frames + _partial_video_length
             else:
-                input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
+                if validation_video is not None:
+                    input_video, input_video_mask, clip_image = get_video_to_video_latent(validation_video, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
+                    strength = denoise_strength
+                else:
+                    input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
+                    strength = 1
 
                 sample = self.pipeline(
                     prompt_textbox,
@@ -434,6 +448,7 @@ class EasyAnimateController:
                     video        = input_video,
                     mask_video   = input_video_mask,
                     clip_image   = clip_image, 
+                    strength     = strength,
                 ).videos
         else:
             sample = self.pipeline(
@@ -627,7 +642,7 @@ def ui(low_gpu_memory_mode, weight_dtype):
                         sample_step_slider = gr.Slider(label="Sampling steps (生成步数)", value=30, minimum=10, maximum=100, step=1)
                         
                     resize_method = gr.Radio(
-                        ["Generate by", "Resize to the Start Image"],
+                        ["Generate by", "Resize according to Reference"],
                         value="Generate by",
                         show_label=False,
                     )
@@ -646,7 +661,12 @@ def ui(low_gpu_memory_mode, weight_dtype):
                             overlap_video_length = gr.Slider(label="Overlap length (视频续写的重叠帧数)", value=4, minimum=1,   maximum=4,  step=1, visible=False)
                             partial_video_length = gr.Slider(label="Partial video generation length (每个部分的视频生成帧数)", value=72, minimum=8,   maximum=144,  step=8, visible=False)
                     
-                    with gr.Accordion("Image to Video (图片到视频)", open=False):
+                    source_method = gr.Radio(
+                        ["Text to Video (文本到视频)", "Image to Video (图片到视频)", "Video to Video (视频到视频)"],
+                        value="Text to Video (文本到视频)",
+                        show_label=False,
+                    )
+                    with gr.Column(visible = False) as image_to_video_col:
                         start_image = gr.Image(
                             label="The image at the beginning of the video (图片到视频的开始图片)",  show_label=True, 
                             elem_id="i2v_start", sources="upload", type="filepath", 
@@ -675,6 +695,13 @@ def ui(low_gpu_memory_mode, weight_dtype):
                         
                         with gr.Accordion("The image at the ending of the video (图片到视频的结束图片[非必需, Optional])", open=False):
                             end_image   = gr.Image(label="The image at the ending of the video (图片到视频的结束图片[非必需, Optional])", show_label=False, elem_id="i2v_end", sources="upload", type="filepath")
+
+                    with gr.Column(visible = False) as video_to_video_col:
+                        validation_video = gr.Video(
+                            label="The video to convert (视频转视频的参考视频)",  show_label=True, 
+                            elem_id="v2v", sources="upload", 
+                        )
+                        denoise_strength = gr.Slider(label="Denoise strength (重绘系数)", value=0.70, minimum=0.10, maximum=0.95, step=0.01)
 
                     cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
                     
@@ -707,6 +734,17 @@ def ui(low_gpu_memory_mode, weight_dtype):
                     return [gr.update(visible=True, maximum=1440), gr.update(visible=True), gr.update(visible=True)]
             generation_method.change(
                 upload_generation_method, generation_method, [length_slider, overlap_video_length, partial_video_length]
+            )
+
+            def upload_source_method(source_method):
+                if source_method == "Text to Video (文本到视频)":
+                    return [gr.update(visible=False), gr.update(visible=False), gr.update(value=None), gr.update(value=None), gr.update(value=None)]
+                elif source_method == "Image to Video (图片到视频)":
+                    return [gr.update(visible=True), gr.update(visible=False), gr.update(), gr.update(), gr.update(value=None)]
+                else:
+                    return [gr.update(visible=False), gr.update(visible=True), gr.update(value=None), gr.update(value=None), gr.update()]
+            source_method.change(
+                upload_source_method, source_method, [image_to_video_col, video_to_video_col, start_image, end_image, validation_video]
             )
 
             def upload_resize_method(resize_method):
@@ -754,6 +792,8 @@ def ui(low_gpu_memory_mode, weight_dtype):
                     cfg_scale_slider, 
                     start_image, 
                     end_image, 
+                    validation_video,
+                    denoise_strength, 
                     seed_textbox,
                 ],
                 outputs=[result_image, result_video, infer_progress]
@@ -896,6 +936,8 @@ class EasyAnimateController_Modelscope:
         cfg_scale_slider, 
         start_image, 
         end_image, 
+        validation_video,
+        denoise_strength,
         seed_textbox,
         is_api = False,
     ):    
@@ -910,12 +952,14 @@ class EasyAnimateController_Modelscope:
             print("Update lora model")
             self.update_lora_model(lora_model_dropdown)
 
-        if resize_method == "Resize to the Start Image":
-            if start_image is None:
-                raise gr.Error(f"Please upload an image when using \"Resize to the Start Image\".")
+        if resize_method == "Resize according to Reference":
+            if start_image is None and validation_video is None:
+                raise gr.Error(f"Please upload an image when using \"Resize according to Reference\".")
         
-            aspect_ratio_sample_size    = {key : [x / 512 * base_resolution for x in ASPECT_RATIO_512[key]] for key in ASPECT_RATIO_512.keys()}
-            original_width, original_height = start_image[0].size if type(start_image) is list else Image.open(start_image).size
+            if validation_video is not None:
+                original_width, original_height = Image.fromarray(cv2.VideoCapture(validation_video).read()[1]).size
+            else:
+                original_width, original_height = start_image[0].size if type(start_image) is list else Image.open(start_image).size
             closest_size, closest_ratio = get_closest_ratio(original_height, original_width, ratios=aspect_ratio_sample_size)
             height_slider, width_slider = [int(x / 16) * 16 for x in closest_size]
 
@@ -929,7 +973,7 @@ class EasyAnimateController_Modelscope:
 
         if is_xformers_available() and not self.inference_config.get('enable_multi_text_encoder', False): self.transformer.enable_xformers_memory_efficient_attention()
 
-        self.pipeline.scheduler = scheduler_dict[sampler_dropdown].from_pretrained(diffusion_transformer_dropdown, subfolder="scheduler")
+        self.pipeline.scheduler = scheduler_dict[sampler_dropdown].from_config(self.pipeline.scheduler.config)
         if self.lora_model_path != "none":
             # lora part
             self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
@@ -940,7 +984,12 @@ class EasyAnimateController_Modelscope:
         
         try:
             if self.transformer.config.in_channels != self.vae.config.latent_channels:
-                input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
+                if validation_video is not None:
+                    input_video, input_video_mask, clip_image = get_video_to_video_latent(validation_video, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
+                    strength = denoise_strength
+                else:
+                    input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
+                    strength = 1
 
                 sample = self.pipeline(
                     prompt_textbox,
@@ -955,6 +1004,7 @@ class EasyAnimateController_Modelscope:
                     video        = input_video,
                     mask_video   = input_video_mask,
                     clip_image   = clip_image, 
+                    strength     = strength,
                 ).videos
             else:
                 sample = self.pipeline(
@@ -1113,7 +1163,7 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memo
                         cfg_scale_slider = gr.Slider(label="CFG Scale (引导系数)",        value=6.0, minimum=0,   maximum=20)
                     else:
                         resize_method = gr.Radio(
-                            ["Generate by", "Resize to the Start Image"],
+                            ["Generate by", "Resize according to Reference"],
                             value="Generate by",
                             show_label=False,
                         )                        
@@ -1122,7 +1172,7 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memo
                                 """                    
                                 We support video generation up to 720p with 144 frames, but for the trial experience, we have set certain limitations. We fix the max resolution of video to 384x672x48 (2s). 
 
-                                If the start image you uploaded does not match this resolution, you can use the "Resize to the Start Image" option above. 
+                                If the start image you uploaded does not match this resolution, you can use the "Resize according to Reference" option above. 
                                 
                                 If you want to experience longer and larger video generation, you can go to our [Github](https://github.com/aigc-apps/EasyAnimate/). 
                                 """
@@ -1142,7 +1192,12 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memo
                             overlap_video_length = gr.Slider(label="Overlap length (视频续写的重叠帧数)", value=4, minimum=1,   maximum=4,  step=1, visible=False)
                             partial_video_length = gr.Slider(label="Partial video generation length (每个部分的视频生成帧数)", value=72, minimum=8,   maximum=144,  step=8, visible=False)
                         
-                        with gr.Accordion("Image to Video (图片到视频)", open=True):
+                        source_method = gr.Radio(
+                            ["Text to Video (文本到视频)", "Image to Video (图片到视频)", "Video to Video (视频到视频)"],
+                            value="Text to Video (文本到视频)",
+                            show_label=False,
+                        )
+                        with gr.Column(visible = False) as image_to_video_col:
                             with gr.Row():
                                 start_image = gr.Image(label="The image at the beginning of the video (图片到视频的开始图片)", show_label=True, elem_id="i2v_start", sources="upload", type="filepath")
                             
@@ -1170,8 +1225,14 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memo
                             with gr.Accordion("The image at the ending of the video (图片到视频的结束图片[非必需, Optional])", open=False):
                                 end_image   = gr.Image(label="The image at the ending of the video (图片到视频的结束图片[非必需, Optional])", show_label=False, elem_id="i2v_end", sources="upload", type="filepath")
 
+                        with gr.Column(visible = False) as video_to_video_col:
+                            validation_video = gr.Video(
+                                label="The video to convert (视频转视频的参考视频)",  show_label=True, 
+                                elem_id="v2v", sources="upload", 
+                            )
+                            denoise_strength = gr.Slider(label="Denoise strength (重绘系数)", value=0.70, minimum=0.10, maximum=0.95, step=0.01)
 
-                        cfg_scale_slider = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
+                        cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
                     
                     with gr.Row():
                         seed_textbox = gr.Textbox(label="Seed (随机种子)", value=43)
@@ -1200,6 +1261,17 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memo
                     return gr.update(minimum=1, maximum=1, value=1, interactive=False)
             generation_method.change(
                 upload_generation_method, generation_method, [length_slider]
+            )
+
+            def upload_source_method(source_method):
+                if source_method == "Text to Video (文本到视频)":
+                    return [gr.update(visible=False), gr.update(visible=False), gr.update(value=None), gr.update(value=None), gr.update(value=None)]
+                elif source_method == "Image to Video (图片到视频)":
+                    return [gr.update(visible=True), gr.update(visible=False), gr.update(), gr.update(), gr.update(value=None)]
+                else:
+                    return [gr.update(visible=False), gr.update(visible=True), gr.update(value=None), gr.update(value=None), gr.update()]
+            source_method.change(
+                upload_source_method, source_method, [image_to_video_col, video_to_video_col, start_image, end_image, validation_video]
             )
 
             def upload_resize_method(resize_method):
@@ -1234,6 +1306,8 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memo
                     cfg_scale_slider, 
                     start_image, 
                     end_image, 
+                    validation_video,
+                    denoise_strength, 
                     seed_textbox,
                 ],
                 outputs=[result_image, result_video, infer_progress]
@@ -1247,7 +1321,7 @@ def post_eas(
     prompt_textbox, negative_prompt_textbox, 
     sampler_dropdown, sample_step_slider, resize_method, width_slider, height_slider,
     base_resolution, generation_method, length_slider, cfg_scale_slider, 
-    start_image, end_image, seed_textbox,
+    start_image, end_image, validation_video, denoise_strength, seed_textbox,
 ):
     if start_image is not None:
         with open(start_image, 'rb') as file:
@@ -1260,6 +1334,12 @@ def post_eas(
             file_content = file.read()
             end_image_encoded_content = base64.b64encode(file_content)
             end_image = end_image_encoded_content.decode('utf-8')
+
+    if validation_video is not None:
+        with open(validation_video, 'rb') as file:
+            file_content = file.read()
+            validation_video_encoded_content = base64.b64encode(file_content)
+            validation_video = validation_video_encoded_content.decode('utf-8')
 
     datas = {
         "base_model_path": base_model_dropdown,
@@ -1279,6 +1359,8 @@ def post_eas(
         "cfg_scale_slider": cfg_scale_slider,
         "start_image": start_image,
         "end_image": end_image,
+        "validation_video": validation_video,
+        "denoise_strength": denoise_strength,
         "seed_textbox": seed_textbox,
     }
 
@@ -1316,6 +1398,8 @@ class EasyAnimateController_EAS:
         cfg_scale_slider, 
         start_image, 
         end_image, 
+        validation_video, 
+        denoise_strength,
         seed_textbox
     ):
         is_image = True if generation_method == "Image Generation" else False
@@ -1326,7 +1410,7 @@ class EasyAnimateController_EAS:
             prompt_textbox, negative_prompt_textbox, 
             sampler_dropdown, sample_step_slider, resize_method, width_slider, height_slider,
             base_resolution, generation_method, length_slider, cfg_scale_slider, 
-            start_image, end_image, 
+            start_image, end_image, validation_video, denoise_strength, 
             seed_textbox
         )
         try:
@@ -1449,7 +1533,7 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                         cfg_scale_slider = gr.Slider(label="CFG Scale",        value=6.0, minimum=0,   maximum=20)
                     else:
                         resize_method = gr.Radio(
-                            ["Generate by", "Resize to the Start Image"],
+                            ["Generate by", "Resize according to Reference"],
                             value="Generate by",
                             show_label=False,
                         )                        
@@ -1458,7 +1542,7 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                                 """                    
                                 We support video generation up to 720p with 144 frames, but for the trial experience, we have set certain limitations. We fix the max resolution of video to 384x672x48 (2s). 
 
-                                If the start image you uploaded does not match this resolution, you can use the "Resize to the Start Image" option above. 
+                                If the start image you uploaded does not match this resolution, you can use the "Resize according to Reference" option above. 
                                 
                                 If you want to experience longer and larger video generation, you can go to our [Github](https://github.com/aigc-apps/EasyAnimate/). 
                                 """
@@ -1476,7 +1560,12 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                             )
                             length_slider = gr.Slider(label="Animation length (视频帧数)", value=48, minimum=8,   maximum=48,  step=8)
                         
-                        with gr.Accordion("Image to Video", open=True):
+                        source_method = gr.Radio(
+                            ["Text to Video (文本到视频)", "Image to Video (图片到视频)", "Video to Video (视频到视频)"],
+                            value="Text to Video (文本到视频)",
+                            show_label=False,
+                        )
+                        with gr.Column(visible = False) as image_to_video_col:
                             start_image = gr.Image(label="The image at the beginning of the video", show_label=True, elem_id="i2v_start", sources="upload", type="filepath")
                             
                             template_gallery_path = ["asset/1.png", "asset/2.png", "asset/3.png", "asset/4.png", "asset/5.png"]
@@ -1503,7 +1592,14 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                             with gr.Accordion("The image at the ending of the video (Optional)", open=False):
                                 end_image   = gr.Image(label="The image at the ending of the video (Optional)", show_label=True, elem_id="i2v_end", sources="upload", type="filepath")
                         
-                        cfg_scale_slider = gr.Slider(label="CFG Scale",        value=7.0, minimum=0,   maximum=20)
+                        with gr.Column(visible = False) as video_to_video_col:
+                            validation_video = gr.Video(
+                                label="The video to convert (视频转视频的参考视频)",  show_label=True, 
+                                elem_id="v2v", sources="upload", 
+                            )
+                            denoise_strength = gr.Slider(label="Denoise strength (重绘系数)", value=0.70, minimum=0.10, maximum=0.95, step=0.01)
+
+                        cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
                     
                     with gr.Row():
                         seed_textbox = gr.Textbox(label="Seed", value=43)
@@ -1532,6 +1628,17 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                     return gr.update(minimum=1, maximum=1, value=1, interactive=False)
             generation_method.change(
                 upload_generation_method, generation_method, [length_slider]
+            )
+
+            def upload_source_method(source_method):
+                if source_method == "Text to Video (文本到视频)":
+                    return [gr.update(visible=False), gr.update(visible=False), gr.update(value=None), gr.update(value=None), gr.update(value=None)]
+                elif source_method == "Image to Video (图片到视频)":
+                    return [gr.update(visible=True), gr.update(visible=False), gr.update(), gr.update(), gr.update(value=None)]
+                else:
+                    return [gr.update(visible=False), gr.update(visible=True), gr.update(value=None), gr.update(value=None), gr.update()]
+            source_method.change(
+                upload_source_method, source_method, [image_to_video_col, video_to_video_col, start_image, end_image, validation_video]
             )
 
             def upload_resize_method(resize_method):
@@ -1564,6 +1671,8 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                     cfg_scale_slider, 
                     start_image, 
                     end_image, 
+                    validation_video,
+                    denoise_strength, 
                     seed_textbox,
                 ],
                 outputs=[result_image, result_video, infer_progress]
