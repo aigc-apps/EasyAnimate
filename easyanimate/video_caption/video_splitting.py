@@ -11,8 +11,8 @@ from tqdm import tqdm
 from .utils.logger import logger
 
 
-MIN_SECONDS = 3
-MAX_SECONDS = 10
+MIN_SECONDS = int(os.getenv("MIN_SECONDS", 3))
+MAX_SECONDS = int(os.getenv("MAX_SECONDS", 10))
 
 
 def get_command(start_time, video_path, video_duration, output_path):

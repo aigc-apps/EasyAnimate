@@ -1,4 +1,3 @@
-import ast
 import argparse
 import os
 from pathlib import Path
@@ -160,7 +159,7 @@ def main():
         motion_score_metadata_path=args.motion_score_metadata_path,
         min_motion_score=args.min_motion_score,
     )
-    video_path_list = [os.path.join(args.video_folder, str(video)) for video in video_path_list]
+    video_path_list = [os.path.join(args.video_folder, video_path) for video_path in video_path_list]
     # Sorting to guarantee the same result for each process.
     video_path_list = natsorted(video_path_list)
 

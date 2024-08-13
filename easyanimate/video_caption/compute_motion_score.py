@@ -116,9 +116,9 @@ def parse_args():
     )
     parser.add_argument("--min_asethetic_score_siglip", type=float, default=4.0, help="The asethetic score (SigLIP) threshold.")
     parser.add_argument(
-        "--motion_score_metadata_path", type=str, default=None, help="The path to the video motion score metadata (csv/jsonl)."
+        "--text_score_metadata_path", type=str, default=None, help="The path to the video text score metadata (csv/jsonl)."
     )
-    parser.add_argument("--min_motion_score", type=float, default=2, help="The motion threshold.")
+    parser.add_argument("--min_text_score", type=float, default=0.02, help="The text threshold.")
 
     args = parser.parse_args()
     return args
@@ -157,10 +157,10 @@ def main():
         min_asethetic_score=args.min_asethetic_score,
         asethetic_score_siglip_metadata_path=args.asethetic_score_siglip_metadata_path,
         min_asethetic_score_siglip=args.min_asethetic_score_siglip,
-        motion_score_metadata_path=args.motion_score_metadata_path,
-        min_motion_score=args.min_motion_score,
+        text_score_metadata_path=args.text_score_metadata_path,
+        min_text_score=args.min_text_score,
     )
-    video_path_list = [os.path.join(args.video_folder, str(video)) for video in video_path_list]
+    video_path_list = [os.path.join(args.video_folder, video_path) for video_path in video_path_list]
     # Sorting to guarantee the same result for each process.
     video_path_list = natsorted(video_path_list)
 

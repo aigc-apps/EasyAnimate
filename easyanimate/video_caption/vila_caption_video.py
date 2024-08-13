@@ -30,9 +30,8 @@ from tinychat.utils.tune import (
     tune_llava_patch_embedding,
 )
 
-from utils.filter import filter
-from utils.logger import logger
-from utils.video_utils import get_video_path_list
+from .utils.filter import filter
+from .utils.logger import logger
 
 gen_params.seed = 1
 gen_params.temp = 1.0
@@ -63,7 +62,7 @@ def skip(*args, **kwargs):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Recaption the video with VILA1.5-AWQ.")
+    parser = argparse.ArgumentParser(description="Recaption videos with VILA1.5.")
     parser.add_argument(
         "--video_metadata_path",
         type=str,
@@ -115,9 +114,19 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--basic_metadata_path", type=str, default=None, help="The path to the basic metadata (csv/jsonl)."
+    )
+    parser.add_argument("--min_resolution", type=float, default=0, help="The resolution threshold.")
+    parser.add_argument("--min_duration", type=float, default=-1, help="The minimum duration.")
+    parser.add_argument("--max_duration", type=float, default=-1, help="The maximum duration.")
+    parser.add_argument(
         "--asethetic_score_metadata_path", type=str, default=None, help="The path to the video quality metadata (csv/jsonl)."
     )
     parser.add_argument("--min_asethetic_score", type=float, default=4.0, help="The asethetic score threshold.")
+    parser.add_argument(
+        "--asethetic_score_siglip_metadata_path", type=str, default=None, help="The path to the video quality metadata (csv/jsonl)."
+    )
+    parser.add_argument("--min_asethetic_score_siglip", type=float, default=4.0, help="The asethetic score (SigLIP) threshold.")
     parser.add_argument(
         "--text_score_metadata_path", type=str, default=None, help="The path to the video text score metadata (csv/jsonl)."
     )
@@ -132,23 +141,14 @@ def parse_args():
 
 
 def main(args):
-    # if args.video_metadata_path.endswith(".csv"):
-    #     video_metadata_df = pd.read_csv(args.video_metadata_path)
-    # elif args.video_metadata_path.endswith(".jsonl"):
-    #     video_metadata_df = pd.read_json(args.video_metadata_path, lines=True)
-    # else:
-    #     raise ValueError("The video_metadata_path must end with .csv or .jsonl.")
-    # video_path_list = video_metadata_df[args.video_path_column].tolist()
-    # video_path_list = [os.path.basename(video_path) for video_path in video_path_list]
-    # logger.info(
-    #     f"{len(set(video_path_list))} videos in {args.video_metadata_path} with the length of {len(video_metadata_df)}."
-    # )
-
-    video_path_list = get_video_path_list(
-        video_folder=args.video_folder,
-        video_metadata_path=args.video_metadata_path,
-        video_path_column=args.video_path_column
-    )
+    if args.video_metadata_path.endswith(".csv"):
+        video_metadata_df = pd.read_csv(args.video_metadata_path)
+    elif args.video_metadata_path.endswith(".jsonl"):
+        video_metadata_df = pd.read_json(args.video_metadata_path, lines=True)
+    else:
+        raise ValueError("The video_metadata_path must end with .csv or .jsonl.")
+    video_path_list = video_metadata_df[args.video_path_column].tolist()
+    video_path_list = [os.path.basename(video_path) for video_path in video_path_list]
 
     if not (args.saved_path.endswith(".csv") or args.saved_path.endswith(".jsonl")):
         raise ValueError("The saved_path must end with .csv or .jsonl.")
@@ -159,31 +159,29 @@ def main(args):
         elif args.saved_path.endswith(".jsonl"):
             saved_metadata_df = pd.read_json(args.saved_path, lines=True)
         saved_video_path_list = saved_metadata_df[args.video_path_column].tolist()
-        video_path_list = list(
-            set(video_path_list).difference(set(saved_video_path_list))
-        )
-        # Sorting to guarantee the same result for each process.
-        video_path_list = natsorted(video_path_list)
+        video_path_list = list(set(video_path_list).difference(set(saved_video_path_list)))
         logger.info(
             f"Resume from {args.saved_path}: {len(saved_video_path_list)} processed and {len(video_path_list)} to be processed."
         )
     
     video_path_list = filter(
         video_path_list,
+        basic_metadata_path=args.basic_metadata_path,
+        min_resolution=args.min_resolution,
+        min_duration=args.min_duration,
+        max_duration=args.max_duration,
         asethetic_score_metadata_path=args.asethetic_score_metadata_path,
         min_asethetic_score=args.min_asethetic_score,
+        asethetic_score_siglip_metadata_path=args.asethetic_score_siglip_metadata_path,
+        min_asethetic_score_siglip=args.min_asethetic_score_siglip,
         text_score_metadata_path=args.text_score_metadata_path,
         min_text_score=args.min_text_score,
         motion_score_metadata_path=args.motion_score_metadata_path,
         min_motion_score=args.min_motion_score,
     )
+    video_path_list = [os.path.join(args.video_folder, video_path) for video_path in video_path_list]
     # Sorting to guarantee the same result for each process.
     video_path_list = natsorted(video_path_list)
-    logger.info(f"{len(video_path_list)} videos are to be processed.")
-    
-    video_path_list = [
-        os.path.join(args.video_folder, str(video_path)) for video_path in video_path_list
-    ]
 
     state = PartialState()
 
@@ -279,6 +277,7 @@ def main(args):
     # Avoid the NCCL timeout in the final gather operation.
     logger.info(f"Drop {len(video_path_list) % state.num_processes} videos to ensure each process handles the same number of videos.")
     video_path_list = video_path_list[:index]
+    logger.info(f"{len(video_path_list)} videos are to be processed.")
     
     result_dict = {args.video_path_column: [], args.caption_column: []}
     with state.split_between_processes(video_path_list) as splitted_video_path_list:
