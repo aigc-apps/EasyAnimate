@@ -177,7 +177,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
             A scheduler to be used in combination with HunyuanDiT to denoise the encoded image latents.
     """
 
-    model_cpu_offload_seq = "text_encoder->text_encoder_2->transformer->vae"
+    model_cpu_offload_seq = "text_encoder->text_encoder_2->clip_image_encoder->transformer->vae"
     _optional_components = [
         "safety_checker",
         "feature_extractor",
@@ -185,6 +185,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
         "tokenizer_2",
         "text_encoder",
         "tokenizer",
+        "clip_image_encoder",
     ]
     _exclude_from_cpu_offload = ["safety_checker"]
     _callback_tensor_inputs = [
@@ -531,7 +532,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
         return timesteps, num_inference_steps - t_start
 
     def prepare_mask_latents(
-        self, mask, masked_image, ref_video, batch_size, height, width, dtype, device, generator, do_classifier_free_guidance
+        self, mask, masked_image, batch_size, height, width, dtype, device, generator, do_classifier_free_guidance
     ):
         # resize the mask to latents shape as we concatenate the mask to the latents
         # we do that before converting to dtype to avoid breaking in case we're using cpu_offload
@@ -584,31 +585,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
         # aligning device to prevent device errors when concating it with the latent model input
         masked_image_latents = masked_image_latents.to(device=device, dtype=dtype)
 
-        ref_video = ref_video.to(device=device, dtype=self.vae.dtype)
-        if self.vae.quant_conv.weight.ndim==5:
-            bs = 1
-            mini_batch_encoder = self.vae.mini_batch_encoder
-            new_ref_pixel_values = []
-            for i in range(0, ref_video.shape[0], bs):
-                ref_pixel_values_bs = ref_video[i : i + bs]
-                ref_pixel_values_bs = self.vae.encode(ref_pixel_values_bs)[0]
-                ref_pixel_values_bs = ref_pixel_values_bs.sample()
-                new_ref_pixel_values.append(ref_pixel_values_bs)
-            ref_video_latents = torch.cat(new_ref_pixel_values, dim = 0)
-            ref_video_latents = ref_video_latents * self.vae.config.scaling_factor
-
-        else:
-            if ref_video.shape[1] == 4:
-                ref_video_latents = ref_video
-            else:
-                video_length = mask.shape[2]
-                ref_video = rearrange(ref_video, "b c f h w -> (b f) c h w")
-                ref_video_latents = self._encode_vae_image(ref_video, generator=generator)
-                ref_video_latents = rearrange(ref_video_latents, "(b f) c h w -> b c f h w", f=video_length)
-
-        # aligning device to prevent device errors when concating it with the latent model input
-        ref_video_latents = ref_video_latents.to(device=device, dtype=dtype).expand_as(masked_image_latents)
-        return mask, masked_image_latents, ref_video_latents
+        return mask, masked_image_latents
 
     def prepare_latents(
         self, 
@@ -662,6 +639,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
                     video = self._encode_vae_image(video, generator=generator)
                     video = rearrange(video, "(b f) c h w -> b c f h w", f=video_length)
             video_latents = video.repeat(batch_size // video.shape[0], 1, 1, 1, 1)
+            video_latents = video_latents.to(device=device, dtype=dtype)
 
         if latents is None:
             noise = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
@@ -708,7 +686,8 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
             mini_batch_decoder = self.vae.mini_batch_decoder
             video = self.vae.decode(latents)[0]
             video = video.clamp(-1, 1)
-            # video = self.smooth_output(video, mini_batch_encoder, mini_batch_decoder).cpu().clamp(-1, 1)
+            if not self.vae.cache_compression_vae:
+                video = self.smooth_output(video, mini_batch_encoder, mini_batch_decoder).cpu().clamp(-1, 1)
         else:
             latents = rearrange(latents, "b c f h w -> (b f) c h w")
             video = []
@@ -785,6 +764,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
         clip_image: Image = None,
         clip_apply_ratio: float = 0.50,
         strength: float = 1.0,
+        comfyui_progressbar: bool = False,
     ):
         r"""
         The call function to the pipeline for generation with HunyuanDiT.
@@ -958,6 +938,9 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
         timesteps, num_inference_steps = self.get_timesteps(
             num_inference_steps=num_inference_steps, strength=strength, device=device
         )
+        if comfyui_progressbar:
+            from comfy.utils import ProgressBar
+            pbar = ProgressBar(num_inference_steps + 3)
         # at which timestep to set the initial noise (n.b. 50% if strength is 0.5)
         latent_timestep = timesteps[:1].repeat(batch_size * num_images_per_prompt)
         # create a boolean to check if the strength is set to 1. if so then initialise the latents with pure noise
@@ -975,6 +958,10 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
         num_channels_latents = self.vae.config.latent_channels
         num_channels_transformer = self.transformer.config.in_channels
         return_image_latents = num_channels_transformer == num_channels_latents
+
+        # Make vae to cuda
+        self.vae = self.vae.to(device)
+        torch.cuda.empty_cache()
 
         # 5. Prepare latents.
         latents_outputs = self.prepare_latents(
@@ -998,6 +985,8 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
         else:
             latents, noise = latents_outputs
         latents_dtype = latents.dtype
+        if comfyui_progressbar:
+            pbar.update(1)
 
         if clip_image is not None:
             inputs = self.clip_image_processor(images=clip_image, return_tensors="pt")
@@ -1017,12 +1006,6 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
             clip_encoder_hidden_states_input = torch.cat([clip_encoder_hidden_states_neg, clip_encoder_hidden_states]) if self.do_classifier_free_guidance else clip_encoder_hidden_states
             clip_attention_mask_input = torch.cat([clip_attention_mask_neg, clip_attention_mask]) if self.do_classifier_free_guidance else clip_attention_mask
 
-            ref_video = torch.from_numpy(np.array(clip_image)).permute(2, 0, 1).unsqueeze(1).unsqueeze(0) / 255
-            video_length = ref_video.shape[2]
-            ref_video = self.image_processor.preprocess(rearrange(ref_video, "b c f h w -> (b f) c h w"), height=height, width=width) 
-            ref_video = ref_video.to(dtype=torch.float32)
-            ref_video = rearrange(ref_video, "(b f) c h w -> b c f h w", f=video_length)
-
         elif clip_image is None and num_channels_transformer != num_channels_latents:
             clip_encoder_hidden_states = torch.zeros(
                 [
@@ -1038,30 +1021,22 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
             clip_encoder_hidden_states_input = torch.cat([clip_encoder_hidden_states] * 2) if self.do_classifier_free_guidance else clip_encoder_hidden_states
             clip_attention_mask_input = torch.cat([clip_attention_mask] * 2) if self.do_classifier_free_guidance else clip_attention_mask
 
-            ref_video = torch.zeros([self.clip_image_encoder.config.image_size, self.clip_image_encoder.config.image_size, 3]).permute(2, 0, 1).unsqueeze(1).unsqueeze(0) / 255
-            video_length = ref_video.shape[2]
-            ref_video = self.image_processor.preprocess(rearrange(ref_video, "b c f h w -> (b f) c h w"), height=height, width=width) 
-            ref_video = ref_video.to(dtype=torch.float32)
-            ref_video = rearrange(ref_video, "(b f) c h w -> b c f h w", f=video_length)
         else:
             clip_encoder_hidden_states_input = None
             clip_attention_mask_input = None
-            ref_video = None
+        if comfyui_progressbar:
+            pbar.update(1)
 
         if mask_video is not None:
             if (mask_video == 255).all():
                 mask_latents = torch.zeros_like(latents).to(latents.device, latents.dtype)
                 masked_video_latents = torch.zeros_like(latents).to(latents.device, latents.dtype)
-                ref_video_latents = torch.zeros_like(latents).to(latents.device, latents.dtype)
 
                 mask_input = torch.cat([mask_latents] * 2) if self.do_classifier_free_guidance else mask_latents
                 masked_video_latents_input = (
                     torch.cat([masked_video_latents] * 2) if self.do_classifier_free_guidance else masked_video_latents
                 )
-                ref_video_latents = (
-                    torch.cat([ref_video_latents] * 2) if self.do_classifier_free_guidance else ref_video_latents
-                )
-                inpaint_latents = torch.cat([mask_input, masked_video_latents_input, ref_video_latents], dim=1).to(latents.dtype)
+                inpaint_latents = torch.cat([mask_input, masked_video_latents_input], dim=1).to(latents.dtype)
             else:
                 # Prepare mask latent variables
                 video_length = video.shape[2]
@@ -1076,10 +1051,9 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
                     else:
                         masked_video = masked_video_latents
 
-                    mask_latents, masked_video_latents, ref_video_latents = self.prepare_mask_latents(
+                    mask_latents, masked_video_latents = self.prepare_mask_latents(
                         mask_condition_tile,
                         masked_video,
-                        ref_video,
                         batch_size,
                         height,
                         width,
@@ -1095,10 +1069,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
                     masked_video_latents_input = (
                         torch.cat([masked_video_latents] * 2) if self.do_classifier_free_guidance else masked_video_latents
                     )
-                    ref_video_latents = (
-                        torch.cat([ref_video_latents] * 2) if self.do_classifier_free_guidance else ref_video_latents
-                    )
-                    inpaint_latents = torch.cat([mask_input, masked_video_latents_input, ref_video_latents], dim=1).to(latents.dtype)
+                    inpaint_latents = torch.cat([mask_input, masked_video_latents_input], dim=1).to(latents.dtype)
                 else:
                     mask = torch.tile(mask_condition, [1, num_channels_latents, 1, 1, 1])
                     mask = F.interpolate(mask, size=latents.size()[-3:], mode='trilinear', align_corners=True).to(latents.device, latents.dtype)
@@ -1108,30 +1079,27 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
             if num_channels_transformer != num_channels_latents:
                 mask = torch.zeros_like(latents).to(latents.device, latents.dtype)
                 masked_video_latents = torch.zeros_like(latents).to(latents.device, latents.dtype)
-                ref_video_latents = torch.zeros_like(latents).to(latents.device, latents.dtype)
 
                 mask_input = torch.cat([mask] * 2) if self.do_classifier_free_guidance else mask
                 masked_video_latents_input = (
                     torch.cat([masked_video_latents] * 2) if self.do_classifier_free_guidance else masked_video_latents
                 )
-                ref_video_latents = (
-                    torch.cat([ref_video_latents] * 2) if self.do_classifier_free_guidance else ref_video_latents
-                )
-                inpaint_latents = torch.cat([mask_input, masked_video_latents_input, ref_video_latents], dim=1).to(latents.dtype)
+                inpaint_latents = torch.cat([mask_input, masked_video_latents_input], dim=1).to(latents.dtype)
             else:
                 mask = torch.zeros_like(init_video[:, :1])
                 mask = torch.tile(mask, [1, num_channels_latents, 1, 1, 1])
                 mask = F.interpolate(mask, size=latents.size()[-3:], mode='trilinear', align_corners=True).to(latents.device, latents.dtype)
 
                 inpaint_latents = None
+        if comfyui_progressbar:
+            pbar.update(1)
 
         # Check that sizes of mask, masked image and latents match
-        if num_channels_transformer == 16:
+        if num_channels_transformer == 12:
             # default case for runwayml/stable-diffusion-inpainting
             num_channels_mask = mask_latents.shape[1]
             num_channels_masked_image = masked_video_latents.shape[1]
-            ref_video_latents = ref_video_latents.shape[1]
-            if num_channels_latents + num_channels_mask + num_channels_masked_image + ref_video_latents != self.transformer.config.in_channels:
+            if num_channels_latents + num_channels_mask + num_channels_masked_image != self.transformer.config.in_channels:
                 raise ValueError(
                     f"Incorrect configuration settings! The config of `pipeline.transformer`: {self.transformer.config} expects"
                     f" {self.transformer.config.in_channels} but received `num_channels_latents`: {num_channels_latents} +"
@@ -1178,6 +1146,11 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
             batch_size * num_images_per_prompt, 1
         )
         style = style.to(device=device).repeat(batch_size * num_images_per_prompt)
+
+        # Empty vae cache
+        self.transformer = self.transformer.to(device)
+        self.vae = self.vae.to("cpu")
+        torch.cuda.empty_cache()
 
         # 10. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
@@ -1277,8 +1250,20 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
                 if XLA_AVAILABLE:
                     xm.mark_step()
 
+                if comfyui_progressbar:
+                    pbar.update(1)
+
+        # Make vae to cuda
+        self.transformer = self.transformer.to("cpu")
+        self.vae = self.vae.to(device)
+        torch.cuda.empty_cache()
+
         # Post-processing
         video = self.decode_latents(latents)
+
+        # Make vae to cpu
+        self.vae = self.vae.to("cpu")
+        torch.cuda.empty_cache()
 
         # Convert to tensor
         if output_type == "latent":

@@ -3,26 +3,34 @@
 import gc
 import os
 
-import torch
+import comfy.model_management as mm
+import cv2
+import folder_paths
 import numpy as np
-from PIL import Image
+import torch
+from comfy.utils import ProgressBar, load_torch_file
 from diffusers import (AutoencoderKL, DDIMScheduler,
                        DPMSolverMultistepScheduler,
                        EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
                        PNDMScheduler)
 from einops import rearrange
 from omegaconf import OmegaConf
+from PIL import Image
 from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 
-import comfy.model_management as mm
-import folder_paths
-from comfy.utils import ProgressBar, load_torch_file
-
+from ..easyanimate.data.bucket_sampler import (ASPECT_RATIO_512,
+                                               get_closest_ratio)
 from ..easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
-from ..easyanimate.models.transformer3d import Transformer3DModel
-from ..easyanimate.pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaintPipeline
-from ..easyanimate.utils.utils import get_image_to_video_latent
-from ..easyanimate.data.bucket_sampler import ASPECT_RATIO_512, get_closest_ratio
+from ..easyanimate.models.transformer3d import (HunyuanTransformer3DModel,
+                                                Transformer3DModel)
+from ..easyanimate.pipeline.pipeline_easyanimate_inpaint import \
+    EasyAnimateInpaintPipeline
+from ..easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import \
+    EasyAnimatePipeline_Multi_Text_Encoder_Inpaint
+from ..easyanimate.utils.lora_utils import merge_lora, unmerge_lora
+from ..easyanimate.utils.utils import (get_image_to_video_latent,
+                                       get_video_to_video_latent,
+                                       save_videos_grid)
 
 # Compatible with Alibaba EAS for quick launch
 eas_cache_dir       = '/stable-diffusion-cache/models'
@@ -53,10 +61,11 @@ class LoadEasyAnimateModel:
                     [ 
                         'EasyAnimateV3-XL-2-InP-512x512',
                         'EasyAnimateV3-XL-2-InP-768x768',
-                        'EasyAnimateV3-XL-2-InP-960x960'
+                        'EasyAnimateV3-XL-2-InP-960x960',
+                        'EasyAnimateV4-XL-2-InP',
                     ],
                     {
-                        "default": 'EasyAnimateV3-XL-2-InP-768x768',
+                        "default": 'EasyAnimateV4-XL-2-InP',
                     }
                 ),
                 "low_gpu_memory_mode":(
@@ -68,15 +77,16 @@ class LoadEasyAnimateModel:
                 "config": (
                     [
                         "easyanimate_video_slicevae_motion_module_v3.yaml",
+                        "easyanimate_video_slicevae_multi_text_encoder_v4.yaml",
                     ],
                     {
-                        "default": "easyanimate_video_slicevae_motion_module_v3.yaml",
+                        "default": "easyanimate_video_slicevae_multi_text_encoder_v4.yaml",
                     }
                 ),
                 "precision": (
                     ['fp16', 'bf16'],
                     {
-                        "default": 'bf16'
+                        "default": 'fp16'
                     }
                 ),
                 
@@ -127,20 +137,25 @@ class LoadEasyAnimateModel:
 
         # Load Sampler
         print("Load Sampler.")
-        scheduler = EulerDiscreteScheduler.from_pretrained(model_path, subfolder= 'scheduler')
+        scheduler = EulerDiscreteScheduler.from_pretrained(model_path, subfolder='scheduler')
         # Update pbar
         pbar.update(1)
         
-        # Load Transformer
-        print("Load Transformer.")
+        # Get Transformer
+        if config.get('enable_multi_text_encoder', False):
+            Choosen_Transformer3DModel = HunyuanTransformer3DModel
+        else:
+            Choosen_Transformer3DModel = Transformer3DModel
+
         transformer_additional_kwargs = OmegaConf.to_container(config['transformer_additional_kwargs'])
         if weight_dtype == torch.float16:
             transformer_additional_kwargs["upcast_attention"] = True
-        transformer = Transformer3DModel.from_pretrained(
+
+        transformer = Choosen_Transformer3DModel.from_pretrained_2d(
             model_path, 
-            subfolder= 'transformer', 
+            subfolder="transformer",
             transformer_additional_kwargs=transformer_additional_kwargs
-        ).to(weight_dtype).eval()  
+        ).to(weight_dtype)
         # Update pbar
         pbar.update(1) 
 
@@ -158,15 +173,26 @@ class LoadEasyAnimateModel:
         # Update pbar
         pbar.update(1)
 
-        pipeline = EasyAnimateInpaintPipeline.from_pretrained(
+        if config.get('enable_multi_text_encoder', False):
+            pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
                 model_path,
+                vae=vae,
                 transformer=transformer,
                 scheduler=scheduler,
-                vae=vae,
                 torch_dtype=weight_dtype,
                 clip_image_encoder=clip_image_encoder,
                 clip_image_processor=clip_image_processor,
-        )
+            )
+        else:
+            pipeline = EasyAnimateInpaintPipeline.from_pretrained(
+                model_path,
+                vae=vae,
+                transformer=transformer,
+                scheduler=scheduler,
+                torch_dtype=weight_dtype,
+                clip_image_encoder=clip_image_encoder,
+                clip_image_processor=clip_image_processor,
+            )
     
         if low_gpu_memory_mode:
             pipeline.enable_sequential_cpu_offload()
@@ -221,6 +247,7 @@ class EasyAnimateI2VSampler:
                         512,
                         768,
                         960,
+                        1024,
                     ], {"default": 768}
                 ),
                 "seed": (
@@ -422,12 +449,128 @@ class EasyAnimateT2VSampler:
             videos = rearrange(sample, "b c t h w -> (b t) h w c")
         return (videos,)   
 
+class EasyAnimateV2VSampler:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "easyanimate_model": (
+                    "EASYANIMATESMODEL", 
+                ),
+                "prompt": (
+                    "STRING_PROMPT",
+                ),
+                "negative_prompt": (
+                    "STRING_PROMPT",
+                ),
+                "video_length": (
+                    "INT", {"default": 72, "min": 8, "max": 144, "step": 8}
+                ),
+                "base_resolution": (
+                    [ 
+                        512,
+                        768,
+                        960,
+                        1024,
+                    ], {"default": 768}
+                ),
+                "seed": (
+                    "INT", {"default": 43, "min": 0, "max": 0xffffffffffffffff}
+                ),
+                "steps": (
+                    "INT", {"default": 25, "min": 1, "max": 200, "step": 1}
+                ),
+                "cfg": (
+                    "FLOAT", {"default": 7.0, "min": 1.0, "max": 20.0, "step": 0.01}
+                ),
+                "denoise_strength": (
+                    "FLOAT", {"default": 0.70, "min": 0.05, "max": 1.00, "step": 0.01}
+                ),
+                "scheduler": (
+                    [ 
+                        "Euler",
+                        "Euler A",
+                        "DPM++",
+                        "PNDM",
+                        "DDIM",
+                    ],
+                    {
+                        "default": 'Euler'
+                    }
+                ),
+                "validation_video": ("IMAGE",),
+            }
+        }
+    
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES =("images",)
+    FUNCTION = "process"
+    CATEGORY = "EasyAnimateWrapper"
+
+    def process(self, easyanimate_model, prompt, negative_prompt, video_length, base_resolution, seed, steps, cfg, denoise_strength, scheduler, validation_video):
+        device = mm.get_torch_device()
+        offload_device = mm.unet_offload_device()
+
+        mm.soft_empty_cache()
+        gc.collect()
+
+        # Count most suitable height and width
+        aspect_ratio_sample_size    = {key : [x / 512 * base_resolution for x in ASPECT_RATIO_512[key]] for key in ASPECT_RATIO_512.keys()}
+        if type(validation_video) is str:
+            original_width, original_height = Image.fromarray(cv2.VideoCapture(validation_video).read()[1]).size
+        else:
+            validation_video = np.array(validation_video.cpu().numpy() * 255, np.uint8)
+            original_width, original_height = Image.fromarray(validation_video[0]).size
+        closest_size, closest_ratio = get_closest_ratio(original_height, original_width, ratios=aspect_ratio_sample_size)
+        height, width = [int(x / 16) * 16 for x in closest_size]
+        
+        # Get Pipeline
+        pipeline = easyanimate_model['pipeline']
+        model_path = easyanimate_model['model_path']
+
+        # Load Sampler
+        if scheduler == "DPM++":
+            noise_scheduler = DPMSolverMultistepScheduler.from_pretrained(model_path, subfolder= 'scheduler')
+        elif scheduler == "Euler":
+            noise_scheduler = EulerDiscreteScheduler.from_pretrained(model_path, subfolder= 'scheduler')
+        elif scheduler == "Euler A":
+            noise_scheduler = EulerAncestralDiscreteScheduler.from_pretrained(model_path, subfolder= 'scheduler')
+        elif scheduler == "PNDM":
+            noise_scheduler = PNDMScheduler.from_pretrained(model_path, subfolder= 'scheduler')
+        elif scheduler == "DDIM":
+            noise_scheduler = DDIMScheduler.from_pretrained(model_path, subfolder= 'scheduler')
+        pipeline.scheduler = noise_scheduler
+
+        generator= torch.Generator(device).manual_seed(seed)
+
+        with torch.no_grad():
+            video_length = int(video_length // pipeline.vae.mini_batch_encoder * pipeline.vae.mini_batch_encoder) if video_length != 1 else 1
+            input_video, input_video_mask, clip_image = get_video_to_video_latent(validation_video, video_length=video_length, sample_size=(height, width))
+            sample = pipeline(
+                prompt, 
+                video_length = video_length,
+                negative_prompt = negative_prompt,
+                height      = height,
+                width       = width,
+                generator   = generator,
+                guidance_scale = cfg,
+                num_inference_steps = steps,
+
+                video        = input_video,
+                mask_video   = input_video_mask,
+                clip_image   = clip_image, 
+                strength = float(denoise_strength),
+                comfyui_progressbar = True,
+            ).videos
+            videos = rearrange(sample, "b c t h w -> (b t) h w c")
+        return (videos,)   
 
 NODE_CLASS_MAPPINGS = {
     "LoadEasyAnimateModel": LoadEasyAnimateModel,
     "TextBox": TextBox,
     "EasyAnimateI2VSampler": EasyAnimateI2VSampler,
     "EasyAnimateT2VSampler": EasyAnimateT2VSampler,
+    "EasyAnimateV2VSampler": EasyAnimateV2VSampler,
 }
 
 
@@ -436,4 +579,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "LoadEasyAnimateModel": "Load EasyAnimate Model",
     "EasyAnimateI2VSampler": "EasyAnimate Sampler for Image to Video",
     "EasyAnimateT2VSampler": "EasyAnimate Sampler for Text to Video",
+    "EasyAnimateV2VSampler": "EasyAnimate Sampler for Video to Video",
 }

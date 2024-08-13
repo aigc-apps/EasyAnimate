@@ -167,16 +167,19 @@ def get_image_to_video_latent(validation_image_start, validation_image_end, vide
     return  input_video, input_video_mask, clip_image
 
 def get_video_to_video_latent(input_video_path, video_length, sample_size):
-    cap = cv2.VideoCapture(input_video_path)
-    input_video = []
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        frame = cv2.resize(frame, (sample_size[1], sample_size[0]))
-        input_video.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-    cap.release()
-    cv2.destroyAllWindows()
+    if type(input_video_path) is str:
+        cap = cv2.VideoCapture(input_video_path)
+        input_video = []
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame = cv2.resize(frame, (sample_size[1], sample_size[0]))
+            input_video.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        cap.release()
+        cv2.destroyAllWindows()
+    else:
+        input_video = input_video_path
 
     input_video = torch.from_numpy(np.array(input_video))[:video_length]
     input_video = input_video.permute([3, 0, 1, 2]).unsqueeze(0) / 255

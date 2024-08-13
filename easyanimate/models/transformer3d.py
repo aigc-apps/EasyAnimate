@@ -23,8 +23,7 @@ import torch.nn.functional as F
 import torch.nn.init as init
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.attention import BasicTransformerBlock, FeedForward
-from diffusers.models.embeddings import (
-    HunyuanCombinedTimestepTextSizeStyleEmbedding, PatchEmbed,
+from diffusers.models.embeddings import (PatchEmbed,
     PixArtAlphaTextProjection, TimestepEmbedding, Timesteps)
 from diffusers.models.lora import LoRACompatibleConv, LoRACompatibleLinear
 from diffusers.models.modeling_outputs import Transformer2DModelOutput
@@ -39,6 +38,7 @@ from torch import nn
 from .attention import (HunyuanDiTBlock, HunyuanTemporalTransformerBlock,
                         SelfAttentionTemporalTransformerBlock,
                         TemporalTransformerBlock)
+from .embeddings import HunyuanCombinedTimestepTextSizeStyleEmbedding
 from .norm import AdaLayerNormSingle
 from .patch import (CasualPatchEmbed3D, Patch1D, PatchEmbed3D, PatchEmbedF3D,
                     TemporalUpsampler3D, UnPatch1D)
@@ -1184,17 +1184,29 @@ class HunyuanTransformer3DModel(ModelMixin, ConfigMixin):
                 state_dict['pos_embed.proj.weight'] = state_dict['pos_embed.proj.weight'].unsqueeze(2).expand(new_shape).clone()
                 state_dict['pos_embed.proj.weight'][:, :, :-1] = 0
             else:
-                model.state_dict()['pos_embed.proj.weight'][:, :4, :, :] = state_dict['pos_embed.proj.weight']
-                model.state_dict()['pos_embed.proj.weight'][:, 4:, :, :] = 0
-                state_dict['pos_embed.proj.weight'] = model.state_dict()['pos_embed.proj.weight']
-                            
+                if model.state_dict()['pos_embed.proj.weight'].size()[1] > state_dict['pos_embed.proj.weight'].size()[1]:
+                    model.state_dict()['pos_embed.proj.weight'][:, :state_dict['pos_embed.proj.weight'].size()[1], :, :] = state_dict['pos_embed.proj.weight']
+                    model.state_dict()['pos_embed.proj.weight'][:, state_dict['pos_embed.proj.weight'].size()[1]:, :, :] = 0
+                    state_dict['pos_embed.proj.weight'] = model.state_dict()['pos_embed.proj.weight']
+                else:
+                    model.state_dict()['pos_embed.proj.weight'][:, :, :, :] = state_dict['pos_embed.proj.weight'][:, :model.state_dict()['pos_embed.proj.weight'].size()[1], :, :]
+                    state_dict['pos_embed.proj.weight'] = model.state_dict()['pos_embed.proj.weight']
+
         if model.state_dict()['proj_out.weight'].size() != state_dict['proj_out.weight'].size():
-            model.state_dict()['proj_out.weight'][:state_dict['proj_out.weight'].size()[0], :] = state_dict['proj_out.weight']
-            state_dict['proj_out.weight'] = model.state_dict()['proj_out.weight']
+            if model.state_dict()['proj_out.weight'].size()[0] > state_dict['proj_out.weight'].size()[0]:
+                model.state_dict()['proj_out.weight'][:state_dict['proj_out.weight'].size()[0], :] = state_dict['proj_out.weight']
+                state_dict['proj_out.weight'] = model.state_dict()['proj_out.weight']
+            else:
+                model.state_dict()['proj_out.weight'][:, :] = state_dict['proj_out.weight'][:model.state_dict()['proj_out.weight'].size()[0], :]
+                state_dict['proj_out.weight'] = model.state_dict()['proj_out.weight']
 
         if model.state_dict()['proj_out.bias'].size() != state_dict['proj_out.bias'].size():
-            model.state_dict()['proj_out.bias'][:state_dict['proj_out.bias'].size()[0]] = state_dict['proj_out.bias']
-            state_dict['proj_out.bias'] = model.state_dict()['proj_out.bias']
+            if model.state_dict()['proj_out.bias'].size()[0] > state_dict['proj_out.bias'].size()[0]:
+                model.state_dict()['proj_out.bias'][:state_dict['proj_out.bias'].size()[0]] = state_dict['proj_out.bias']
+                state_dict['proj_out.bias'] = model.state_dict()['proj_out.bias']
+            else:
+                model.state_dict()['proj_out.bias'][:, :] = state_dict['proj_out.bias'][:model.state_dict()['proj_out.bias'].size()[0], :]
+                state_dict['proj_out.bias'] = model.state_dict()['proj_out.bias']
 
         tmp_state_dict = {} 
         for key in state_dict:

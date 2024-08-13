@@ -99,12 +99,16 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         scaling_factor: float = 0.1825,
         slice_mag_vae=True,
         slice_compression_vae=False,
+        cache_compression_vae=False,
         use_tiling=False,
         use_tiling_encoder=False,
         use_tiling_decoder=False,
         mini_batch_encoder=9,
         mini_batch_decoder=3,
         upcast_vae=False,
+        spatial_group_norm=False,
+        tile_sample_min_size=384,
+        tile_overlap_factor=0.25,
     ):
         super().__init__()
         down_block_types = str_eval(down_block_types)
@@ -127,7 +131,9 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
             double_z=True,
             slice_mag_vae=slice_mag_vae,
             slice_compression_vae=slice_compression_vae,
+            cache_compression_vae=cache_compression_vae,
             mini_batch_encoder=mini_batch_encoder,
+            spatial_group_norm=spatial_group_norm,
         )
 
         self.decoder = omnigen_Mag_Decoder(
@@ -147,13 +153,17 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
             num_attention_heads=num_attention_heads,
             slice_mag_vae=slice_mag_vae,
             slice_compression_vae=slice_compression_vae,
+            cache_compression_vae=cache_compression_vae,
             mini_batch_decoder=mini_batch_decoder,
+            spatial_group_norm=spatial_group_norm,
         )
 
         self.quant_conv = nn.Conv3d(2 * latent_channels, 2 * latent_channels, kernel_size=1)
         self.post_quant_conv = nn.Conv3d(latent_channels, latent_channels, kernel_size=1)
 
+        self.slice_mag_vae = slice_mag_vae
         self.slice_compression_vae = slice_compression_vae
+        self.cache_compression_vae = cache_compression_vae
         self.mini_batch_encoder = mini_batch_encoder
         self.mini_batch_decoder = mini_batch_decoder
         self.use_slicing = False
@@ -161,8 +171,8 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         self.use_tiling_encoder = use_tiling_encoder
         self.use_tiling_decoder = use_tiling_decoder
         self.upcast_vae = upcast_vae
-        self.tile_sample_min_size = 384
-        self.tile_overlap_factor = 0.25
+        self.tile_sample_min_size = tile_sample_min_size
+        self.tile_overlap_factor = tile_overlap_factor
         self.tile_latent_min_size = int(self.tile_sample_min_size / (2 ** (len(ch_mult) - 1)))
         self.scaling_factor = scaling_factor
 

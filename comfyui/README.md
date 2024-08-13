@@ -34,12 +34,19 @@ python install.py
 ```
 
 ### 2. Download models into `ComfyUI/models/EasyAnimate/`
-EasyAnimateV3:
+
+| Name | Type | Storage Space | Url | Hugging Face | Description |
+| EasyAnimateV4-XL-2-InP.tar | EasyAnimateV4 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV4-XL-2-InP)| Our official graph-generated video model is capable of predicting videos at multiple resolutions (512, 768, 1024, 1280) and has been trained on 144 frames at a rate of 24 frames per second. |
+
+<details>
+  <summary>(Obsolete) EasyAnimateV3:</summary>
+
 | Name | Type | Storage Space | Url | Hugging Face | Description |
 |--|--|--|--|--|--|
 | EasyAnimateV3-XL-2-InP-512x512.tar | EasyAnimateV3 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-512x512) | EasyAnimateV3 official weights for 512x512 text and image to video resolution. Training with 144 frames and fps 24 |
 | EasyAnimateV3-XL-2-InP-768x768.tar | EasyAnimateV3 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-768x768) | EasyAnimateV3 official weights for 768x768 text and image to video resolution. Training with 144 frames and fps 24 |
 | EasyAnimateV3-XL-2-InP-960x960.tar | EasyAnimateV3 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-960x960) | EasyAnimateV3 official weights for 960x960 text and  image to video resolution. Training with 144 frames and fps 24 |
+</details>
 
 ## Node types
 - **LoadEasyAnimateModel**
@@ -50,17 +57,25 @@ EasyAnimateV3:
     - EasyAnimate Sampler for Image to Video 
 - **EasyAnimateT2VSampler**
     - EasyAnimate Sampler for Text to Video
+- **EasyAnimateV2VSampler**
+    - EasyAnimate Sampler for Video to Video
 
 ## Example workflows
 
+### Video to video generation
+Our ui is shown as follow, this is the [download link](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v4/easyanimatev4_workflow_v2v.json) of the json:
+![workflow graph](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v4/comfyui_v2v.jpg)
+
+You can run the demo using following video:
+[demo video](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v4/play_guitar.mp4)
+
 ### Image to video generation
-Our ui is shown as follow, this is the [download link](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/easyanimatev3_workflow_i2v.json) of the json:
-![workflow graph](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/comfyui_i2v.jpg)
+Our ui is shown as follow, this is the [download link](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v4/easyanimatev4_workflow_i2v.json) of the json:
+![workflow graph](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v4/comfyui_i2v.jpg)
 
 You can run the demo using following photo:
-![demo image](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/firework.png)
-
+![demo image](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v4/firework.png)
 
 ### Text to video generation
-Our ui is shown as follow, this is the [download link](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/easyanimatev3_workflow_t2v.json) of the json:
-![workflow graph](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/comfyui_t2v.jpg)
+Our ui is shown as follow, this is the [download link](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v4/easyanimatev4_workflow_t2v.json) of the json:
+![workflow graph](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v4/comfyui_t2v.jpg)

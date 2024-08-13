@@ -7,6 +7,7 @@ import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from einops import rearrange
 
 from ..util import instantiate_from_config
 from .omnigen_enc_dec import Decoder as omnigen_Mag_Decoder
@@ -114,9 +115,12 @@ class AutoencoderKLMagvit_fromOmnigen(pl.LightningModule):
         lossconfig=None,
         slice_mag_vae=False,
         slice_compression_vae=False,
+        cache_compression_vae=False,
+        spatial_group_norm=False,
         mini_batch_encoder=9,
         mini_batch_decoder=3,
         train_decoder_only=False,
+        train_encoder_only=False,
     ):
         super().__init__()
         self.image_key = image_key
@@ -140,6 +144,8 @@ class AutoencoderKLMagvit_fromOmnigen(pl.LightningModule):
             double_z=True,
             slice_mag_vae=slice_mag_vae,
             slice_compression_vae=slice_compression_vae,
+            cache_compression_vae=cache_compression_vae,
+            spatial_group_norm=spatial_group_norm,
             mini_batch_encoder=mini_batch_encoder,
         )
 
@@ -160,6 +166,8 @@ class AutoencoderKLMagvit_fromOmnigen(pl.LightningModule):
             num_attention_heads=num_attention_heads,
             slice_mag_vae=slice_mag_vae,
             slice_compression_vae=slice_compression_vae,
+            cache_compression_vae=cache_compression_vae,
+            spatial_group_norm=spatial_group_norm,
             mini_batch_decoder=mini_batch_decoder,
         )
 
@@ -169,9 +177,13 @@ class AutoencoderKLMagvit_fromOmnigen(pl.LightningModule):
         self.mini_batch_encoder = mini_batch_encoder
         self.mini_batch_decoder = mini_batch_decoder
         self.train_decoder_only = train_decoder_only
+        self.train_encoder_only = train_encoder_only
         if train_decoder_only:
             self.encoder.requires_grad_(False)
             self.quant_conv.requires_grad_(False)
+        if train_encoder_only:
+            self.decoder.requires_grad_(False)
+            self.post_quant_conv.requires_grad_(False)
         if monitor is not None:
             self.monitor = monitor
         if ckpt_path is not None:
@@ -284,6 +296,10 @@ class AutoencoderKLMagvit_fromOmnigen(pl.LightningModule):
         if self.train_decoder_only:
             opt_ae = torch.optim.Adam(list(self.decoder.parameters())+
                                     list(self.post_quant_conv.parameters()),
+                                    lr=lr, betas=(0.5, 0.9))
+        elif self.train_encoder_only:
+            opt_ae = torch.optim.Adam(list(self.encoder.parameters())+
+                                    list(self.quant_conv.parameters()),
                                     lr=lr, betas=(0.5, 0.9))
         else:
             opt_ae = torch.optim.Adam(list(self.encoder.parameters())+

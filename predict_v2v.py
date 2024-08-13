@@ -40,7 +40,7 @@ lora_path           = None
 sample_size         = [384, 672]
 # In EasyAnimateV1, the video_length of video is 40 ~ 80.
 # In EasyAnimateV2 and V3, the video_length of video is 1 ~ 144. If u want to generate a image, please set the video_length = 1.
-video_length        = 72
+video_length        = 144
 fps                 = 24
 
 # Use torch.float16 if GPU does not support torch.bfloat16
