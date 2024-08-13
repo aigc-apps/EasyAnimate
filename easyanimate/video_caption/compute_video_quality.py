@@ -10,8 +10,8 @@ from torch.utils.data import DataLoader
 
 import utils.image_evaluator as image_evaluator
 import utils.video_evaluator as video_evaluator
-from utils.logger import logger
-from utils.video_dataset import VideoDataset, collate_fn
+from .utils.logger import logger
+from .utils.video_dataset import VideoDataset, collate_fn
 
 
 def parse_args():
@@ -124,6 +124,12 @@ def main():
     if args.frame_sample_method == "image":
         logger.warning("Set args.num_sampled_frames to 1 since args.frame_sample_method is image.")
         args.num_sampled_frames = 1
+    
+    index = len(video_metadata_df) - len(video_metadata_df) % state.num_processes
+    # Avoid the NCCL timeout in the final gather operation.
+    logger.info(f"Drop {len(video_metadata_df) % state.num_processes} videos to ensure each process handles the same number of videos.")
+    video_metadata_df = video_metadata_df.iloc[:index]
+    logger.info(f"{len(video_metadata_df)} videos are to be processed.")
 
     video_metadata_list = video_metadata_df.to_dict(orient='list')
     with state.split_between_processes(video_metadata_list) as splitted_video_metadata:
@@ -164,9 +170,7 @@ def main():
                 result_dict[args.video_path_column].extend(saved_video_path_list)
 
             # Save the metadata in the main process every saved_freq.
-            # If the len(video_loader) of different processes are not the same, we should avoid performing
-            # the gather operation at idx == len(video_loader) - 1 to prevent the NCCL timeout.
-            if (idx != 0 or idx != len(video_loader) -1) and (idx % args.saved_freq == 0):
+            if (idx != 0) and (idx % args.saved_freq == 0):
                 state.wait_for_everyone()
                 # if len(result_dict[args.video_path_column]) != 0.
                 gathered_result_dict = {k: gather_object(v) for k, v in result_dict.items()}

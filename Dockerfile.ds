@@ -55,6 +55,9 @@ ARG site_pkg_path=$(python3 -c 'import site; print(site.getsitepackages()[0])')
 COPY easyanimate/video_caption/package_patches/easyocr_detection_patched.py $site_pkg_path/easyocr/detection.py
 COPY easyanimate/video_caption/package_patches/vila_siglip_encoder_patched.py $site_pkg_path/llava/model/multimodal_encoder/siglip_encoder.py
 
+# Use the binary files provided by imageio-ffmpeg without installing the FFmpeg package.
+RUN ln -s /usr/local/lib/python3.10/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux64-v4.2.2 /usr/local/bin/ffmpeg
+
 ENV PYTHONUNBUFFERED 1
 ENV NVIDIA_DISABLE_REQUIRE 1
 
