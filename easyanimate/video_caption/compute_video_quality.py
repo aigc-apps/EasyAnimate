@@ -10,8 +10,8 @@ from torch.utils.data import DataLoader
 
 import utils.image_evaluator as image_evaluator
 import utils.video_evaluator as video_evaluator
-from .utils.logger import logger
-from .utils.video_dataset import VideoDataset, collate_fn
+from utils.logger import logger
+from utils.video_dataset import VideoDataset, collate_fn
 
 
 def parse_args():

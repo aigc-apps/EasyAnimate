@@ -8,7 +8,7 @@ from multiprocessing import Pool
 import pandas as pd
 from tqdm import tqdm
 
-from .utils.logger import logger
+from utils.logger import logger
 
 
 MIN_SECONDS = int(os.getenv("MIN_SECONDS", 3))
@@ -102,7 +102,7 @@ def clip_video(video_path, timecode_list, output_folder, video_duration):
                         splitted_index += 1
                         continue
                     else:
-                        command = get_command(cur_start, video_path, cur_video_duration, output_path)
+                        command = get_command(cur_start, video_path, cur_video_duration, splitted_output_path)
                         try:
                             subprocess.run(command, check=True)
                         except Exception as e:

@@ -12,9 +12,9 @@ REWRITE_MODEL_PATH="/PATH/TO/Meta-Llama-3-8B-Instruct"
 
 # Use Efficient-Large-Model/Llama-3-VILA1.5-8b-AWQ to perform recaption.
 accelerate launch vila_caption_video.py \
-    --video_metadata_path META_FILE_PATH \
+    --video_metadata_path ${META_FILE_PATH} \
     --video_folder ${VIDEO_FOLDER} \
-    --model_path ${MODEL_PATH} \
+    --model_path ${VILA_MODEL_PATH} \
     --precision "W4A16" \
     --saved_path $VIDEO_CAPTION_SAVED_PATH \
     --saved_freq 1 \
@@ -27,6 +27,7 @@ python caption_rewrite.py \
     --batch_size 4096 \
     --model_name $REWRITE_MODEL_PATH \
     --prompt prompt/rewrite.txt \
+    --prefix '"rewritten description": ' \
     --saved_path $REWRITTEN_VIDEO_CAPTION_SAVED_PATH \
     --saved_freq 1
 

@@ -11,8 +11,9 @@ from natsort import natsorted
 from tqdm import tqdm
 from torchvision.datasets.utils import download_url
 
-from .utils.logger import logger
-from .utils.video_utils import extract_frames
+from utils.logger import logger
+from utils.video_utils import extract_frames
+from utils.filter import filter
 
 
 def init_ocr_reader(root: str = "~/.cache/easyocr", device: str = "gpu"):

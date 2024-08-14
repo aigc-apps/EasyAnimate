@@ -9,7 +9,7 @@ from natsort import index_natsorted
 from vllm import LLM, SamplingParams
 from transformers import AutoTokenizer
 
-from .utils.logger import logger
+from utils.logger import logger
 
 
 def extract_output(s, prefix='"rewritten description": '):

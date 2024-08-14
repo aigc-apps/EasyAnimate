@@ -9,7 +9,7 @@ from scenedetect import open_video, SceneManager
 from scenedetect.detectors import ContentDetector
 from tqdm import tqdm
 
-from .utils.logger import logger
+from utils.logger import logger
 
 
 def cutscene_detection_star(args):

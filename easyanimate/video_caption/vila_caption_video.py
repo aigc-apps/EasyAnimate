@@ -30,8 +30,8 @@ from tinychat.utils.tune import (
     tune_llava_patch_embedding,
 )
 
-from .utils.filter import filter
-from .utils.logger import logger
+from utils.filter import filter
+from utils.logger import logger
 
 gen_params.seed = 1
 gen_params.temp = 1.0
@@ -94,7 +94,7 @@ def parse_args():
     parser.add_argument(
         "--quant_path",
         type=str,
-        default="llama-3-vila1.5-8b-w4-g128-awq-v2.pt",
+        default=None,
     )
     parser.add_argument(
         "--precision", type=str, default="W4A16", help="compute precision"
@@ -244,6 +244,7 @@ def main(args):
                 args.quant_path = os.path.join(args.model_path, "llm/vila-1.5-13b-w4-g128-awq-v2.pt")
             elif "VILA1.5-40b-AWQ" in args.model_path:
                 args.quant_path = os.path.join(args.model_path, "llm/vila-1.5-40b-w4-g128-awq-v2.pt")
+        print(args.quant_path)
         model.llm = load_awq_model(model.llm, args.quant_path, 4, 128, state.device)
         from tinychat.modules import (
             make_fused_mlp,

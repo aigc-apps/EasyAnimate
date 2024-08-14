@@ -38,7 +38,7 @@ def filter(
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
         logger.info(
             f"Load {basic_metadata_path} ({len(basic_df)}) and filter {len(filtered_video_path_list)} videos "
-            "with resolution less than {min_resolution}."
+            f"with resolution less than {min_resolution}."
         )
 
         if min_duration != -1:
@@ -49,7 +49,7 @@ def filter(
             video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
             logger.info(
                 f"Load {basic_metadata_path} and filter {len(filtered_video_path_list)} videos "
-                "with duration less than {min_duration}."
+                f"with duration less than {min_duration}."
             )
 
         if max_duration != -1:
@@ -60,7 +60,7 @@ def filter(
             video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
             logger.info(
                 f"Load {basic_metadata_path} and filter {len(filtered_video_path_list)} videos "
-                "with duration greater than {max_duration}."
+                f"with duration greater than {max_duration}."
             )
 
     if asethetic_score_metadata_path is not None:
@@ -81,7 +81,7 @@ def filter(
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
         logger.info(
             f"Load {asethetic_score_metadata_path} ({len(asethetic_score_df)}) and filter {len(filtered_video_path_list)} videos "
-             "with aesthetic score less than {min_asethetic_score}."
+            f"with aesthetic score less than {min_asethetic_score}."
         )
 
     if asethetic_score_siglip_metadata_path is not None:
@@ -106,7 +106,7 @@ def filter(
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
         logger.info(
             f"Load {asethetic_score_siglip_metadata_path} ({len(asethetic_score_siglip_df)}) and filter {len(filtered_video_path_list)} videos "
-            "with aesthetic score (SigLIP) less than {min_asethetic_score_siglip}."
+            f"with aesthetic score (SigLIP) less than {min_asethetic_score_siglip}."
         )
 
     if text_score_metadata_path is not None:
@@ -122,7 +122,7 @@ def filter(
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
         logger.info(
             f"Load {text_score_metadata_path} ({len(text_score_df)}) and filter {len(filtered_video_path_list)} videos "
-            "with text score greater than {min_text_score}."
+            f"with text score greater than {min_text_score}."
         )
 
     if motion_score_metadata_path is not None:
@@ -138,7 +138,7 @@ def filter(
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
         logger.info(
             f"Load {motion_score_metadata_path} ({len(motion_score_df)}) and filter {len(filtered_video_path_list)} videos "
-            "with motion score smaller than {min_motion_score}."
+            f"with motion score smaller than {min_motion_score}."
         )
 
     return video_path_list
