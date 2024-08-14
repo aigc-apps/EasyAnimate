@@ -48,6 +48,17 @@ from ..models.transformer3d import Transformer3DModel
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
+import torch_xla as xla
+import torch_xla.core.xla_model as xm
+import torch_xla.runtime as xr
+import torch_xla.distributed.spmd as xs
+import torch_xla.distributed.parallel_loader as pl
+import time
+
+# Enable XLA SPMD execution mode.
+xr.use_spmd()
+
+
 if is_bs4_available():
     from bs4 import BeautifulSoup
 
@@ -992,6 +1003,22 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
                 If `return_dict` is `True`, [`~pipelines.ImagePipelineOutput`] is returned, otherwise a `tuple` is
                 returned where the first element is a list with the generated images
         """
+
+        # Define device mesh
+        num_devices = xr.global_runtime_device_count()
+        print(f"Number of devices:{num_devices}")
+        mesh_shape = (
+            2,
+            4,
+        )  # Adjust this based on your TPU configuration
+        device_ids = np.array(range(num_devices))
+        mesh = xs.Mesh(device_ids, mesh_shape, ("fsdp", "sp"))
+        print(f"Mesh Shape: {mesh.shape()}")
+        print(mesh.get_logical_mesh())
+
+        # Define partition_spec (adjust according to the tensor shape and desired sharding)
+        partition_spec = (None, "fsdp", "sp", None, None)
+
         # 1. Check inputs. Raise error if not correct
         height = height or self.transformer.config.sample_size * self.vae_scale_factor
         width = width or self.transformer.config.sample_size * self.vae_scale_factor
@@ -1010,7 +1037,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
             device = initDevice
         else:
             device = self._execution_device
-        
+
         print("_________________Using Device:", device)
 
         # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
@@ -1091,6 +1118,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
             latents, noise, image_latents = latents_outputs
         else:
             latents, noise = latents_outputs
+
         latents_dtype = latents.dtype
 
         if mask_video is not None:
@@ -1288,14 +1316,19 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
             from comfy.utils import ProgressBar
 
             pbar = ProgressBar(num_inference_steps)
+
+        max_mem = 0
+
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
+
                 latent_model_input = (
                     torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                 )
+
                 latent_model_input = self.scheduler.scale_model_input(
                     latent_model_input, t
-                )
+                ).to(device)
 
                 if (
                     i < len(timesteps) * (1 - clip_apply_ratio)
@@ -1333,6 +1366,13 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
                     )
                 # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
                 current_timestep = current_timestep.expand(latent_model_input.shape[0])
+
+                # get shape of the latent model input
+                shape = latent_model_input.shape
+                print(
+                    f"Shape of the latent model input: {shape}, device: {latent_model_input.device}"
+                )
+                xs.mark_sharding(latent_model_input, mesh, partition_spec)
 
                 # predict noise model_output
                 noise_pred = self.transformer(
@@ -1386,6 +1426,12 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
 
                 if comfyui_progressbar:
                     pbar.update(1)
+
+                print(f"Mark Checkpoint for xla: {i} , {t} ")
+
+                xm.mark_step()
+
+        print(f"Max Memory Used: {max_mem} GB")
         gc.collect()
         torch.cuda.empty_cache()
 
