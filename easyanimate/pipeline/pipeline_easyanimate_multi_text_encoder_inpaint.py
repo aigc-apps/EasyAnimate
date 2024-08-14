@@ -252,16 +252,16 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
         )
         self.model_cpu_offload_flag = False
 
-    def enable_sequential_cpu_offload(self,):
-        super().enable_sequential_cpu_offload()
+    def enable_sequential_cpu_offload(self, *args, **kwargs):
+        super().enable_sequential_cpu_offload(*args, **kwargs)
         self.model_cpu_offload_flag = False
         if hasattr(self.transformer, "clip_projection") and self.transformer.clip_projection is not None:
             import accelerate
             accelerate.hooks.remove_hook_from_module(self.transformer.clip_projection, recurse=True)
             self.transformer.clip_projection = self.transformer.clip_projection.to("cuda")
 
-    def enable_model_cpu_offload(self,):
-        super().enable_model_cpu_offload()
+    def enable_model_cpu_offload(self, *args, **kwargs):
+        super().enable_model_cpu_offload(*args, **kwargs)
         self.model_cpu_offload_flag = True
 
     def encode_prompt(
