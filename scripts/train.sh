@@ -41,4 +41,4 @@ accelerate launch --mixed_precision="bf16" scripts/train.py \
   --random_frame_crop \
   --enable_bucket \
   --train_mode="inpaint" \
-  --trainable_modules "transformer_blocks" "proj_out" "pos_embed" "long_connect_fc"
+  --trainable_modules "."

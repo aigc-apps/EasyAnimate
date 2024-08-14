@@ -250,14 +250,19 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
         self.mask_processor = VaeImageProcessor(
             vae_scale_factor=self.vae_scale_factor, do_normalize=False, do_binarize=True, do_convert_grayscale=True
         )
+        self.model_cpu_offload_flag = False
 
     def enable_sequential_cpu_offload(self,):
         super().enable_sequential_cpu_offload()
+        self.model_cpu_offload_flag = False
         if hasattr(self.transformer, "clip_projection") and self.transformer.clip_projection is not None:
             import accelerate
             accelerate.hooks.remove_hook_from_module(self.transformer.clip_projection, recurse=True)
             self.transformer.clip_projection = self.transformer.clip_projection.to("cuda")
-            self.transofrmer.time_extra_emb = self.transformer.time_extra_emb.to("cuda")
+
+    def enable_model_cpu_offload(self,):
+        super().enable_model_cpu_offload()
+        self.model_cpu_offload_flag = True
 
     def encode_prompt(
         self,
@@ -961,8 +966,9 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
         return_image_latents = num_channels_transformer == num_channels_latents
 
         # Make vae to cuda
-        self.vae = self.vae.to(device)
-        torch.cuda.empty_cache()
+        if self.model_cpu_offload_flag:
+            self.vae = self.vae.to(device)
+            torch.cuda.empty_cache()
 
         # 5. Prepare latents.
         latents_outputs = self.prepare_latents(
@@ -1149,9 +1155,10 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
         style = style.to(device=device).repeat(batch_size * num_images_per_prompt)
 
         # Empty vae cache
-        self.transformer = self.transformer.to(device)
-        self.vae = self.vae.to("cpu")
-        torch.cuda.empty_cache()
+        if self.model_cpu_offload_flag:
+            self.transformer = self.transformer.to(device)
+            self.vae = self.vae.to("cpu")
+            torch.cuda.empty_cache()
 
         # 10. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
@@ -1255,16 +1262,18 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
                     pbar.update(1)
 
         # Make vae to cuda
-        self.transformer = self.transformer.to("cpu")
-        self.vae = self.vae.to(device)
-        torch.cuda.empty_cache()
+        if self.model_cpu_offload_flag:
+            self.transformer = self.transformer.to("cpu")
+            self.vae = self.vae.to(device)
+            torch.cuda.empty_cache()
 
         # Post-processing
         video = self.decode_latents(latents)
 
-        # Make vae to cpu
-        self.vae = self.vae.to("cpu")
-        torch.cuda.empty_cache()
+        if self.model_cpu_offload_flag:
+            # Make vae to cpu
+            self.vae = self.vae.to("cpu")
+            torch.cuda.empty_cache()
 
         # Convert to tensor
         if output_type == "latent":

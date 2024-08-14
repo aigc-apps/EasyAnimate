@@ -23,8 +23,7 @@ import torch.nn.functional as F
 import torch.nn.init as init
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.attention import BasicTransformerBlock, FeedForward
-from diffusers.models.embeddings import (
-    HunyuanCombinedTimestepTextSizeStyleEmbedding, PatchEmbed,
+from diffusers.models.embeddings import (PatchEmbed,
     PixArtAlphaTextProjection, TimestepEmbedding, Timesteps)
 from diffusers.models.lora import LoRACompatibleConv, LoRACompatibleLinear
 from diffusers.models.modeling_outputs import Transformer2DModelOutput
@@ -39,6 +38,7 @@ from torch import nn
 from .attention import (HunyuanDiTBlock, HunyuanTemporalTransformerBlock,
                         SelfAttentionTemporalTransformerBlock,
                         TemporalTransformerBlock)
+from .embeddings import HunyuanCombinedTimestepTextSizeStyleEmbedding
 from .norm import AdaLayerNormSingle
 from .patch import (CasualPatchEmbed3D, Patch1D, PatchEmbed3D, PatchEmbedF3D,
                     TemporalUpsampler3D, UnPatch1D)

@@ -79,13 +79,13 @@ class CausalConv3d(nn.Conv3d):
             x = x.to(dtype=dtype)
             return super().forward(x)
         elif self.padding_flag == 5:
-            self.prev_features = x[:, :, -self.temporal_padding:]
-
             x = F.pad(
                 x,
-                pad=(0, 0, 0, 0, self.temporal_padding_origin, self.temporal_padding_origin),
+                pad=(0, 0, 0, 0, self.temporal_padding, 0),
+                mode="replicate",     # TODO: check if this is necessary
             )
             x = x.to(dtype=dtype)
+            self.prev_features = x[:, :, -self.temporal_padding:]
             return super().forward(x)
         elif self.padding_flag == 6:
             if self.t_stride == 2:

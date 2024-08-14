@@ -1326,19 +1326,15 @@ def main():
     )
 
     # Prepare everything with our `accelerator`.
-    if not args.enable_text_encoder_in_dataloader:
-        transformer3d, text_encoder, network, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-            transformer3d, text_encoder, network, optimizer, train_dataloader, lr_scheduler
-        )
-    else:
-        transformer3d, network, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-            transformer3d, network, optimizer, train_dataloader, lr_scheduler
-        )
+    network, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+        network, optimizer, train_dataloader, lr_scheduler
+    )
 
     # Move text_encode and vae to gpu and cast to weight_dtype
     vae.to(accelerator.device, dtype=weight_dtype)
     if args.train_mode != "normal":
         image_encoder.to(accelerator.device, dtype=weight_dtype)
+    transformer3d.to(accelerator.device, dtype=weight_dtype)
     if not args.enable_text_encoder_in_dataloader:
         text_encoder.to(accelerator.device)
         if config.get('enable_multi_text_encoder', False):
