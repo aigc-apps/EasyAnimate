@@ -675,6 +675,11 @@ def parse_args():
         "--motion_sub_loss_ratio", type=float, default=0.25, help="The ratio of motion sub loss."
     )
     parser.add_argument(
+        "--keep_all_node_same_token_length",
+        action="store_true", 
+        help="Reference of the length token.",
+    )
+    parser.add_argument(
         "--train_sampling_steps",
         type=int,
         default=1000,
@@ -834,6 +839,7 @@ def main():
     else:
         rng = None
         torch_rng = None
+    index_rng = np.random.default_rng(np.random.PCG64(43))
     print(f"Init rng with seed {args.seed + accelerator.process_index}. Process_index is {accelerator.process_index}")
 
     # Handle the repository creation
@@ -1122,13 +1128,15 @@ def main():
             }
             return length_to_frame_num
 
-        length_to_frame_num = get_length_to_frame_num(
-            args.video_sample_n_frames * args.token_sample_size * args.token_sample_size, 
-        )
-
         def collate_fn(examples):
+            target_token_length = args.video_sample_n_frames * args.token_sample_size * args.token_sample_size
+            length_to_frame_num = get_length_to_frame_num(
+                target_token_length, 
+            )
+
             # Create new output
             new_examples                 = {}
+            new_examples["target_token_length"] = target_token_length
             new_examples["pixel_values"] = []
             new_examples["text"]         = []
             if args.train_mode != "normal":
@@ -1504,6 +1512,13 @@ def main():
                         special_list = [other_elements_value] * (length - 1) + [last_element]
                         return special_list
                     
+                if args.keep_all_node_same_token_length:
+                    actual_token_length = index_rng.choice(numbers_list)
+                    actual_video_length = min(actual_token_length / pixel_values.size()[-1] / pixel_values.size()[-2], args.video_sample_n_frames) // sample_n_frames_bucket_interval * sample_n_frames_bucket_interval
+                    actual_video_length = int(max(actual_video_length, 1))
+                else:
+                    actual_video_length = None
+
                 if args.random_frame_crop:
                     select_frames = [_tmp for _tmp in list(range(sample_n_frames_bucket_interval, args.video_sample_n_frames + sample_n_frames_bucket_interval, sample_n_frames_bucket_interval))]
                     select_frames_prob = np.array(create_special_list(len(select_frames)))
@@ -1512,6 +1527,9 @@ def main():
                         temp_n_frames = np.random.choice(select_frames, p = select_frames_prob)
                     else:
                         temp_n_frames = rng.choice(select_frames, p = select_frames_prob)
+                    if args.keep_all_node_same_token_length:
+                        temp_n_frames = min(actual_video_length, temp_n_frames)
+
                     pixel_values = pixel_values[:, :temp_n_frames, :, :]
 
                     if args.train_mode != "normal":
@@ -1519,6 +1537,15 @@ def main():
                         mask = mask[:, :temp_n_frames, :, :]
 
                 video_length = pixel_values.shape[1]
+                if args.train_mode != "normal":
+                    t2v_flag = [(_mask == 1).all() for _mask in mask]
+                    new_t2v_flag = []
+                    for _mask in t2v_flag:
+                        if _mask and np.random.rand() < 0.90:
+                            new_t2v_flag.append(0)
+                        else:
+                            new_t2v_flag.append(1)
+                    t2v_flag = torch.from_numpy(np.array(new_t2v_flag)).to(accelerator.device, dtype=weight_dtype)
 
                 if args.low_vram:
                     torch.cuda.empty_cache()
@@ -1609,7 +1636,9 @@ def main():
                             )
                             mask = rearrange(mask, "(b f) c h w -> b c f h w", f=video_length)
                             inpaint_latents = torch.concat([mask, mask_latents], dim=1)
-                                
+
+                        inpaint_latents = t2v_flag[:, None, None, None, None] * inpaint_latents
+                    
                         with torch.no_grad():
                             clip_encoder_hidden_states = []
                             for clip_pixel_value in clip_pixel_values:

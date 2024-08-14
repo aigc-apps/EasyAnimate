@@ -507,6 +507,7 @@ For more details, please refer to [arxiv](https://arxiv.org/abs/2405.18991).
 - Open-Sora: https://github.com/hpcaitech/Open-Sora
 - Animatediff: https://github.com/guoyww/AnimateDiff
 - ComfyUI-EasyAnimateWrapper: https://github.com/kijai/ComfyUI-EasyAnimateWrapper
+- HunYuan DiT: https://github.com/tencent/HunyuanDiT
 
 # License
 This project is licensed under the [Apache License (Version 2.0)](https://github.com/modelscope/modelscope/blob/master/LICENSE).
