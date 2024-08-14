@@ -3,7 +3,7 @@ The final detailed description must not exceed 200 words. Output with the follow
 {"detailed description": "your detailed description here"}
 
 Here is an example:
-{"brief prompt words": "A stylish woman in a black leather jacket, red dress, and boots walks confidently down a damp Tokyo street."}
+brief prompt words: "A stylish woman in a black leather jacket, red dress, and boots walks confidently down a damp Tokyo street."
 {"detailed description": "A stylish woman walks down a Tokyo street filled with warm glowing neon and animated city signage. She wears a black leather jacket, a long red dress, and black boots, and carries a black purse. She wears sunglasses and red lipstick. She walks confidently and casually. The street is damp and reflective, creating a mirror effect of the colorful lights. Many pedestrians walk about."}
 
 Here are the brief prompt words:

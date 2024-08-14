@@ -60,7 +60,7 @@ def parse_args():
     parser.add_argument(
         "--model_name",
         type=str,
-        default="meta-llama/Meta-Llama-3-8B-Instruct",
+        default="NousResearch/Meta-Llama-3-8B-Instruct",
     )
     parser.add_argument(
         "--prompt",
@@ -132,7 +132,7 @@ def main():
 
     llm = LLM(model=args.model_name, trust_remote_code=True, tensor_parallel_size=tensor_parallel_size)
     if "Llama-3" in args.model_name:
-        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
+        tokenizer = AutoTokenizer.from_pretrained("NousResearch/Meta-Llama-3-8B-Instruct")
         stop_token_ids = [tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids("<|eot_id|>")]
         sampling_params = SamplingParams(temperature=0.7, top_p=1, max_tokens=1024, stop_token_ids=stop_token_ids)
     else:
