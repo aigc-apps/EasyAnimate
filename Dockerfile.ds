@@ -16,15 +16,15 @@ RUN apt-get update -y && apt-get install -y zip && \
     rm -rf /var/lib/apt/lists/*
 RUN pip install wandb tqdm GitPython==3.1.32 Pillow==9.5.0 setuptools --upgrade -i https://mirrors.aliyun.com/pypi/simple/
 
-RUN pip install torch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 --index-url https://download.pytorch.org/whl/cu118
-RUN pip install xformers==0.0.24 --index-url https://download.pytorch.org/whl/cu118
+RUN pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu118
+RUN pip install xformers==0.0.27.post2 --index-url https://download.pytorch.org/whl/cu118
 
 # install VILA (video-caption)
-RUN wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/package/vila-1.0.0-torch2.2.0-py3-none-any.whl
-RUN mv vila-1.0.0-torch2.2.0-py3-none-any.whl vila-1.0.0-py3-none-any.whl
+RUN wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/package/vila-1.0.0-torch2.4.0-py3-none-any.whl
+RUN mv vila-1.0.0-torch2.4.0-py3-none-any.whl vila-1.0.0-py3-none-any.whl
 RUN pip install vila-1.0.0-py3-none-any.whl --extra-index-url https://download.pytorch.org/whl/cu118
-RUN wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/package/flash_attn-2.6.1%2Bcu118torch2.2cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
-RUN pip install flash_attn-2.6.1+cu118torch2.2cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
+RUN wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/package/flash_attn-2.6.3%2Bcu118torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
+RUN pip install flash_attn-2.6.3+cu118torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
 
 # install llm-awq (video-caption)
 RUN git clone https://github.com/mit-han-lab/llm-awq /root/llm-awq
@@ -35,7 +35,7 @@ WORKDIR /root/llm-awq/awq/kernels
 RUN export TORCH_CUDA_ARCH_LIST="8.0 8.6 8.9 9.0+PTX" && python3 setup.py install
 
 # install vllm (video-caption)
-RUN pip install https://github.com/vllm-project/vllm/releases/download/v0.5.0/vllm-0.5.0+cu118-cp310-cp310-manylinux1_x86_64.whl --extra-index-url https://download.pytorch.org/whl/cu118
+RUN pip install https://github.com/vllm-project/vllm/releases/download/v0.5.4/vllm-0.5.4+cu118-cp310-cp310-manylinux1_x86_64.whl --extra-index-url https://download.pytorch.org/whl/cu118
 
 # install requirements (video-caption)
 WORKDIR /root/
@@ -54,12 +54,11 @@ RUN pip install -r /root/requirements.txt -i https://mirrors.aliyun.com/pypi/sim
 RUN rm -rf /root/requirements.txt
 
 # install package patches (video-caption)
-ARG site_pkg_path=$(python3 -c 'import site; print(site.getsitepackages()[0])')
-COPY easyanimate/video_caption/package_patches/easyocr_detection_patched.py $site_pkg_path/easyocr/detection.py
-COPY easyanimate/video_caption/package_patches/vila_siglip_encoder_patched.py $site_pkg_path/llava/model/multimodal_encoder/siglip_encoder.py
+COPY easyanimate/video_caption/package_patches/easyocr_detection_patched.py /usr/local/lib/python3.10/dist-packages/easyocr/detection.py
+COPY easyanimate/video_caption/package_patches/vila_siglip_encoder_patched.py /usr/local/lib/python3.10/dist-packages/llava/model/multimodal_encoder/siglip_encoder.py
 
 # Use the binary files provided by imageio-ffmpeg without installing the FFmpeg package (video-caption).
-RUN ln -s /usr/local/lib/python3.10/site-packages/imageio_ffmpeg/binaries/ffmpeg-linux64-v4.2.2 /usr/local/bin/ffmpeg
+RUN ln -s /usr/local/lib/python3.10/dist-packages/imageio_ffmpeg/binaries/ffmpeg-linux64-v4.2.2 /usr/local/bin/ffmpeg
 
 ENV PYTHONUNBUFFERED 1
 ENV NVIDIA_DISABLE_REQUIRE 1
