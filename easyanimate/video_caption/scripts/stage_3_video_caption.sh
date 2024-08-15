@@ -1,10 +1,10 @@
 META_FILE_PATH="datasets/panda_70m/videos_clips/data/meta_file_info.jsonl"
 VIDEO_FOLDER="datasets/panda_70m/videos_clips/data/"
-MOTION_SCORE_SAVED_PATH="datasets/panda_70m/videos_clips/meta_motion_info.jsonl"
+MOTION_SAVED_PATH="datasets/panda_70m/videos_clips/meta_motion_info.jsonl"
 MIN_MOTION_SCORE=2
 VIDEO_CAPTION_SAVED_PATH="datasets/panda_70m/meta_caption_info_vila_8b.jsonl"
 REWRITTEN_VIDEO_CAPTION_SAVED_PATH="datasets/panda_70m/meta_caption_info_vila_8b_rewritten.jsonl"
-LAST_JSON_PATH="datasets/panda_70m/train_panda_70m.json"
+TRAIN_SAVED_PATH="datasets/panda_70m/train_panda_70m.json"
 # Manually download Efficient-Large-Model/Llama-3-VILA1.5-8b-AWQ to VILA_MODEL_PATH.
 VILA_MODEL_PATH="/PATH/TO/Llama-3-VILA1.5-8b-AWQ"
 # Manually download meta-llama/Meta-Llama-3-8B-Instruct to REWRITE_MODEL_PATH.
@@ -21,7 +21,7 @@ accelerate launch vila_caption_video.py \
     --motion_score_metadata_path $MOTION_SCORE_SAVED_PATH \
     --min_motion_score $MIN_MOTION_SCORE
 
-# Rewrite video captions (optional)
+# Rewrite video captions (optional).
 python caption_rewrite.py \
     --video_metadata_path $VIDEO_CAPTION_SAVED_PATH \
     --batch_size 4096 \
@@ -31,7 +31,22 @@ python caption_rewrite.py \
     --saved_path $REWRITTEN_VIDEO_CAPTION_SAVED_PATH \
     --saved_freq 1
 
-python -m utils.convert_jsonl_to_json \
+# Compute caption-video alignment (optional).
+accelerate launch compute_video_quality.py \
+    --video_metadata_path $REWRITTEN_VIDEO_CAPTION_SAVED_PATH \
+    --caption_column caption \
+    --video_folder $VIDEO_FOLDER \
+    --frame_sample_method uniform \
+    --num_sampled_frames 8 \
+    --metrics VideoCLIPXLScore \
+    --batch_size 4 \
+    --saved_path $VIDEOCLIPXL_SCORE_SAVED_PATH \
+    --saved_freq 10
+
+# Get the final train file.
+python filter_meta_train.py \
+    --caption_metadata_path $REWRITTEN_VIDEO_CAPTION_SAVED_PATH \
     --video_folder=$VIDEO_FOLDER \
-    --jsonl_load_path=$REWRITTEN_VIDEO_CAPTION_SAVED_PATH \
-    --save_path=$LAST_JSON_PATH
+    --videoclipxl_score_metadata_path $VIDEOCLIPXL_SCORE_SAVED_PATH \
+    --min_videoclipxl_score $MIN_VIDEOCLIPXL_SCORE \
+    --saved_path=$TRAIN_SAVED_PATH

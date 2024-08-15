@@ -66,7 +66,7 @@ class VideoCLIPXLScore():
         if not os.path.exists(self.root):
             os.makedirs(self.root)
 
-        k = "MixCLIP-L_20240628"
+        k = "VideoCLIP-XL-v2"
         filename = os.path.basename(_MODELS[k])
         download_url(_MODELS[k], self.root, filename=filename, md5=_MD5[k])
         self.model = VideoCLIPXL()
@@ -101,7 +101,7 @@ class VideoCLIPXLScore():
         return scores.tolist() if len(videos) == 1 else scores.diagonal().tolist()
     
     def __repr__(self):
-        return "mixclip_score"
+        return "videoclipxl_score"
 
 
 if __name__ == "__main__":

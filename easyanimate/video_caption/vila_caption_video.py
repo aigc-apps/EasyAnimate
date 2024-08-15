@@ -244,7 +244,6 @@ def main(args):
                 args.quant_path = os.path.join(args.model_path, "llm/vila-1.5-13b-w4-g128-awq-v2.pt")
             elif "VILA1.5-40b-AWQ" in args.model_path:
                 args.quant_path = os.path.join(args.model_path, "llm/vila-1.5-40b-w4-g128-awq-v2.pt")
-        print(args.quant_path)
         model.llm = load_awq_model(model.llm, args.quant_path, 4, 128, state.device)
         from tinychat.modules import (
             make_fused_mlp,

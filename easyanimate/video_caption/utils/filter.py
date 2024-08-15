@@ -20,6 +20,8 @@ def filter(
     min_text_score=0.02,
     motion_score_metadata_path=None,
     min_motion_score=2,
+    videoclipxl_score_metadata_path=None,
+    min_videoclipxl_score=0.20,
     video_path_column="video_path",
 ):
     video_path_list = [os.path.basename(video_path) for video_path in video_path_list]
@@ -139,6 +141,22 @@ def filter(
         logger.info(
             f"Load {motion_score_metadata_path} ({len(motion_score_df)}) and filter {len(filtered_video_path_list)} videos "
             f"with motion score smaller than {min_motion_score}."
+        )
+    
+    if videoclipxl_score_metadata_path is not None:
+        if videoclipxl_score_metadata_path.endswith(".csv"):
+            videoclipxl_score_df = pd.read_csv(videoclipxl_score_metadata_path)
+        elif videoclipxl_score_metadata_path.endswith(".jsonl"):
+            videoclipxl_score_df = pd.read_json(videoclipxl_score_metadata_path, lines=True)
+        
+        filtered_videoclipxl_score_df = videoclipxl_score_df[videoclipxl_score_df["videoclipxl_score"] < min_videoclipxl_score]
+        filtered_video_path_list = filtered_videoclipxl_score_df[video_path_column].tolist()
+        filtered_video_path_list = [os.path.basename(video_path) for video_path in filtered_video_path_list]
+
+        video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
+        logger.info(
+            f"Load {videoclipxl_score_metadata_path} ({len(videoclipxl_score_df)}) and "
+            f"filter {len(filtered_video_path_list)} videos with mixclip score smaller than {min_videoclipxl_score}."
         )
 
     return video_path_list
