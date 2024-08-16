@@ -31,6 +31,7 @@ EasyAnimate is a pipeline based on the transformer architecture that can be used
 We will support quick pull-ups from different platforms, refer to [Quick Start](#quick-start).
 
 What's New:
+- Updated to version 4, supporting a maximum resolution of 1024x1024, 144 frames, 6 seconds, and 24fps video generation. It also supports larger resolutions of 1280x1280 with video generation at 96 frames. Supports the generation of videos from text, images, and videos. A single model can support arbitrary resolutions from 512 to 1280 and supports bilingual predictions in Chinese and English. [ 2024.08.15 ]
 - Support ComfyUI, please refer to [ComfyUI README](comfyui/README.md) for details. [ 2024.07.12 ]
 - Updated to v3, supports up to 720p 144 frames (960x960, 6s, 24fps) video generation, and supports text and image generated video models. [ 2024.07.01 ]
 - ModelScope-Sora "Data Directors" creative sprint has been annouced using EasyAnimate as the training backbone to investigate the influence of data preprocessing. Please visit the competition's [official website](https://tianchi.aliyun.com/competition/entrance/532219) for more information. [ 2024.06.17 ]
@@ -89,10 +90,10 @@ mkdir models/Diffusion_Transformer
 mkdir models/Motion_Module
 mkdir models/Personalized_Model
 
-wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar -O models/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar
+wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar.gz -O models/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar.gz
 
 cd models/Diffusion_Transformer/
-tar -xvf EasyAnimateV4-XL-2-InP.tar
+tar -zxvf EasyAnimateV4-XL-2-InP.tar.gz
 cd ../../
 ```
 
@@ -403,7 +404,7 @@ For details on setting some parameters, please refer to [Readme Train](scripts/R
 # Model zoo
 
 | Name | Type | Storage Space | Url | Hugging Face | Description |
-| EasyAnimateV4-XL-2-InP.tar | EasyAnimateV4 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV4-XL-2-InP)| Our official graph-generated video model is capable of predicting videos at multiple resolutions (512, 768, 1024, 1280) and has been trained on 144 frames at a rate of 24 frames per second. |
+| EasyAnimateV4-XL-2-InP.tar.gz | EasyAnimateV4 | Before extraction: 8.9 GB / After extraction: 14.0 GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar.gz) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV4-XL-2-InP)| Our official graph-generated video model is capable of predicting videos at multiple resolutions (512, 768, 1024, 1280) and has been trained on 144 frames at a rate of 24 frames per second. |
 
 <details>
   <summary>(Obsolete) EasyAnimateV3:</summary>
@@ -465,9 +466,19 @@ We used [Hunyuan-DiT](https://github.com/Tencent/HunyuanDiT) as the underlying f
 
 The overall structure of EasyAnimateV4 is as follows:
 
-It includes two Text Encoders, a Video VAE (video encoder and decoder), and a Diffusion Transformer (DiT). The MT5 Encoder and multi-modal CLIP serve as the text encoders. EasyAnimateV4 employs 3D global attention for video reconstruction, eliminating the separation between motion modules and the base model, ensuring coherent frame generation and seamless motion transitions through global attention. Additionally, this pipeline facilitates both image generation and video generation simultaneously.
+EasyAnimateV4 includes two text encoders, Video VAE (video encoder and decoder), and Diffusion Transformer (DiT). The MT5 Encoder and multi-modal CLIP are used as text encoders. EasyAnimateV4 employs 3D global attention for video reconstruction, eliminating the separation of motion modules and base models as seen in V3. This ensures coherent frame generation and seamless motion transitions through global attention.
 
-Modifications were also made to the Slice VAE, and the Decoder was retrained to address the stuttering issues encountered with Slice VAE when faced with scene changes. After removing the initial video chunk, each subsequent video chunk only sees the features of the preceding chunk during convolution and not those of the later chunks. As a result, the reconstruction output from the Decoder is smoother compared to the original Slice VAE.
+The pipeline structure of EasyAnimateV4 is as follows:
+
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/framework_v4.jpg" alt="ui" style="zoom:50%;" />
+
+The foundational model structure of EasyAnimateV4 is as follows:
+
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/pipeline_v4.jpg" alt="ui" style="zoom:50%;" />
+
+The Slice VAE exhibits some stuttering during scene changes because the later latents cannot fully access information from the preceding blocks during decoding. 
+
+Referring to MagVit, we stored the results after convolution of the previous blocks. Except for the initial video block, each subsequent video block during convolution only accessed the features of the preceding video blocks, not the following ones. After this modification, the decoder's reconstruction results are smoother compared to the original Slice VAE.
 
 <details>
   <summary>(Obsolete) EasyAnimateV3:</summary>

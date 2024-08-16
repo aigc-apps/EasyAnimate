@@ -105,7 +105,7 @@ def get_image_to_video_latent(validation_image_start, validation_image_end, vide
                 [1, 1, video_length, 1, 1]
             )
             input_video_mask = torch.zeros_like(input_video[:, :1])
-            input_video_mask[:, :, 4:] = 255
+            input_video_mask[:, :, 2:] = 255
 
         if type(image_end) is list:
             image_end = [_image_end.resize(image_start[0].size if type(image_start) is list else image_start.size) for _image_end in image_end]
@@ -118,8 +118,8 @@ def get_image_to_video_latent(validation_image_start, validation_image_end, vide
             input_video_mask[:, :, -len(image_end):] = 0
         else:
             image_end = image_end.resize(image_start[0].size if type(image_start) is list else image_start.size)
-            input_video[:, :, -1:] = torch.from_numpy(np.array(image_end)).permute(2, 0, 1).unsqueeze(1).unsqueeze(0)
-            input_video_mask[:, :, -4:] = 0
+            input_video[:, :, -2:] = torch.from_numpy(np.array(image_end)).permute(2, 0, 1).unsqueeze(1).unsqueeze(0)
+            input_video_mask[:, :, -2:] = 0
 
         input_video = input_video / 255
 
@@ -152,7 +152,7 @@ def get_image_to_video_latent(validation_image_start, validation_image_end, vide
                 [1, 1, video_length, 1, 1]
             ) / 255
             input_video_mask = torch.zeros_like(input_video[:, :1])
-            input_video_mask[:, :, 4:, ] = 255
+            input_video_mask[:, :, 2:, ] = 255
     else:
         image_start = None
         image_end = None
@@ -177,7 +177,6 @@ def get_video_to_video_latent(input_video_path, video_length, sample_size):
             frame = cv2.resize(frame, (sample_size[1], sample_size[0]))
             input_video.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         cap.release()
-        cv2.destroyAllWindows()
     else:
         input_video = input_video_path
 

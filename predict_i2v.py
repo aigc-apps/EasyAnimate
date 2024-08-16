@@ -54,13 +54,15 @@ weight_dtype            = torch.bfloat16
 validation_image_start  = "asset/1.png"
 validation_image_end    = None
 
-# prompts
-prompt                  = "The dog is looking at camera and smiling. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
-negative_prompt         = "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion. "
-guidance_scale          = 7
+# We support English and Chinese in V4
+prompt                  = "一条狗看着屏幕。质量高、杰作、最佳品质、高分辨率、超精细、梦幻般。""
+negative_prompt         = "低质量，不清晰，突变，变形，失真。"
+# prompt                  = "The dog is looking at camera and smiling. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
+# negative_prompt         = "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion. "
+guidance_scale          = 5.0
 seed                    = 43
 num_inference_steps     = 25
-lora_weight             = 0.55
+lora_weight             = 0.60
 save_path               = "samples/easyanimate-videos_i2v"
 
 config = OmegaConf.load(config_path)

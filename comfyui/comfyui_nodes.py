@@ -203,9 +203,39 @@ class LoadEasyAnimateModel:
             'pipeline': pipeline, 
             'dtype': weight_dtype,
             'model_path': model_path,
+            'loras': [],
+            'strength_model': [],
         }
         return (easyanimate_model,)
 
+class LoadEasyAnimateLora:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "easyanimate_model": ("EASYANIMATESMODEL",),
+                "lora_name": (folder_paths.get_filename_list("loras"), {"default": None,}),
+                "strength_model": ("FLOAT", {"default": 1.0, "min": -100.0, "max": 100.0, "step": 0.01}),
+            }
+        }
+    RETURN_TYPES = ("EASYANIMATESMODEL",)
+    RETURN_NAMES = ("easyanimate_model",)
+    FUNCTION = "load_lora"
+    CATEGORY = "EasyAnimateWrapper"
+
+    def load_lora(self, easyanimate_model, lora_name, strength_model):
+        if lora_name is not None:
+            return (
+                {
+                    'pipeline': easyanimate_model["pipeline"], 
+                    'dtype': easyanimate_model["dtype"],
+                    'model_path': easyanimate_model["model_path"],
+                    'loras': easyanimate_model.get("loras", []) + [folder_paths.get_full_path("loras", lora_name)],
+                    'strength_model': easyanimate_model.get("strength_model", []) + [strength_model],
+                }, 
+            )
+        else:
+            return (easyanimate_model,)
 
 class TextBox:
     @classmethod
@@ -223,7 +253,6 @@ class TextBox:
 
     def process(self, prompt):
         return (prompt, )
-
 
 class EasyAnimateI2VSampler:
     @classmethod
@@ -321,6 +350,9 @@ class EasyAnimateI2VSampler:
             video_length = int(video_length // pipeline.vae.mini_batch_encoder * pipeline.vae.mini_batch_encoder) if video_length != 1 else 1
             input_video, input_video_mask, clip_image = get_image_to_video_latent(start_img, end_img, video_length=video_length, sample_size=(height, width))
 
+            for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                pipeline = merge_lora(pipeline, _lora_path, _lora_weight)
+
             sample = pipeline(
                 prompt, 
                 video_length = video_length,
@@ -337,6 +369,9 @@ class EasyAnimateI2VSampler:
                 comfyui_progressbar = True,
             ).videos
             videos = rearrange(sample, "b c t h w -> (b t) h w c")
+
+            for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
         return (videos,)   
 
 
@@ -358,10 +393,10 @@ class EasyAnimateT2VSampler:
                     "INT", {"default": 72, "min": 8, "max": 144, "step": 8}
                 ),
                 "width": (
-                    "INT", {"default": 1008, "min": 64, "max": 2048, "step": 64}
+                    "INT", {"default": 1008, "min": 64, "max": 2048, "step": 16}
                 ),
                 "height": (
-                    "INT", {"default": 576, "min": 64, "max": 2048, "step": 64}
+                    "INT", {"default": 576, "min": 64, "max": 2048, "step": 16}
                 ),
                 "is_image":(
                     [
@@ -431,6 +466,10 @@ class EasyAnimateT2VSampler:
         with torch.no_grad():
             video_length = int(video_length // pipeline.vae.mini_batch_encoder * pipeline.vae.mini_batch_encoder) if video_length != 1 else 1
             input_video, input_video_mask, clip_image = get_image_to_video_latent(None, None, video_length=video_length, sample_size=(height, width))
+
+            for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                pipeline = merge_lora(pipeline, _lora_path, _lora_weight)
+
             sample = pipeline(
                 prompt, 
                 video_length = video_length,
@@ -447,6 +486,9 @@ class EasyAnimateT2VSampler:
                 comfyui_progressbar = True,
             ).videos
             videos = rearrange(sample, "b c t h w -> (b t) h w c")
+
+            for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
         return (videos,)   
 
 class EasyAnimateV2VSampler:
@@ -546,6 +588,10 @@ class EasyAnimateV2VSampler:
         with torch.no_grad():
             video_length = int(video_length // pipeline.vae.mini_batch_encoder * pipeline.vae.mini_batch_encoder) if video_length != 1 else 1
             input_video, input_video_mask, clip_image = get_video_to_video_latent(validation_video, video_length=video_length, sample_size=(height, width))
+
+            for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                pipeline = merge_lora(pipeline, _lora_path, _lora_weight)
+
             sample = pipeline(
                 prompt, 
                 video_length = video_length,
@@ -563,11 +609,15 @@ class EasyAnimateV2VSampler:
                 comfyui_progressbar = True,
             ).videos
             videos = rearrange(sample, "b c t h w -> (b t) h w c")
+
+            for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
         return (videos,)   
 
 NODE_CLASS_MAPPINGS = {
-    "LoadEasyAnimateModel": LoadEasyAnimateModel,
     "TextBox": TextBox,
+    "LoadEasyAnimateModel": LoadEasyAnimateModel,
+    "LoadEasyAnimateLora": LoadEasyAnimateLora,
     "EasyAnimateI2VSampler": EasyAnimateI2VSampler,
     "EasyAnimateT2VSampler": EasyAnimateT2VSampler,
     "EasyAnimateV2VSampler": EasyAnimateV2VSampler,
@@ -577,6 +627,7 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "TextBox": "TextBox",
     "LoadEasyAnimateModel": "Load EasyAnimate Model",
+    "LoadEasyAnimateLora": "Load EasyAnimate Lora",
     "EasyAnimateI2VSampler": "EasyAnimate Sampler for Image to Video",
     "EasyAnimateT2VSampler": "EasyAnimate Sampler for Text to Video",
     "EasyAnimateV2VSampler": "EasyAnimate Sampler for Video to Video",

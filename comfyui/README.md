@@ -79,3 +79,11 @@ You can run the demo using following photo:
 ### Text to video generation
 Our ui is shown as follow, this is the [download link](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v4/easyanimatev4_workflow_t2v.json) of the json:
 ![workflow graph](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v4/comfyui_t2v.jpg)
+
+### Text to video generation With Lora
+We have provided a v4 version of the portrait Lora for testing, and the specific download link is [Lora download Link](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev4_minimalism_lora.safetensors).
+
+You can put this Lora at ```ComfyUI/models/loras/easyanimate```.
+
+Our ui is shown as follow, this is the [download link](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v4/easyanimatev4_workflow_lora.json) of the json:
+![workflow graph](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v4/comfyui_lora.jpg)

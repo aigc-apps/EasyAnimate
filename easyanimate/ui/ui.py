@@ -360,81 +360,97 @@ class EasyAnimateController:
         else: seed_textbox = np.random.randint(0, 1e10)
         generator = torch.Generator(device="cuda").manual_seed(int(seed_textbox))
         
-        # try:
-        if self.transformer.config.in_channels != self.vae.config.latent_channels:
-            if generation_method == "Long Video Generation":
-                if validation_video is not None:
-                    raise gr.Error(f"Video to Video is not Support Long Video Generation now.")
-                init_frames = 0
-                last_frames = init_frames + partial_video_length
-                while init_frames < length_slider:
-                    if last_frames >= length_slider:
-                        if self.pipeline.vae.quant_conv.weight.ndim==5:
-                            mini_batch_encoder = self.pipeline.vae.mini_batch_encoder
-                            _partial_video_length = length_slider - init_frames
-                            _partial_video_length = int(_partial_video_length // mini_batch_encoder * mini_batch_encoder)
+        try:
+            if self.transformer.config.in_channels != self.vae.config.latent_channels:
+                if generation_method == "Long Video Generation":
+                    if validation_video is not None:
+                        raise gr.Error(f"Video to Video is not Support Long Video Generation now.")
+                    init_frames = 0
+                    last_frames = init_frames + partial_video_length
+                    while init_frames < length_slider:
+                        if last_frames >= length_slider:
+                            if self.pipeline.vae.quant_conv.weight.ndim==5:
+                                mini_batch_encoder = self.pipeline.vae.mini_batch_encoder
+                                _partial_video_length = length_slider - init_frames
+                                _partial_video_length = int(_partial_video_length // mini_batch_encoder * mini_batch_encoder)
+                            else:
+                                _partial_video_length = length_slider - init_frames
+                            
+                            if _partial_video_length <= 0:
+                                break
                         else:
-                            _partial_video_length = length_slider - init_frames
+                            _partial_video_length = partial_video_length
+
+                        if last_frames >= length_slider:
+                            input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, video_length=_partial_video_length, sample_size=(height_slider, width_slider))
+                        else:
+                            input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, None, video_length=_partial_video_length, sample_size=(height_slider, width_slider))
+
+                        with torch.no_grad():
+                            sample = self.pipeline(
+                                prompt_textbox, 
+                                negative_prompt     = negative_prompt_textbox,
+                                num_inference_steps = sample_step_slider,
+                                guidance_scale      = cfg_scale_slider,
+                                width               = width_slider,
+                                height              = height_slider,
+                                video_length        = _partial_video_length,
+                                generator           = generator,
+
+                                video        = input_video,
+                                mask_video   = input_video_mask,
+                                clip_image   = clip_image, 
+                                strength     = 1,
+                            ).videos
                         
-                        if _partial_video_length <= 0:
+                        if init_frames != 0:
+                            mix_ratio = torch.from_numpy(
+                                np.array([float(_index) / float(overlap_video_length) for _index in range(overlap_video_length)], np.float32)
+                            ).unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+                            
+                            new_sample[:, :, -overlap_video_length:] = new_sample[:, :, -overlap_video_length:] * (1 - mix_ratio) + \
+                                sample[:, :, :overlap_video_length] * mix_ratio
+                            new_sample = torch.cat([new_sample, sample[:, :, overlap_video_length:]], dim = 2)
+
+                            sample = new_sample
+                        else:
+                            new_sample = sample
+
+                        if last_frames >= length_slider:
                             break
-                    else:
-                        _partial_video_length = partial_video_length
 
-                    if last_frames >= length_slider:
-                        input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, video_length=_partial_video_length, sample_size=(height_slider, width_slider))
-                    else:
-                        input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, None, video_length=_partial_video_length, sample_size=(height_slider, width_slider))
+                        start_image = [
+                            Image.fromarray(
+                                (sample[0, :, _index].transpose(0, 1).transpose(1, 2) * 255).numpy().astype(np.uint8)
+                            ) for _index in range(-overlap_video_length, 0)
+                        ]
 
-                    with torch.no_grad():
-                        sample = self.pipeline(
-                            prompt_textbox, 
-                            negative_prompt     = negative_prompt_textbox,
-                            num_inference_steps = sample_step_slider,
-                            guidance_scale      = cfg_scale_slider,
-                            width               = width_slider,
-                            height              = height_slider,
-                            video_length        = _partial_video_length,
-                            generator           = generator,
-
-                            video        = input_video,
-                            mask_video   = input_video_mask,
-                            clip_image   = clip_image, 
-                            strength     = 1,
-                        ).videos
-                    
-                    if init_frames != 0:
-                        mix_ratio = torch.from_numpy(
-                            np.array([float(_index) / float(overlap_video_length) for _index in range(overlap_video_length)], np.float32)
-                        ).unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-                        
-                        new_sample[:, :, -overlap_video_length:] = new_sample[:, :, -overlap_video_length:] * (1 - mix_ratio) + \
-                            sample[:, :, :overlap_video_length] * mix_ratio
-                        new_sample = torch.cat([new_sample, sample[:, :, overlap_video_length:]], dim = 2)
-
-                        sample = new_sample
-                    else:
-                        new_sample = sample
-
-                    if last_frames >= length_slider:
-                        break
-
-                    start_image = [
-                        Image.fromarray(
-                            (sample[0, :, _index].transpose(0, 1).transpose(1, 2) * 255).numpy().astype(np.uint8)
-                        ) for _index in range(-overlap_video_length, 0)
-                    ]
-
-                    init_frames = init_frames + _partial_video_length - overlap_video_length
-                    last_frames = init_frames + _partial_video_length
-            else:
-                if validation_video is not None:
-                    input_video, input_video_mask, clip_image = get_video_to_video_latent(validation_video, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
-                    strength = denoise_strength
+                        init_frames = init_frames + _partial_video_length - overlap_video_length
+                        last_frames = init_frames + _partial_video_length
                 else:
-                    input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
-                    strength = 1
+                    if validation_video is not None:
+                        input_video, input_video_mask, clip_image = get_video_to_video_latent(validation_video, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
+                        strength = denoise_strength
+                    else:
+                        input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
+                        strength = 1
 
+                    sample = self.pipeline(
+                        prompt_textbox,
+                        negative_prompt     = negative_prompt_textbox,
+                        num_inference_steps = sample_step_slider,
+                        guidance_scale      = cfg_scale_slider,
+                        width               = width_slider,
+                        height              = height_slider,
+                        video_length        = length_slider if not is_image else 1,
+                        generator           = generator,
+
+                        video        = input_video,
+                        mask_video   = input_video_mask,
+                        clip_image   = clip_image, 
+                        strength     = strength,
+                    ).videos
+            else:
                 sample = self.pipeline(
                     prompt_textbox,
                     negative_prompt     = negative_prompt_textbox,
@@ -443,34 +459,18 @@ class EasyAnimateController:
                     width               = width_slider,
                     height              = height_slider,
                     video_length        = length_slider if not is_image else 1,
-                    generator           = generator,
-
-                    video        = input_video,
-                    mask_video   = input_video_mask,
-                    clip_image   = clip_image, 
-                    strength     = strength,
+                    generator           = generator
                 ).videos
-        else:
-            sample = self.pipeline(
-                prompt_textbox,
-                negative_prompt     = negative_prompt_textbox,
-                num_inference_steps = sample_step_slider,
-                guidance_scale      = cfg_scale_slider,
-                width               = width_slider,
-                height              = height_slider,
-                video_length        = length_slider if not is_image else 1,
-                generator           = generator
-            ).videos
-        # except Exception as e:
-        #     gc.collect()
-        #     torch.cuda.empty_cache()
-        #     torch.cuda.ipc_collect()
-        #     if self.lora_model_path != "none":
-        #         self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
-        #     if is_api:
-        #         return "", f"Error. error information is {str(e)}"
-        #     else:
-        #         return gr.update(), gr.update(), f"Error. error information is {str(e)}"
+        except Exception as e:
+            gc.collect()
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+            if self.lora_model_path != "none":
+                self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
+            if is_api:
+                return "", f"Error. error information is {str(e)}"
+            else:
+                return gr.update(), gr.update(), f"Error. error information is {str(e)}"
 
         gc.collect()
         torch.cuda.empty_cache()
@@ -703,7 +703,7 @@ def ui(low_gpu_memory_mode, weight_dtype):
                         )
                         denoise_strength = gr.Slider(label="Denoise strength (重绘系数)", value=0.70, minimum=0.10, maximum=0.95, step=0.01)
 
-                    cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
+                    cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=5.0, minimum=0,   maximum=20)
                     
                     with gr.Row():
                         seed_textbox = gr.Textbox(label="Seed (随机种子)", value=43)
@@ -1232,7 +1232,7 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memo
                             )
                             denoise_strength = gr.Slider(label="Denoise strength (重绘系数)", value=0.70, minimum=0.10, maximum=0.95, step=0.01)
 
-                        cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
+                        cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=5.0, minimum=0,   maximum=20)
                     
                     with gr.Row():
                         seed_textbox = gr.Textbox(label="Seed (随机种子)", value=43)
@@ -1599,7 +1599,7 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                             )
                             denoise_strength = gr.Slider(label="Denoise strength (重绘系数)", value=0.70, minimum=0.10, maximum=0.95, step=0.01)
 
-                        cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
+                        cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=5.0, minimum=0,   maximum=20)
                     
                     with gr.Row():
                         seed_textbox = gr.Textbox(label="Seed", value=43)

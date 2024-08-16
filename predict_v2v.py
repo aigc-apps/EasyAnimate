@@ -51,12 +51,15 @@ validation_video        = "asset/1.mp4"
 denoise_strength        = 0.70
 
 # prompts
-prompt                  = "A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
-negative_prompt         = "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion. "
-guidance_scale          = 7
+# We support English and Chinese in V4
+prompt                  = "一位年轻女子，有着美丽清澈的眼睛和金发，站在森林里，穿着白色的衣服，戴着皇冠。她似乎陷入了沉思，相机聚焦在她的脸上。质量高、杰作、最佳品质、高分辨率、超精细、梦幻般。""
+negative_prompt         = "低质量，不清晰，突变，变形，失真。"
+# prompt                  = "A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
+# negative_prompt         = "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion. "
+guidance_scale          = 5.0
 seed                    = 43
 num_inference_steps     = 25
-lora_weight             = 0.55
+lora_weight             = 0.60
 save_path               = "samples/easyanimate-videos_v2v"
 
 config = OmegaConf.load(config_path)

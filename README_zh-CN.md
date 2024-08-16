@@ -31,6 +31,7 @@ EasyAnimate是一个基于transformer结构的pipeline，可用于生成AI图片
 我们会逐渐支持从不同平台快速启动，请参阅 [快速启动](#快速启动)。
 
 新特性：
+- 更新到v4版本，最大支持1024x1024，144帧, 6s, 24fps视频生成，同时支持更大分辨率的1280x1280，96帧视频生成，支持文、图、视频生视频，单个模型可支持512到1280任意分辨率，支持中文与英文双语预测。[ 2024.08.15 ]
 - 支持comfyui，详情查看[ComfyUI README](comfyui/README.md)。[ 2024.07.12 ]
 - 更新到v3版本，最大支持720p 144帧(960x960, 6s, 24fps)视频生成，支持文与图生视频模型。[ 2024.07.01 ]
 - ModelScope-Sora“数据导演”创意竞速——第三届Data-Juicer大模型数据挑战赛已经正式启动！其使用EasyAnimate作为基础模型，探究数据处理对于模型训练的作用。立即访问[竞赛官网](https://tianchi.aliyun.com/competition/entrance/532219)，了解赛事详情。[ 2024.06.17 ]
@@ -84,10 +85,10 @@ mkdir models/Diffusion_Transformer
 mkdir models/Motion_Module
 mkdir models/Personalized_Model
 
-wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar -O models/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar
+wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar.gz -O models/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar.gz
 
 cd models/Diffusion_Transformer/
-tar -xvf EasyAnimateV4-XL-2-InP.tar
+tar -xvf EasyAnimateV4-XL-2-InP.tar.gz
 cd ../../
 ```
 
@@ -403,7 +404,7 @@ EasyAnimateV4:
 
 | 名称 | 种类 | 存储空间 | 下载地址 | Hugging Face | 描述 |
 |--|--|--|--|--|--|
-| EasyAnimateV4-XL-2-InP.tar | EasyAnimateV4 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV4-XL-2-InP)| 官方的图生视频权重。支持多分辨率（512，768，1024，1280）的视频预测，以144帧、每秒24帧进行训练 |
+| EasyAnimateV4-XL-2-InP.tar.gz | EasyAnimateV4 | 解压前 8.9 GB / 解压后 14.0 GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar.gz) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV4-XL-2-InP)| 官方的图生视频权重。支持多分辨率（512，768，1024，1280）的视频预测，以144帧、每秒24帧进行训练 |
 
 <details>
   <summary>(Obsolete) EasyAnimateV3:</summary>
@@ -465,8 +466,13 @@ EasyAnimateV4:
 EasyAnimateV4的整体结构如下：
 它包括两个Text Encoder、Video VAE（视频编码器和视频解码器）和Diffusion Transformer（DiT）。MT5 Encoder和多摸CLIP用作文本编码器。EasyAnimateV4使用3D全局注意力进行视频重建，不再划分运动模块与基础模型，直接通过全局注意力确保生成连贯的帧和无缝的运动过渡。同时，在一个Pipeline中即实现了图片的生成，也实现了视频的生成。
 
-同时对Slice VAE进行了修改，对Decoder进行了重新训练，用于解决Slice VAE在面对画面变动时的顿挫感，除去最开始的视频块，后面每一个视频块在卷积时，都只能看到前面视频块的特征，看不到后面视频块的特征，这样Decoder的重建结果相比原Slice VAE会更平滑。
+EasyAnimateV4的Pipeline结构如下：
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/framework_v4.jpg" alt="ui" style="zoom:50%;" />
 
+EasyAnimateV4基础模型结构如下：
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/pipeline_v4.jpg" alt="ui" style="zoom:50%;" />
+
+Slice VAE在面对画面变动时存在一定的顿挫感，因为后面的latent在解码的时候无法看到完全看到前面的块的信息。参考magvit，我们对前面块卷积后的结果进行了存储，除去最开始的视频块，后面每一个视频块在卷积时，都只能看到前面视频块的特征，看不到后面视频块的特征，在这样的修改后，Decoder的重建结果相比原Slice VAE会更平滑。
 
 <details>
   <summary>(Obsolete) EasyAnimateV3:</summary>

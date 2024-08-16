@@ -768,7 +768,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
         crops_coords_top_left: Tuple[int, int] = (0, 0),
         use_resolution_binning: bool = False,
         clip_image: Image = None,
-        clip_apply_ratio: float = 0.50,
+        clip_apply_ratio: float = 0.40,
         strength: float = 1.0,
         comfyui_progressbar: bool = False,
     ):
