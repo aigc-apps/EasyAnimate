@@ -1,7 +1,9 @@
 # 数据预处理
 [English](./README.md) | 简体中文
 
-该文件夹包含 EasyAnimate 使用的数据集预处理（即视频切分）、过滤和生成描述的代码。
+该文件夹包含 EasyAnimate 使用的数据集预处理（即视频切分）、过滤和生成描述的代码。整个过程支持分布式并行处理，能够处理大规模数据集。
+
+此外，我们和 [Data-Juicer](https://github.com/modelscope/data-juicer/blob/main/docs/DJ_SORA.md) 合作，能让你在 [Aliyun PAI-DLC](https://help.aliyun.com/zh/pai/user-guide/video-preprocessing/) 轻松进行视频数据的处理。
 
 
 ## 快速开始
@@ -14,10 +16,10 @@
 ```shell
 # pull image
 docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:
-asyanimate_video_caption
+asyanimate
 
 # enter image
-docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:asyanimate_video_caption
+docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:asyanimate
 
 # clone code
 git clone https://github.com/aigc-apps/EasyAnimate.git

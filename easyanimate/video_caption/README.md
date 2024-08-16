@@ -2,6 +2,10 @@
 English | [简体中文](./README_zh-CN.md)
 
 The folder contains codes for dataset preprocessing (i.e., video splitting), filtering, and recaptioning used by EasyAnimate.
+The entire process supports distributed parallel processing, capable of handling large-scale datasets.
+
+Meanwhile, we are collaborating with [Data-Juicer](https://github.com/modelscope/data-juicer/blob/main/docs/DJ_SORA.md),
+allowing you to easily perform video data processing on [Aliyun PAI-DLC](https://help.aliyun.com/zh/pai/user-guide/video-preprocessing/).
 
 ## Quick Start
 
@@ -15,10 +19,10 @@ the minimum GPU requirment should be RTX 3060 or A2 (CUDA Compute Capability >= 
 ```shell
 # pull image
 docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:
-asyanimate_video_caption
+asyanimate
 
 # enter image
-docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:asyanimate_video_caption
+docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:asyanimate
 
 # clone code
 git clone https://github.com/aigc-apps/EasyAnimate.git
