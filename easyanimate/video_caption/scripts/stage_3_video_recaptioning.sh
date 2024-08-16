@@ -6,12 +6,10 @@ VIDEO_CAPTION_SAVED_PATH="datasets/panda_70m/meta_caption_info_vila_8b.jsonl"
 REWRITTEN_VIDEO_CAPTION_SAVED_PATH="datasets/panda_70m/meta_caption_info_vila_8b_rewritten.jsonl"
 TRAIN_SAVED_PATH="datasets/panda_70m/train_panda_70m.json"
 # Manually download Efficient-Large-Model/Llama-3-VILA1.5-8b-AWQ to VILA_MODEL_PATH.
-VILA_MODEL_PATH="/PATH/TO/Llama-3-VILA1.5-8b-AWQ"
 # Manually download meta-llama/Meta-Llama-3-8B-Instruct to REWRITE_MODEL_PATH.
-REWRITE_MODEL_PATH="/PATH/TO/Meta-Llama-3-8B-Instruct"
 
-# Use Efficient-Large-Model/Llama-3-VILA1.5-8b-AWQ to perform recaption.
-accelerate launch vila_caption_video.py \
+# Use VILA1.5-AWQ to perform recaptioning.
+accelerate launch vila_video_recaptioning.py \
     --video_metadata_path ${META_FILE_PATH} \
     --video_folder ${VIDEO_FOLDER} \
     --model_path ${VILA_MODEL_PATH} \
