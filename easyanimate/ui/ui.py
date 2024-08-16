@@ -703,7 +703,7 @@ def ui(low_gpu_memory_mode, weight_dtype):
                         )
                         denoise_strength = gr.Slider(label="Denoise strength (重绘系数)", value=0.70, minimum=0.10, maximum=0.95, step=0.01)
 
-                    cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=5.0, minimum=0,   maximum=20)
+                    cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
                     
                     with gr.Row():
                         seed_textbox = gr.Textbox(label="Seed (随机种子)", value=43)
@@ -1232,7 +1232,7 @@ def ui_modelscope(edition, config_path, model_name, savedir_sample, low_gpu_memo
                             )
                             denoise_strength = gr.Slider(label="Denoise strength (重绘系数)", value=0.70, minimum=0.10, maximum=0.95, step=0.01)
 
-                        cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=5.0, minimum=0,   maximum=20)
+                        cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
                     
                     with gr.Row():
                         seed_textbox = gr.Textbox(label="Seed (随机种子)", value=43)
@@ -1599,7 +1599,7 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                             )
                             denoise_strength = gr.Slider(label="Denoise strength (重绘系数)", value=0.70, minimum=0.10, maximum=0.95, step=0.01)
 
-                        cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=5.0, minimum=0,   maximum=20)
+                        cfg_scale_slider  = gr.Slider(label="CFG Scale (引导系数)",        value=7.0, minimum=0,   maximum=20)
                     
                     with gr.Row():
                         seed_textbox = gr.Textbox(label="Seed", value=43)
