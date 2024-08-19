@@ -345,7 +345,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
             )
             text_input_ids = text_inputs.input_ids
             if text_input_ids.shape[-1] > actual_max_sequence_length:
-                reprompt = tokenizer.batch_decode(text_input_ids[:, :actual_max_sequence_length])
+                reprompt = tokenizer.batch_decode(text_input_ids[:, :actual_max_sequence_length], skip_special_tokens=True)
                 text_inputs = tokenizer(
                     reprompt,
                     padding="max_length",
@@ -412,7 +412,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
             )
             uncond_input_ids = uncond_input.input_ids
             if uncond_input_ids.shape[-1] > actual_max_sequence_length:
-                reuncond_tokens = tokenizer.batch_decode(uncond_input_ids[:, :actual_max_sequence_length])
+                reuncond_tokens = tokenizer.batch_decode(uncond_input_ids[:, :actual_max_sequence_length], skip_special_tokens=True)
                 uncond_input = tokenizer(
                     reuncond_tokens,
                     padding="max_length",
