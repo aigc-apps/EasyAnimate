@@ -4,6 +4,8 @@ MOTION_SAVED_PATH="datasets/panda_70m/videos_clips/meta_motion_info.jsonl"
 MIN_MOTION_SCORE=2
 VIDEO_CAPTION_SAVED_PATH="datasets/panda_70m/meta_caption_info_vila_8b.jsonl"
 REWRITTEN_VIDEO_CAPTION_SAVED_PATH="datasets/panda_70m/meta_caption_info_vila_8b_rewritten.jsonl"
+VIDEOCLIPXL_SCORE_SAVED_PATH="datasets/panda_70m/meta_caption_info_vila_8b_rewritten_videoclipxl.jsonl"
+MIN_VIDEOCLIPXL_SCORE=0.20
 TRAIN_SAVED_PATH="datasets/panda_70m/train_panda_70m.json"
 # Manually download Efficient-Large-Model/Llama-3-VILA1.5-8b-AWQ to VILA_MODEL_PATH.
 # Manually download meta-llama/Meta-Llama-3-8B-Instruct to REWRITE_MODEL_PATH.
@@ -16,7 +18,7 @@ accelerate launch vila_video_recaptioning.py \
     --precision "W4A16" \
     --saved_path $VIDEO_CAPTION_SAVED_PATH \
     --saved_freq 1 \
-    --motion_score_metadata_path $MOTION_SCORE_SAVED_PATH \
+    --motion_score_metadata_path $MOTION_SAVED_PATH \
     --min_motion_score $MIN_MOTION_SCORE
 
 # Rewrite video captions (optional).
