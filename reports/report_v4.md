@@ -25,6 +25,10 @@ In addition to the features introduced in EasyAnimateV3, EasyAnimateV4 also high
 - More data and improved multi-stage training
 - Re-trained VAE
 
+Limitation: 
+
+We attempted to implement EasyAnimate using 3D full attention, but this structure performed moderately on slice VAE and incurred considerable training costs. As a result, the performance of version V4 did not significantly surpass that of version V3. Due to limited resources, we are migrating EasyAnimate to a retrained 16-channel MagVit to pursue better model performance.
+
 All implementations of the above improvements (including training and inference) are available in the EasyAnimateV4 version. The following sections will detail the improvements. We have also optimized our codebase and documentation for easier usage and development.
 
 ## 3D Full Attention
