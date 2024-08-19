@@ -3,21 +3,29 @@ This script (optional) can rewrite and beautify the user-uploaded prompt via LLM
 making it more suitable as the inference prompt and thus improving the quality of the generated videos.
 
 Usage:
-1. Set the `OPENAI_API_KEY` and `OPENAI_BASE_URL` in the environment variables.
-You can also deploy the OpenAI Compatible Server locally using vLLM. For example:
++ You can request OpenAI compatible server to perform beautiful prompt by running
+```shell
+export OPENAI_API_KEY="your_openai_api_key" OPENAI_BASE_URL="your_openai_base_url" python beautiful_prompt.py \
+    --model "your_model_name" \
+    --prompt "your_prompt"
 ```
-# Meta-Llama-3.1-8B-Instruct is sufficient for this task.
-python -m vllm.entrypoints.openai.api_server serve /path/to/your_llm --dtype auto --api-key "your_api_key"
-``` 
-Please refer to https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html for details.
++ You can also deploy the OpenAI Compatible Server locally using vLLM. For example:
+```shell
+# Meta-Llama-3-8B-Instruct is sufficient for this task.
+# Download it from https://huggingface.co/NousResearch/Meta-Llama-3-8B-Instruct or https://www.modelscope.cn/models/LLM-Research/Meta-Llama-3-8B-Instruct to /path/to/your_llm
 
-2. Run the scripts
+# deploy the OpenAI compatible server
+python -m vllm.entrypoints.openai.api_server serve /path/to/your_llm --dtype auto --api-key "your_api_key"
 ```
-python -m scripts.beautiful_prompt \
+
+Then you can perform beautiful prompt by running
+```shell
+python -m beautiful_prompt.py \
     --model /path/to/your_llm \
     --prompt "your_prompt" \
     --base_url "http://localhost:8000/v1" \
     --api_key "your_api_key"
+```
 """
 import argparse
 import os

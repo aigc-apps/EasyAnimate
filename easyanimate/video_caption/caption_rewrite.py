@@ -41,7 +41,7 @@ def parse_args():
     parser.add_argument(
         "--video_path_column",
         type=str,
-        default="video_path",
+        default=None,
         help="The column contains the video path (an absolute path or a relative path w.r.t the video_folder).",
     )
     parser.add_argument(
@@ -97,7 +97,7 @@ def main():
     if saved_suffix not in set([".csv", ".jsonl", ".json"]):
         raise ValueError(f"The saved_path must end with .csv, .jsonl or .json.")
 
-    if os.path.exists(args.saved_path):
+    if os.path.exists(args.saved_path) and args.video_path_column is not None:
         if args.saved_path.endswith(".csv"):
             saved_metadata_df = pd.read_csv(args.saved_path)
         elif args.saved_path.endswith(".jsonl"):
@@ -119,7 +119,8 @@ def main():
             args.prompt = "".join(f.readlines())
     logger.info(f"Prompt: {args.prompt}")
 
-    video_path_list = video_metadata_df[args.video_path_column].tolist()
+    if args.video_path_column is not None:
+        video_path_list = video_metadata_df[args.video_path_column].tolist()
     if args.caption_column in video_metadata_df.columns:
         sampled_frame_caption_list = video_metadata_df[args.caption_column].tolist()
     else:
@@ -131,7 +132,7 @@ def main():
     logger.info(f"Automatically set tensor_parallel_size={tensor_parallel_size} based on the available devices.")
 
     llm = LLM(model=args.model_name, trust_remote_code=True, tensor_parallel_size=tensor_parallel_size)
-    if "Llama-3" in args.model_name:
+    if "Meta-Llama-3-70B" in args.model_name:
         tokenizer = AutoTokenizer.from_pretrained("NousResearch/Meta-Llama-3-8B-Instruct")
         stop_token_ids = [tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids("<|eot_id|>")]
         sampling_params = SamplingParams(temperature=0.7, top_p=1, max_tokens=1024, stop_token_ids=stop_token_ids)
@@ -139,10 +140,13 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(args.model_name)
         sampling_params = SamplingParams(temperature=0.7, top_p=1, max_tokens=1024)
 
-    result_dict = {args.video_path_column: [], args.caption_column: []}
+    result_dict = {args.caption_column: []}
+    if args.video_path_column is not None:
+        result_dict = {args.video_path_column: [], args.caption_column: []}
 
     for i in tqdm(range(0, len(sampled_frame_caption_list), args.batch_size)):
-        batch_video_path = video_path_list[i : i + args.batch_size]
+        if args.video_path_column is not None:
+            batch_video_path = video_path_list[i : i + args.batch_size]
         batch_caption = sampled_frame_caption_list[i : i + args.batch_size]
         batch_prompt = []
         for caption in batch_caption:
@@ -160,17 +164,28 @@ def main():
 
         # Filter out data that does not meet the output format.
         batch_result = []
-        for video_path, output in zip(batch_video_path, batch_output):
-            if output is not None:
-                batch_result.append((video_path, output))
-        batch_video_path, batch_output = zip(*batch_result)
+        if args.video_path_column is not None:
+            for video_path, output in zip(batch_video_path, batch_output):
+                if output is not None:
+                    batch_result.append((video_path, output))
+            batch_video_path, batch_output = zip(*batch_result)
 
-        result_dict[args.video_path_column].extend(batch_video_path)
-        result_dict[args.caption_column].extend(batch_output)
+            result_dict[args.video_path_column].extend(batch_video_path)
+        else:
+            for output in batch_output:
+                if output is not None:
+                    batch_result.append(output)
+
+            result_dict[args.caption_column].extend(batch_result)
+            print(result_dict)
+
+        # if args.video_path_column is not None:
+        #     result_dict[args.video_path_column].extend(batch_video_path)
+        # result_dict[args.caption_column].extend(batch_output)
 
         # Save the metadata every args.saved_freq.
         if i != 0 and ((i // args.batch_size) % args.saved_freq) == 0:
-            if len(result_dict[args.video_path_column]) > 0:
+            if len(result_dict[args.caption_column]) > 0:
                 result_df = pd.DataFrame(result_dict)
                 if args.saved_path.endswith(".csv"):
                     header = True if not os.path.exists(args.saved_path) else False
@@ -185,9 +200,11 @@ def main():
                     result_df.to_json(args.saved_path, orient="records", indent=4, force_ascii=False)
                 logger.info(f"Save result to {args.saved_path}.")
 
-            result_dict = {args.video_path_column: [], args.caption_column: []}
+            result_dict = {args.caption_column: []}
+            if args.video_path_column is not None:
+                result_dict = {args.video_path_column: [], args.caption_column: []}
 
-    if len(result_dict[args.video_path_column]) > 0:
+    if len(result_dict[args.caption_column]) > 0:
         result_df = pd.DataFrame(result_dict)
         if args.saved_path.endswith(".csv"):
             header = True if not os.path.exists(args.saved_path) else False
