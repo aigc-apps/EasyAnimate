@@ -31,6 +31,7 @@ EasyAnimate是一个基于transformer结构的pipeline，可用于生成AI图片
 我们会逐渐支持从不同平台快速启动，请参阅 [快速启动](#快速启动)。
 
 新特性：
+- 更新到v4版本，最大支持1024x1024，144帧, 6s, 24fps视频生成，同时支持更大分辨率的1280x1280，96帧视频生成，支持文、图、视频生视频，单个模型可支持512到1280任意分辨率，支持中文与英文双语预测。[ 2024.08.15 ]
 - 支持comfyui，详情查看[ComfyUI README](comfyui/README.md)。[ 2024.07.12 ]
 - 更新到v3版本，最大支持720p 144帧(960x960, 6s, 24fps)视频生成，支持文与图生视频模型。[ 2024.07.01 ]
 - ModelScope-Sora“数据导演”创意竞速——第三届Data-Juicer大模型数据挑战赛已经正式启动！其使用EasyAnimate作为基础模型，探究数据处理对于模型训练的作用。立即访问[竞赛官网](https://tianchi.aliyun.com/competition/entrance/532219)，了解赛事详情。[ 2024.06.17 ]
@@ -65,7 +66,35 @@ DSW 有免费 GPU 时间，用户可申请一次，申请后3个月内有效。
 #### c. 通过docker
 使用docker的情况下，请保证机器中已经正确安装显卡驱动与CUDA环境，然后以此执行以下命令：
 
-EasyAnimateV3:
+EasyAnimateV4:
+```
+# pull image
+docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
+
+# enter image
+docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
+
+# clone code
+git clone https://github.com/aigc-apps/EasyAnimate.git
+
+# enter EasyAnimate's dir
+cd EasyAnimate
+
+# download weights
+mkdir models/Diffusion_Transformer
+mkdir models/Motion_Module
+mkdir models/Personalized_Model
+
+wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar.gz -O models/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar.gz
+
+cd models/Diffusion_Transformer/
+tar -xvf EasyAnimateV4-XL-2-InP.tar.gz
+cd ../../
+```
+
+<details>
+  <summary>(Obsolete) EasyAnimateV3:</summary>
+
 ```
 # pull image
 docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
@@ -94,6 +123,7 @@ tar -xvf EasyAnimateV3-XL-2-InP-768x768.tar
 tar -xvf EasyAnimateV3-XL-2-InP-960x960.tar
 cd ../../
 ```
+</details>
 
 <details>
   <summary>(Obsolete) EasyAnimateV2:</summary>
@@ -160,15 +190,47 @@ cd ../../
 #### a. 环境检查
 我们已验证EasyAnimate可在以下环境中执行：
 
+Windows 的详细信息：
+- 操作系统 Windows 10
+- python: python3.10 & python3.11
+- pytorch: torch2.2.0
+- CUDA: 11.8 & 12.1
+- CUDNN: 8+
+- GPU： Nvidia-3060 12G
+
 Linux 的详细信息：
 - 操作系统 Ubuntu 20.04, CentOS
 - python: python3.10 & python3.11
 - pytorch: torch2.2.0
-- CUDA: 11.8
+- CUDA: 11.8 & 12.1
 - CUDNN: 8+
-- GPU： Nvidia-A10 24G & Nvidia-A100 40G & Nvidia-A100 80G
+- GPU：Nvidia-V100 16G & Nvidia-A10 24G & Nvidia-A100 40G & Nvidia-A100 80G
 
 我们需要大约 60GB 的可用磁盘空间，请检查！
+
+不同显存可以生成的视频大小有：
+| GPU memory | 384x672x72 | 384x672x144 | 576x1008x72 | 576x1008x144 | 768x1344x72 | 768x1344x144 | 960x1680x96 |
+|----------|----------|----------|----------|----------|----------|----------|----------|
+| 12GB | ⭕️ | ⭕️ | ⭕️ | ⭕️ | ❌ | ❌ | ❌ |
+| 16GB | ✅ | ✅ | ⭕️ | ⭕️ | ⭕️ | ❌ | ❌ |
+| 24GB | ✅ | ✅ | ✅ | ⭕️ | ✅ | ❌ | ❌ |
+| 40GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 80GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+✅ 表示它可以在low_gpu_memory_mode＝False下运行，⭕️ 表示它可以在low_gpu_memory_mode＝True下运行，❌ 表示它无法运行。low_gpu_memory_mode=True时，运行速度较慢。
+
+有一些不支持torch.bfloat16的卡型，如2080ti、V100，需要将app.py、predict文件中的weight_dtype修改为torch.float16才可以运行。
+
+不同卡型在25step时的生成时间如下：
+| GPU | 384x672x72 | 384x672x144 | 576x1008x72 | 576x1008x144 | 768x1344x72 | 768x1344x144 | 960x1680x96 |
+|----------|----------|----------|----------|----------|----------|----------|----------|
+| A10 24GB | ~180s | ~370s | ~480s | ~1800s(⭕️) | ~1000s | ❌ | ❌ |
+| A100 80GB | ~60s | ~180s | ~200s | ~600s | ~500s | ~1800s | ~1800s |
+
+(⭕️) 表示它可以在low_gpu_memory_mode＝True下运行，速度较慢，❌ 表示它无法运行。
+
+<details>
+  <summary>(Obsolete) EasyAnimateV3:</summary>
 
 不同显存可以生成的视频大小有：
 | GPU memory | 384x672x72 | 384x672x144 | 576x1008x72 | 576x1008x144 | 720x1280x72 | 720x1280x144 |
@@ -178,13 +240,23 @@ Linux 的详细信息：
 | 24GB | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
 | 40GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 80GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-
-✅ 表示它可以在low_gpu_memory_mode＝False下运行，⭕️ 表示它可以在low_gpu_memory_mode＝True下运行，❌ 表示它无法运行。low_gpu_memory_mode=True时，运行速度较慢。显卡需要支持bfloat16预测。
+</details>
 
 #### b. 权重放置
 我们最好将[权重](#model-zoo)按照指定路径进行放置：
 
-EasyAnimateV3:
+EasyAnimateV4:
+```
+📦 models/
+├── 📂 Diffusion_Transformer/
+│   └── 📂 EasyAnimateV4-XL-2-InP/
+├── 📂 Personalized_Model/
+│   └── your trained trainformer model / your trained lora model (for UI load)
+```
+
+<details>
+  <summary>(Obsolete) EasyAnimateV3:</summary>:
+
 ```
 📦 models/
 ├── 📂 Diffusion_Transformer/
@@ -192,9 +264,11 @@ EasyAnimateV3:
 ├── 📂 Personalized_Model/
 │   └── your trained trainformer model / your trained lora model (for UI load)
 ```
+</details>
 
 <details>
   <summary>(Obsolete) EasyAnimateV2:</summary>
+
 ```
 📦 models/
 ├── 📂 Diffusion_Transformer/
@@ -235,6 +309,9 @@ EasyAnimateV3:
 - 步骤2：运行app.py文件，进入gradio页面。
 - 步骤3：根据页面选择生成模型，填入prompt、neg_prompt、guidance_scale和seed等，点击生成，等待生成结果，结果保存在sample文件夹中。
 
+##### iii、通过comfyui
+具体查看[ComfyUI README](comfyui/README.md)。
+
 ### 2. 模型训练
 一个完整的EasyAnimate训练链路应该包括数据预处理、Video VAE训练、Video DiT训练。其中Video VAE训练是一个可选项，因为我们已经提供了训练好的Video VAE。
 
@@ -248,9 +325,9 @@ EasyAnimateV3:
 📦 project/
 ├── 📂 datasets/
 │   ├── 📂 internal_datasets/
-│       ├── 📂 videos/
+│       ├── 📂 train/
 │       │   ├── 📄 00000001.mp4
-│       │   ├── 📄 00000001.jpg
+│       │   ├── 📄 00000002.jpg
 │       │   └── 📄 .....
 │       └── 📄 json_of_internal_datasets.json
 ```
@@ -259,12 +336,12 @@ json_of_internal_datasets.json是一个标准的json文件。json中的file_path
 ```json
 [
     {
-      "file_path": "videos/00000001.mp4",
+      "file_path": "train/00000001.mp4",
       "text": "A group of young men in suits and sunglasses are walking down a city street.",
       "type": "video"
     },
     {
-      "file_path": "train/00000001.jpg",
+      "file_path": "train/00000002.jpg",
       "text": "A group of young men in suits and sunglasses are walking down a city street.",
       "type": "image"
     },
@@ -316,21 +393,28 @@ export DATASET_META_NAME="/mnt/data/json_of_internal_datasets.json"
 sh scripts/train.sh
 ```
 
+关于一些参数的设置细节，可以查看[Readme Train](scripts/README_TRAIN.md)与[Readme Lora](scripts/README_TRAIN_LORA.md)
+
 <details>
   <summary>(Obsolete) EasyAnimateV1:</summary>
   如果你想训练EasyAnimateV1。请切换到git分支v1。
 </details>
 
+EasyAnimateV4:
 
-# 模型地址
+| 名称 | 种类 | 存储空间 | 下载地址 | Hugging Face | 描述 |
+|--|--|--|--|--|--|
+| EasyAnimateV4-XL-2-InP.tar.gz | EasyAnimateV4 | 解压前 8.9 GB / 解压后 14.0 GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar.gz) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV4-XL-2-InP)| 官方的图生视频权重。支持多分辨率（512，768，1024，1280）的视频预测，以144帧、每秒24帧进行训练 |
 
-EasyAnimateV3:
+<details>
+  <summary>(Obsolete) EasyAnimateV3:</summary>
 
 | 名称 | 种类 | 存储空间 | 下载地址 | Hugging Face | 描述 |
 |--|--|--|--|--|--|
 | EasyAnimateV3-XL-2-InP-512x512.tar | EasyAnimateV3 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-512x512)| 官方的512x512分辨率的图生视频权重。以144帧、每秒24帧进行训练 |
 | EasyAnimateV3-XL-2-InP-768x768.tar | EasyAnimateV3 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-768x768) | 官方的768x768分辨率的图生视频权重。以144帧、每秒24帧进行训练 |
 | EasyAnimateV3-XL-2-InP-960x960.tar | EasyAnimateV3 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-960x960) | 官方的960x960（720P）分辨率的图生视频权重。以144帧、每秒24帧进行训练 |
+</details>
 
 <details>
   <summary>(Obsolete) EasyAnimateV2:</summary>
@@ -375,6 +459,24 @@ EasyAnimateV3:
 - 文本描述： 通过videochat2和vila对视频帧进行recaption。PAI也在自研质量更高的视频recaption模型，将在第一时间放出供大家使用。
 
 ### 2. 模型结构
+EasyAnimateV4:
+
+我们使用了[Hunyuan-DiT](https://github.com/Tencent/HunyuanDiT)作为基础结构，并在此基础上修改了VAE和DiT的模型结构来更好地支持视频的生成。请参考原始资源页并遵循相应的许可证。
+
+EasyAnimateV4的整体结构如下：
+它包括两个Text Encoder、Video VAE（视频编码器和视频解码器）和Diffusion Transformer（DiT）。MT5 Encoder和多摸CLIP用作文本编码器。EasyAnimateV4使用3D全局注意力进行视频重建，不再划分运动模块与基础模型，直接通过全局注意力确保生成连贯的帧和无缝的运动过渡。同时，在一个Pipeline中即实现了图片的生成，也实现了视频的生成。
+
+EasyAnimateV4的Pipeline结构如下：
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/framework_v4.jpg" alt="ui" style="zoom:50%;" />
+
+EasyAnimateV4基础模型结构如下：
+<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/pipeline_v4.jpg" alt="ui" style="zoom:50%;" />
+
+Slice VAE在面对画面变动时存在一定的顿挫感，因为后面的latent在解码的时候无法看到完全看到前面的块的信息。参考magvit，我们对前面块卷积后的结果进行了存储，除去最开始的视频块，后面每一个视频块在卷积时，都只能看到前面视频块的特征，看不到后面视频块的特征，在这样的修改后，Decoder的重建结果相比原Slice VAE会更平滑。
+
+<details>
+  <summary>(Obsolete) EasyAnimateV3:</summary>
+
 我们使用了[PixArt-alpha](https://github.com/PixArt-alpha/PixArt-alpha)作为基础模型，并在此基础上修改了VAE和DiT的模型结构来更好地支持视频的生成。EasyAnimate的整体结构如下：
 
 下图概述了EasyAnimate的管道。它包括Text Encoder、Video VAE（视频编码器和视频解码器）和Diffusion Transformer（DiT）。T5 Encoder用作文本编码器。其他组件将在以下部分中详细说明。
@@ -388,6 +490,7 @@ EasyAnimateV3:
 同时，其提出了Slice VAE，用于解决MagViT在面对长、大视频时编解码上的显存困难，同时相比于MagViT在视频编解码阶段进行了时间维度更大的压缩。
 
 更多细节可以看查看[arxiv](https://arxiv.org/abs/2405.18991)。
+</details>
 
 # 未来计划
 - 支持更大规模参数量的文视频生成模型。
@@ -407,6 +510,7 @@ EasyAnimateV3:
 - Open-Sora: https://github.com/hpcaitech/Open-Sora
 - Animatediff: https://github.com/guoyww/AnimateDiff
 - ComfyUI-EasyAnimateWrapper: https://github.com/kijai/ComfyUI-EasyAnimateWrapper
+- HunYuan DiT: https://github.com/tencent/HunyuanDiT
 
 # 许可证
 本项目采用 [Apache License (Version 2.0)](https://github.com/modelscope/modelscope/blob/master/LICENSE).

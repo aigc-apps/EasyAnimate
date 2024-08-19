@@ -245,6 +245,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
         max_sequence_length: Optional[int] = None,
         text_encoder_index: int = 0,
+        actual_max_sequence_length: int = 140,
     ):
         r"""
         Encodes the prompt into text encoder hidden states.
@@ -310,17 +311,28 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
                 return_tensors="pt",
             )
             text_input_ids = text_inputs.input_ids
+            if text_input_ids.shape[-1] > actual_max_sequence_length:
+                reprompt = tokenizer.batch_decode(text_input_ids[:, :actual_max_sequence_length])
+                text_inputs = tokenizer(
+                    reprompt,
+                    padding="max_length",
+                    max_length=max_length,
+                    truncation=True,
+                    return_attention_mask=True,
+                    return_tensors="pt",
+                )
+                text_input_ids = text_inputs.input_ids
             untruncated_ids = tokenizer(prompt, padding="longest", return_tensors="pt").input_ids
 
             if untruncated_ids.shape[-1] >= text_input_ids.shape[-1] and not torch.equal(
                 text_input_ids, untruncated_ids
             ):
-                removed_text = tokenizer.batch_decode(untruncated_ids[:, tokenizer.model_max_length - 1 : -1])
+                _actual_max_sequence_length = min(tokenizer.model_max_length, actual_max_sequence_length)
+                removed_text = tokenizer.batch_decode(untruncated_ids[:, _actual_max_sequence_length - 1 : -1])
                 logger.warning(
                     "The following part of your input was truncated because CLIP can only handle sequences up to"
-                    f" {tokenizer.model_max_length} tokens: {removed_text}"
+                    f" {_actual_max_sequence_length} tokens: {removed_text}"
                 )
-
             prompt_attention_mask = text_inputs.attention_mask.to(device)
             prompt_embeds = text_encoder(
                 text_input_ids.to(device),
@@ -365,6 +377,18 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
                 truncation=True,
                 return_tensors="pt",
             )
+            uncond_input_ids = uncond_input.input_ids
+            if uncond_input_ids.shape[-1] > actual_max_sequence_length:
+                reuncond_tokens = tokenizer.batch_decode(uncond_input_ids[:, :actual_max_sequence_length])
+                uncond_input = tokenizer(
+                    reuncond_tokens,
+                    padding="max_length",
+                    max_length=max_length,
+                    truncation=True,
+                    return_attention_mask=True,
+                    return_tensors="pt",
+                )
+                uncond_input_ids = uncond_input.input_ids
 
             negative_prompt_attention_mask = uncond_input.attention_mask.to(device)
             negative_prompt_embeds = text_encoder(
@@ -518,42 +542,22 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         latents = latents * self.scheduler.init_noise_sigma
         return latents
 
+
     def smooth_output(self, video, mini_batch_encoder, mini_batch_decoder):
         if video.size()[2] <= mini_batch_encoder:
             return video
         prefix_index_before = mini_batch_encoder // 2
         prefix_index_after = mini_batch_encoder - prefix_index_before
         pixel_values = video[:, :, prefix_index_before:-prefix_index_after]
-        
-        pixel_values = pixel_values.to(self.vae.quant_conv.weight.dtype)
-        if self.vae.slice_compression_vae:
-            latents = self.vae.encode(pixel_values)[0]
-            latents = latents.sample()
-        else:
-            new_pixel_values = []
-            for i in range(0, pixel_values.shape[2], mini_batch_encoder):
-                with torch.no_grad():
-                    pixel_values_bs = pixel_values[:, :, i: i + mini_batch_encoder, :, :]
-                    pixel_values_bs = self.vae.encode(pixel_values_bs)[0]
-                    pixel_values_bs = pixel_values_bs.sample()
-                    new_pixel_values.append(pixel_values_bs)
-            latents = torch.cat(new_pixel_values, dim = 2)
-        
-        latents = latents.float()
-        if self.vae.slice_compression_vae:
-            middle_video = self.vae.decode(latents)[0]
-        else:
-            middle_video = []
-            for i in range(0, latents.shape[2], mini_batch_decoder):
-                with torch.no_grad():
-                    start_index = i
-                    end_index = i + mini_batch_decoder
-                    latents_bs = self.vae.decode(latents[:, :, start_index:end_index, :, :])[0]
-                    middle_video.append(latents_bs)
-            middle_video = torch.cat(middle_video, 2)
+
+        # Encode middle videos
+        latents = self.vae.encode(pixel_values)[0]
+        latents = latents.mode()
+        # Decode middle videos
+        middle_video = self.vae.decode(latents)[0]
+
         video[:, :, prefix_index_before:-prefix_index_after] = (video[:, :, prefix_index_before:-prefix_index_after] + middle_video) / 2
         return video
-    
 
     def decode_latents(self, latents):
         self.vae.decoder = self.vae.decoder.float()
@@ -564,19 +568,10 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         if self.vae.quant_conv.weight.ndim==5:
             mini_batch_encoder = self.vae.mini_batch_encoder
             mini_batch_decoder = self.vae.mini_batch_decoder
-            if self.vae.slice_compression_vae:
-                video = self.vae.decode(latents)[0]
-            else:
-                video = []
-                for i in range(0, latents.shape[2], mini_batch_decoder):
-                    with torch.no_grad():
-                        start_index = i
-                        end_index = i + mini_batch_decoder
-                        latents_bs = self.vae.decode(latents[:, :, start_index:end_index, :, :])[0]
-                        video.append(latents_bs)
-                video = torch.cat(video, 2)
+            video = self.vae.decode(latents)[0]
             video = video.clamp(-1, 1)
-            video = self.smooth_output(video, mini_batch_encoder, mini_batch_decoder).cpu().clamp(-1, 1)
+            if not self.vae.cache_compression_vae:
+                video = self.smooth_output(video, mini_batch_encoder, mini_batch_decoder).cpu().clamp(-1, 1)
         else:
             latents = rearrange(latents, "b c f h w -> (b f) c h w")
             video = []
@@ -868,6 +863,11 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         )
         style = style.to(device=device).repeat(batch_size * num_images_per_prompt)
 
+        # Empty vae cache
+        self.transformer = self.transformer.to(device)
+        self.vae = self.vae.to("cpu")
+        torch.cuda.empty_cache()
+
         # 8. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         self._num_timesteps = len(timesteps)
@@ -932,6 +932,11 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
 
                 if XLA_AVAILABLE:
                     xm.mark_step()
+
+        # Make vae to cuda
+        self.transformer = self.transformer.to("cpu")
+        self.vae = self.vae.to(device)
+        torch.cuda.empty_cache()
 
         # Post-processing
         video = self.decode_latents(latents)

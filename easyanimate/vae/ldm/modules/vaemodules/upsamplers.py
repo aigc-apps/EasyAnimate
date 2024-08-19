@@ -137,6 +137,7 @@ class SpatialTemporalUpsampler3D(Upsampler):
         )
 
         self.padding_flag = 0
+        self.set_3dgroupnorm = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = F.interpolate(x, scale_factor=(1, 2, 2), mode="nearest")
@@ -145,31 +146,11 @@ class SpatialTemporalUpsampler3D(Upsampler):
         if self.padding_flag == 0:
             if x.shape[2] > 1:
                 first_frame, x = x[:, :, :1], x[:, :, 1:]
-                x = F.interpolate(x, scale_factor=(2, 1, 1), mode="trilinear")
+                x = F.interpolate(x, scale_factor=(2, 1, 1), mode="trilinear" if not self.set_3dgroupnorm else "nearest")
                 x = torch.cat([first_frame, x], dim=2)
-        elif self.padding_flag == 2:
-            x = F.interpolate(x, scale_factor=(2, 1, 1), mode="trilinear")
+        elif self.padding_flag == 2 or self.padding_flag == 5 or self.padding_flag == 6:
+            x = F.interpolate(x, scale_factor=(2, 1, 1), mode="trilinear" if not self.set_3dgroupnorm else "nearest")
         return x
-
-    def set_padding_one_frame(self):
-        def _set_padding_one_frame(name, module):
-            if hasattr(module, 'padding_flag'):
-                print('Set pad mode for module[%s] type=%s' % (name, str(type(module))))
-                module.padding_flag = 1
-            for sub_name, sub_mod in module.named_children():
-                _set_padding_one_frame(sub_name, sub_mod)
-        for name, module in self.named_children():
-            _set_padding_one_frame(name, module)
-
-    def set_padding_more_frame(self):
-        def _set_padding_more_frame(name, module):
-            if hasattr(module, 'padding_flag'):
-                print('Set pad mode for module[%s] type=%s' % (name, str(type(module))))
-                module.padding_flag = 2
-            for sub_name, sub_mod in module.named_children():
-                _set_padding_more_frame(sub_name, sub_mod)
-        for name, module in self.named_children():
-            _set_padding_more_frame(name, module)
 
 class SpatialTemporalUpsamplerD2S3D(Upsampler):
     def __init__(self, in_channels: int, out_channels: int):

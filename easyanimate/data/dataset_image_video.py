@@ -26,9 +26,9 @@ def get_random_mask(shape):
     f, c, h, w = shape
     
     if f != 1:
-        mask_index = np.random.randint(0, 5)
+        mask_index = np.random.choice([0, 1, 2, 3, 4], p = [0.05, 0.3, 0.3, 0.3, 0.05]) # np.random.randint(0, 5)
     else:
-        mask_index = np.random.randint(0, 2)
+        mask_index = np.random.choice([0, 1], p = [0.2, 0.8]) # np.random.randint(0, 2)
     mask = torch.zeros((f, 1, h, w), dtype=torch.uint8)
 
     if mask_index == 0:
@@ -128,6 +128,22 @@ def get_video_reader_batch(video_reader, batch_index):
     frames = video_reader.get_batch(batch_index).asnumpy()
     return frames
 
+def resize_frame(frame, target_short_side):
+    h, w, _ = frame.shape
+    if h < w:
+        if target_short_side > h:
+            return frame
+        new_h = target_short_side
+        new_w = int(target_short_side * w / h)
+    else:
+        if target_short_side > w:
+            return frame
+        new_w = target_short_side
+        new_h = int(target_short_side * h / w)
+    
+    resized_frame = cv2.resize(frame, (new_w, new_h))
+    return resized_frame
+
 class ImageVideoDataset(Dataset):
     def __init__(
             self,
@@ -176,11 +192,11 @@ class ImageVideoDataset(Dataset):
         # Video params
         self.video_sample_stride    = video_sample_stride
         self.video_sample_n_frames  = video_sample_n_frames
-        video_sample_size = tuple(video_sample_size) if not isinstance(video_sample_size, int) else (video_sample_size, video_sample_size)
+        self.video_sample_size = tuple(video_sample_size) if not isinstance(video_sample_size, int) else (video_sample_size, video_sample_size)
         self.video_transforms = transforms.Compose(
             [
-                transforms.Resize(video_sample_size[0]),
-                transforms.CenterCrop(video_sample_size),
+                transforms.Resize(min(self.video_sample_size)),
+                transforms.CenterCrop(self.video_sample_size),
                 transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
             ]
         )
@@ -193,7 +209,9 @@ class ImageVideoDataset(Dataset):
             transforms.ToTensor(),
             transforms.Normalize([0.5, 0.5, 0.5],[0.5, 0.5, 0.5])
         ])
-    
+
+        self.larger_side_of_image_and_video = max(min(self.image_sample_size), min(self.video_sample_size))
+
     def get_batch(self, idx):
         data_info = self.dataset[idx % len(self.dataset)]
         
@@ -223,6 +241,12 @@ class ImageVideoDataset(Dataset):
                     pixel_values = func_timeout(
                         VIDEO_READER_TIMEOUT, get_video_reader_batch, args=sample_args
                     )
+                    resized_frames = []
+                    for i in range(len(pixel_values)):
+                        frame = pixel_values[i]
+                        resized_frame = resize_frame(frame, self.larger_side_of_image_and_video)
+                        resized_frames.append(resized_frame)
+                    pixel_values = np.array(resized_frames)
                 except FunctionTimedOut:
                     raise ValueError(f"Read {idx} timeout.")
                 except Exception as e:

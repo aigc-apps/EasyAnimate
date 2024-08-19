@@ -19,9 +19,9 @@ if __name__ == "__main__":
     server_port = 7860
 
     # Params below is used when ui_mode = "modelscope"
-    edition = "v3"
-    config_path = "config/easyanimate_video_slicevae_motion_module_v3.yaml"
-    model_name = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512"
+    edition = "v4"
+    config_path = "config/easyanimate_video_slicevae_multi_text_encoder_v4.yaml"
+    model_name = "models/Diffusion_Transformer/EasyAnimateV4-XL-2-InP"
     savedir_sample = "samples"
 
     if ui_mode == "modelscope":

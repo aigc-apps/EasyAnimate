@@ -1,0 +1,489 @@
+{
+  "last_node_id": 86,
+  "last_link_id": 47,
+  "nodes": [
+    {
+      "id": 80,
+      "type": "Note",
+      "pos": [
+        20,
+        -300
+      ],
+      "size": {
+        "0": 210,
+        "1": 66.98204040527344
+      },
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "properties": {
+        "text": ""
+      },
+      "widgets_values": [
+        "Load model here\n（在此选择要使用的模型）"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 78,
+      "type": "Note",
+      "pos": [
+        18,
+        -46
+      ],
+      "size": {
+        "0": 210,
+        "1": 58
+      },
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "properties": {
+        "text": ""
+      },
+      "widgets_values": [
+        "You can write prompt here\n（你可以在此填写提示词）"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 73,
+      "type": "TextBox",
+      "pos": [
+        250,
+        160
+      ],
+      "size": {
+        "0": 383.7149963378906,
+        "1": 183.83506774902344
+      },
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "prompt",
+          "type": "STRING_PROMPT",
+          "links": [
+            45
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "title": "Negtive Prompt（反向提示词）",
+      "properties": {
+        "Node name for S&R": "TextBox"
+      },
+      "widgets_values": [
+        "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion."
+      ]
+    },
+    {
+      "id": 79,
+      "type": "Note",
+      "pos": [
+        15.739953613281248,
+        462.38664912015946
+      ],
+      "size": {
+        "0": 210,
+        "1": 58
+      },
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "properties": {
+        "text": ""
+      },
+      "widgets_values": [
+        "You can upload video here\n（在此上传视频）"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 31,
+      "type": "LoadEasyAnimateModel",
+      "pos": [
+        240,
+        -300
+      ],
+      "size": {
+        "0": 422.3550720214844,
+        "1": 131.07559204101562
+      },
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "easyanimate_model",
+          "type": "EASYANIMATESMODEL",
+          "links": [
+            43
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadEasyAnimateModel"
+      },
+      "widgets_values": [
+        "EasyAnimateV4-XL-2-InP",
+        false,
+        "easyanimate_video_slicevae_multi_text_encoder_v4.yaml",
+        "bf16"
+      ]
+    },
+    {
+      "id": 85,
+      "type": "VHS_LoadVideo",
+      "pos": [
+        336,
+        470
+      ],
+      "size": [
+        235.1999969482422,
+        398.971426827567
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            46
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "frame_count",
+          "type": "INT",
+          "links": null,
+          "shape": 3
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": null,
+          "shape": 3
+        },
+        {
+          "name": "video_info",
+          "type": "VHS_VIDEOINFO",
+          "links": null,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VHS_LoadVideo"
+      },
+      "widgets_values": {
+        "video": "00000125.mp4",
+        "force_rate": 0,
+        "force_size": "Disabled",
+        "custom_width": 512,
+        "custom_height": 512,
+        "frame_load_cap": 0,
+        "skip_first_frames": 0,
+        "select_every_nth": 1,
+        "choose video to upload": "image",
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "frame_load_cap": 0,
+            "skip_first_frames": 0,
+            "force_rate": 0,
+            "filename": "00000125.mp4",
+            "type": "input",
+            "format": "video/mp4",
+            "select_every_nth": 1
+          }
+        }
+      }
+    },
+    {
+      "id": 75,
+      "type": "TextBox",
+      "pos": [
+        250,
+        -50
+      ],
+      "size": {
+        "0": 383.54010009765625,
+        "1": 156.71620178222656
+      },
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "prompt",
+          "type": "STRING_PROMPT",
+          "links": [
+            44
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "title": "Positive Prompt（正向提示词）",
+      "properties": {
+        "Node name for S&R": "TextBox"
+      },
+      "widgets_values": [
+        "一个漂亮的女人在弹吉他。视频质量高，画面清晰。高质量，杰作，最好的质量，高分辨率，超仔细。"
+      ]
+    },
+    {
+      "id": 17,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        1134,
+        93
+      ],
+      "size": [
+        390.9534912109375,
+        535.9734235491071
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 47,
+          "label": "图像",
+          "slot_index": 0
+        },
+        {
+          "name": "audio",
+          "type": "VHS_AUDIO",
+          "link": null,
+          "label": "音频"
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "label": "批次管理"
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null,
+          "shape": 3,
+          "label": "文件名",
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 24,
+        "loop_count": 0,
+        "filename_prefix": "EasyAnimate",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 22,
+        "save_metadata": true,
+        "pingpong": false,
+        "save_output": true,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "filename": "EasyAnimate_00026.mp4",
+            "subfolder": "",
+            "type": "output",
+            "format": "video/h264-mp4",
+            "frame_rate": 24
+          }
+        }
+      }
+    },
+    {
+      "id": 86,
+      "type": "EasyAnimateV2VSampler",
+      "pos": [
+        762,
+        41
+      ],
+      "size": {
+        "0": 319.20001220703125,
+        "1": 286
+      },
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "easyanimate_model",
+          "type": "EASYANIMATESMODEL",
+          "link": 43,
+          "slot_index": 0
+        },
+        {
+          "name": "prompt",
+          "type": "STRING_PROMPT",
+          "link": 44
+        },
+        {
+          "name": "negative_prompt",
+          "type": "STRING_PROMPT",
+          "link": 45
+        },
+        {
+          "name": "validation_video",
+          "type": "IMAGE",
+          "link": 46,
+          "slot_index": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            47
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EasyAnimateV2VSampler"
+      },
+      "widgets_values": [
+        72,
+        768,
+        43,
+        "fixed",
+        25,
+        7,
+        0.7000000000000001,
+        "Euler"
+      ]
+    }
+  ],
+  "links": [
+    [
+      43,
+      31,
+      0,
+      86,
+      0,
+      "EASYANIMATESMODEL"
+    ],
+    [
+      44,
+      75,
+      0,
+      86,
+      1,
+      "STRING_PROMPT"
+    ],
+    [
+      45,
+      73,
+      0,
+      86,
+      2,
+      "STRING_PROMPT"
+    ],
+    [
+      46,
+      85,
+      0,
+      86,
+      3,
+      "IMAGE"
+    ],
+    [
+      47,
+      86,
+      0,
+      17,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [
+    {
+      "title": "Prompts",
+      "bounding": [
+        218,
+        -127,
+        450,
+        483
+      ],
+      "color": "#3f789e",
+      "font_size": 24
+    },
+    {
+      "title": "Load EasyAnimate",
+      "bounding": [
+        220,
+        -380,
+        472,
+        232
+      ],
+      "color": "#b06634",
+      "font_size": 24
+    },
+    {
+      "title": "Upload Your Video",
+      "bounding": [
+        218,
+        385,
+        456,
+        498
+      ],
+      "color": "#a1309b",
+      "font_size": 24
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.683013455365071,
+      "offset": [
+        308.139596574468,
+        433.1647465336458
+      ]
+    },
+    "workspace_info": {
+      "id": "776b62b4-bd17-4ed3-9923-b7aad000b1ea"
+    }
+  },
+  "version": 0.4
+}
