@@ -25,3 +25,4 @@ transformers==4.37.2
 beautifulsoup4
 ftfy
 func_timeout
+deepspeed

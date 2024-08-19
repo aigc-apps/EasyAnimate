@@ -46,9 +46,11 @@ RUN rm /root/requirements-video_caption.txt
 RUN apt-get update && apt-get install -y aria2
 RUN pip install -U http://eas-data.oss-cn-shanghai.aliyuncs.com/sdk/allspark-0.15-py2.py3-none-any.whl 
 RUN pip install -e git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers
-RUN pip install pytorch_lightning==1.9.4 -i https://mirrors.aliyun.com/pypi/simple/
+RUN pip install came-pytorch deepspeed pytorch_lightning==1.9.4 func_timeout -i https://mirrors.aliyun.com/pypi/simple/
 
 # install requirements
+RUN pip install bitsandbytes mamba-ssm causal-conv1d>=1.4.0 -i https://mirrors.aliyun.com/pypi/simple/
+RUN pip install ipykernel -i https://mirrors.aliyun.com/pypi/simple/
 COPY ./requirements.txt /root/requirements.txt
 RUN pip install -r /root/requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 RUN rm -rf /root/requirements.txt
