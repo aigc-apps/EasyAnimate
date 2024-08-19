@@ -1020,13 +1020,6 @@ def main():
                     pickle.dump([batch_sampler.sampler._pos_start, first_epoch], file)
 
         def load_model_hook(models, input_dir):
-            from safetensors.torch import load_file, safe_open
-            state_dict = load_file(os.path.join(input_dir, "lora_diffusion_pytorch_model.safetensors"))
-            model = models[-1]
-            model.load_state_dict(state_dict)
-            for _ in range(len(models)):
-                models.pop()
-
             pkl_path = os.path.join(input_dir, "sampler_pos_start.pkl")
             if os.path.exists(pkl_path):
                 with open(pkl_path, 'rb') as file:
@@ -1113,6 +1106,17 @@ def main():
             batch_size=args.train_batch_size, train_folder = args.train_data_dir, drop_last=True,
             aspect_ratios=aspect_ratio_sample_size,
         )
+        if args.keep_all_node_same_token_length:
+            if args.token_sample_size > 256:
+                numbers_list = list(range(256, args.token_sample_size + 1, 128))
+
+                if numbers_list[-1] != args.token_sample_size:
+                    numbers_list.append(args.token_sample_size)
+            else:
+                numbers_list = [256]
+            numbers_list = [_number * _number * args.video_sample_n_frames for _number in  numbers_list]
+        else:
+            numbers_list = None
 
         def get_length_to_frame_num(token_length):
             if args.image_sample_size > args.video_sample_size:
@@ -1402,6 +1406,11 @@ def main():
             else:
                 first_epoch = global_step // num_update_steps_per_epoch
             print(f"Load pkl from {pkl_path}. Get first_epoch = {first_epoch}.")
+
+            from safetensors.torch import load_file, safe_open
+            state_dict = load_file(os.path.join(os.path.join(args.output_dir, path), "lora_diffusion_pytorch_model.safetensors"))
+            m, u = accelerator.unwrap_model(network).load_state_dict(state_dict, strict=False)
+            print(f"missing keys: {len(m)}, unexpected keys: {len(u)}")
 
             accelerator.print(f"Resuming from checkpoint {path}")
             accelerator.load_state(os.path.join(args.output_dir, path))

@@ -52,7 +52,7 @@ denoise_strength        = 0.70
 
 # prompts
 # We support English and Chinese in V4
-prompt                  = "一位年轻女子，有着美丽清澈的眼睛和金发，站在森林里，穿着白色的衣服，戴着皇冠。她似乎陷入了沉思，相机聚焦在她的脸上。质量高、杰作、最佳品质、高分辨率、超精细、梦幻般。""
+prompt                  = "一位年轻女子，有着美丽清澈的眼睛和金发，站在森林里，穿着白色的衣服，戴着皇冠。她似乎陷入了沉思，相机聚焦在她的脸上。质量高、杰作、最佳品质、高分辨率、超精细、梦幻般。"
 negative_prompt         = "低质量，不清晰，突变，变形，失真。"
 # prompt                  = "A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
 # negative_prompt         = "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion. "
