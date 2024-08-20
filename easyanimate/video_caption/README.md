@@ -7,6 +7,20 @@ The entire process supports distributed parallel processing, capable of handling
 Meanwhile, we are collaborating with [Data-Juicer](https://github.com/modelscope/data-juicer/blob/main/docs/DJ_SORA.md),
 allowing you to easily perform video data processing on [Aliyun PAI-DLC](https://help.aliyun.com/zh/pai/user-guide/video-preprocessing/).
 
+# Table of Content
+- [Video Caption](#video-caption)
+- [Table of Content](#table-of-content)
+  - [Quick Start](#quick-start)
+    - [Setup](#setup)
+    - [Data Preprocessing](#data-preprocessing)
+      - [Data Preparation](#data-preparation)
+      - [Video Splitting](#video-splitting)
+      - [Video Filtering](#video-filtering)
+      - [Video Recaptioning](#video-recaptioning)
+    - [Beautiful Prompt (For EasyAnimate Inference)](#beautiful-prompt-for-easyanimate-inference)
+      - [Batched Inference](#batched-inference)
+      - [OpenAI Server](#openai-server)
+
 ## Quick Start
 
 ### Setup
@@ -110,51 +124,52 @@ We support batched inference with local LLMs or OpenAI compatible server based o
 
 #### Batched Inference
 1. Prepare original prompts in a jsonl file `easyanimate/video_caption/datasets/original_prompt.jsonl` with the following format:
-```json
-{"prompt": "A stylish woman in a black leather jacket, red dress, and boots walks confidently down a damp Tokyo street."}
-{"prompt": "An underwater world with realistic fish and other creatures of the sea."}
-{"prompt": "a monarch butterfly perched on a tree trunk in the forest."}
-{"prompt": "a child in a room with a bottle of wine and a lamp."}
-{"prompt": "two men in suits walking down a hallway."}
-```
+    ```json
+    {"prompt": "A stylish woman in a black leather jacket, red dress, and boots walks confidently down a damp Tokyo street."}
+    {"prompt": "An underwater world with realistic fish and other creatures of the sea."}
+    {"prompt": "a monarch butterfly perched on a tree trunk in the forest."}
+    {"prompt": "a child in a room with a bottle of wine and a lamp."}
+    {"prompt": "two men in suits walking down a hallway."}
+    ```
 
-Then you can perform beautiful prompt by running
-```shell
-# Meta-Llama-3-8B-Instruct is sufficient for this task.
-# Download it from https://huggingface.co/NousResearch/Meta-Llama-3-8B-Instruct or https://www.modelscope.cn/models/LLM-Research/Meta-Llama-3-8B-Instruct to /path/to/your_llm
+2. Then you can perform beautiful prompt by running
+    ```shell
+    # Meta-Llama-3-8B-Instruct is sufficient for this task.
+    # Download it from https://huggingface.co/NousResearch/Meta-Llama-3-8B-Instruct or https://www.modelscope.cn/models/LLM-Research/Meta-Llama-3-8B-Instruct to /path/to/your_llm
 
-python caption_rewrite.py \
-    --video_metadata_path datasets/original_prompt.jsonl \
-    --caption_column "prompt" \
-    --batch_size 1 \
-    --model_name /path/to/your_llm \
-    --prompt prompt/beautiful_prompt.txt \
-    --prefix '"detailed description": ' \
-    --saved_path datasets/beautiful_prompt.jsonl \
-    --saved_freq 1
-```
+    python caption_rewrite.py \
+        --video_metadata_path datasets/original_prompt.jsonl \
+        --caption_column "prompt" \
+        --batch_size 1 \
+        --model_name /path/to/your_llm \
+        --prompt prompt/beautiful_prompt.txt \
+        --prefix '"detailed description": ' \
+        --saved_path datasets/beautiful_prompt.jsonl \
+        --saved_freq 1
+    ```
 
 #### OpenAI Server
 + You can request OpenAI compatible server to perform beautiful prompt by running
-```shell
-export OPENAI_API_KEY="your_openai_api_key" OPENAI_BASE_URL="your_openai_base_url" python beautiful_prompt.py \
-    --model "your_model_name" \
-    --prompt "your_prompt"
-```
+    ```shell
+    OPENAI_API_KEY="your_openai_api_key" OPENAI_BASE_URL="your_openai_base_url" python beautiful_prompt.py \
+        --model "your_model_name" \
+        --prompt "your_prompt"
+    ```
+
 + You can also deploy the OpenAI Compatible Server locally using vLLM. For example:
-```shell
-# Meta-Llama-3-8B-Instruct is sufficient for this task.
-# Download it from https://huggingface.co/NousResearch/Meta-Llama-3-8B-Instruct or https://www.modelscope.cn/models/LLM-Research/Meta-Llama-3-8B-Instruct to /path/to/your_llm
+    ```shell
+    # Meta-Llama-3-8B-Instruct is sufficient for this task.
+    # Download it from https://huggingface.co/NousResearch/Meta-Llama-3-8B-Instruct or https://www.modelscope.cn/models/LLM-Research/Meta-Llama-3-8B-Instruct to /path/to/your_llm
 
-# deploy the OpenAI compatible server
-python -m vllm.entrypoints.openai.api_server serve /path/to/your_llm --dtype auto --api-key "your_api_key"
-```
+    # deploy the OpenAI compatible server
+    python -m vllm.entrypoints.openai.api_server serve /path/to/your_llm --dtype auto --api-key "your_api_key"
+    ```
 
-Then you can perform beautiful prompt by running
-```shell
-python -m beautiful_prompt.py \
-    --model /path/to/your_llm \
-    --prompt "your_prompt" \
-    --base_url "http://localhost:8000/v1" \
-    --api_key "your_api_key"
-```
+    Then you can perform beautiful prompt by running
+    ```shell
+    python -m beautiful_prompt.py \
+        --model /path/to/your_llm \
+        --prompt "your_prompt" \
+        --base_url "http://localhost:8000/v1" \
+        --api_key "your_api_key"
+    ```
