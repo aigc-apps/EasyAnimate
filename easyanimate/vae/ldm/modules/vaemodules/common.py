@@ -38,7 +38,7 @@ class CausalConv3d(nn.Conv3d):
         assert len(dilation) == 3, f"Dilation must be a 3-tuple, got {dilation} instead."
 
         t_ks, h_ks, w_ks = kernel_size
-        _, h_stride, w_stride = stride
+        self.t_stride, h_stride, w_stride = stride
         t_dilation, h_dilation, w_dilation = dilation
 
         t_pad = (t_ks - 1) * t_dilation
@@ -54,6 +54,7 @@ class CausalConv3d(nn.Conv3d):
         self.temporal_padding = t_pad
         self.temporal_padding_origin = math.ceil(((t_ks - 1) * w_dilation + (1 - w_stride)) / 2)
         self.padding_flag = 0
+        self.prev_features = None
 
         super().__init__(
             in_channels=in_channels,
@@ -67,38 +68,44 @@ class CausalConv3d(nn.Conv3d):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, C, T, H, W)
+        dtype = x.dtype
+        x = x.float()
         if self.padding_flag == 0:
             x = F.pad(
                 x,
                 pad=(0, 0, 0, 0, self.temporal_padding, 0),
                 mode="replicate",     # TODO: check if this is necessary
             )
+            x = x.to(dtype=dtype)
+            return super().forward(x)
+        elif self.padding_flag == 5:
+            x = F.pad(
+                x,
+                pad=(0, 0, 0, 0, self.temporal_padding, 0),
+                mode="replicate",     # TODO: check if this is necessary
+            )
+            x = x.to(dtype=dtype)
+            self.prev_features = x[:, :, -self.temporal_padding:]
+            return super().forward(x)
+        elif self.padding_flag == 6:
+            if self.t_stride == 2:
+                x = torch.concat(
+                    [self.prev_features[:, :, -(self.temporal_padding - 1):], x], dim = 2
+                )
+            else:
+                x = torch.concat(
+                    [self.prev_features, x], dim = 2
+                )
+            self.prev_features = x[:, :, -self.temporal_padding:]
+            x = x.to(dtype=dtype)
+            return super().forward(x)
         else:
             x = F.pad(
                 x,
                 pad=(0, 0, 0, 0, self.temporal_padding_origin, self.temporal_padding_origin),
             )
-        return super().forward(x)
-    
-    def set_padding_one_frame(self):
-        def _set_padding_one_frame(name, module):
-            if hasattr(module, 'padding_flag'):
-                print('Set pad mode for module[%s] type=%s' % (name, str(type(module))))
-                module.padding_flag = 1
-            for sub_name, sub_mod in module.named_children():
-                _set_padding_one_frame(sub_name, sub_mod)
-        for name, module in self.named_children():
-            _set_padding_one_frame(name, module)
-
-    def set_padding_more_frame(self):
-        def _set_padding_more_frame(name, module):
-            if hasattr(module, 'padding_flag'):
-                print('Set pad mode for module[%s] type=%s' % (name, str(type(module))))
-                module.padding_flag = 2
-            for sub_name, sub_mod in module.named_children():
-                _set_padding_more_frame(sub_name, sub_mod)
-        for name, module in self.named_children():
-            _set_padding_more_frame(name, module)
+            x = x.to(dtype=dtype)
+            return super().forward(x)
 
 class ResidualBlock2D(nn.Module):
     def __init__(
@@ -142,15 +149,29 @@ class ResidualBlock2D(nn.Module):
         else:
             self.shortcut = nn.Identity()
 
+        self.set_3dgroupnorm = False
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         shortcut = self.shortcut(x)
 
-        x = self.norm1(x)
+        if self.set_3dgroupnorm:
+            batch_size = x.shape[0]
+            x = rearrange(x, "b c t h w -> (b t) c h w")
+            x = self.norm1(x)
+            x = rearrange(x, "(b t) c h w -> b c t h w", b=batch_size)
+        else:
+            x = self.norm1(x)
         x = self.nonlinearity(x)
 
         x = self.conv1(x)
 
-        x = self.norm2(x)
+        if self.set_3dgroupnorm:
+            batch_size = x.shape[0]
+            x = rearrange(x, "b c t h w -> (b t) c h w")
+            x = self.norm2(x)
+            x = rearrange(x, "(b t) c h w -> b c t h w", b=batch_size)
+        else:
+            x = self.norm2(x)
         x = self.nonlinearity(x)
 
         x = self.dropout(x)
@@ -201,15 +222,29 @@ class ResidualBlock3D(nn.Module):
         else:
             self.shortcut = nn.Identity()
 
+        self.set_3dgroupnorm = False
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         shortcut = self.shortcut(x)
 
-        x = self.norm1(x)
+        if self.set_3dgroupnorm:
+            batch_size = x.shape[0]
+            x = rearrange(x, "b c t h w -> (b t) c h w")
+            x = self.norm1(x)
+            x = rearrange(x, "(b t) c h w -> b c t h w", b=batch_size)
+        else:
+            x = self.norm1(x)
         x = self.nonlinearity(x)
 
         x = self.conv1(x)
 
-        x = self.norm2(x)
+        if self.set_3dgroupnorm:
+            batch_size = x.shape[0]
+            x = rearrange(x, "b c t h w -> (b t) c h w")
+            x = self.norm2(x)
+            x = rearrange(x, "(b t) c h w -> b c t h w", b=batch_size)
+        else:
+            x = self.norm2(x)
         x = self.nonlinearity(x)
 
         x = self.dropout(x)
@@ -238,11 +273,18 @@ class SpatialNorm2D(nn.Module):
         self.norm = nn.GroupNorm(num_channels=f_channels, num_groups=32, eps=1e-6, affine=True)
         self.conv_y = nn.Conv2d(zq_channels, f_channels, kernel_size=1, stride=1, padding=0)
         self.conv_b = nn.Conv2d(zq_channels, f_channels, kernel_size=1, stride=1, padding=0)
+        self.set_3dgroupnorm = False
 
     def forward(self, f: torch.FloatTensor, zq: torch.FloatTensor) -> torch.FloatTensor:
         f_size = f.shape[-2:]
         zq = F.interpolate(zq, size=f_size, mode="nearest")
-        norm_f = self.norm(f)
+        if self.set_3dgroupnorm:
+            batch_size = f.shape[0]
+            f = rearrange(f, "b c t h w -> (b t) c h w")
+            norm_f = self.norm(f)
+            norm_f = rearrange(norm_f, "(b t) c h w -> b c t h w", b=batch_size)
+        else:
+            norm_f = self.norm(f)
         new_f = norm_f * self.conv_y(zq) + self.conv_b(zq)
         return new_f
 

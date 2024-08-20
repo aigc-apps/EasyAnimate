@@ -95,3 +95,23 @@ class AdaLayerNormSingle(nn.Module):
         # No modulation happening here.
         embedded_timestep = self.emb(timestep, **added_cond_kwargs, batch_size=batch_size, hidden_dtype=hidden_dtype)
         return self.linear(self.silu(embedded_timestep)), embedded_timestep
+
+class AdaLayerNormShift(nn.Module):
+    r"""
+    Norm layer modified to incorporate timestep embeddings.
+
+    Parameters:
+        embedding_dim (`int`): The size of each embedding vector.
+        num_embeddings (`int`): The size of the embeddings dictionary.
+    """
+
+    def __init__(self, embedding_dim: int, elementwise_affine=True, eps=1e-6):
+        super().__init__()
+        self.silu = nn.SiLU()
+        self.linear = nn.Linear(embedding_dim, embedding_dim)
+        self.norm = FP32LayerNorm(embedding_dim, elementwise_affine=elementwise_affine, eps=eps)
+
+    def forward(self, x: torch.Tensor, emb: torch.Tensor) -> torch.Tensor:
+        shift = self.linear(self.silu(emb.to(torch.float32)).to(emb.dtype))
+        x = self.norm(x) + shift.unsqueeze(dim=1)
+        return x

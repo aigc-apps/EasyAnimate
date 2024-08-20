@@ -3,8 +3,7 @@ einops
 safetensors
 timm
 tomesd
-accelerate>=0.31.0
-torch>=2.2.0
+torch>=2.1.2
 torchdiffeq
 torchsde
 xformers
@@ -19,10 +18,11 @@ albumentations
 imageio[ffmpeg]
 imageio[pyav]
 tensorboard
-gradio==3.41.2
-diffusers==0.28.2
-transformers==4.37.2
 beautifulsoup4
 ftfy
 func_timeout
 deepspeed
+accelerate>=0.25.0
+gradio>=3.41.2
+diffusers>=0.28.2
+transformers>=4.37.2

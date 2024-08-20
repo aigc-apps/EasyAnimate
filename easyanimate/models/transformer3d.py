@@ -23,8 +23,7 @@ import torch.nn.functional as F
 import torch.nn.init as init
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from diffusers.models.attention import BasicTransformerBlock, FeedForward
-from diffusers.models.embeddings import (
-    HunyuanCombinedTimestepTextSizeStyleEmbedding, PatchEmbed,
+from diffusers.models.embeddings import (PatchEmbed,
     PixArtAlphaTextProjection, TimestepEmbedding, Timesteps)
 from diffusers.models.lora import LoRACompatibleConv, LoRACompatibleLinear
 from diffusers.models.modeling_outputs import Transformer2DModelOutput
@@ -39,6 +38,7 @@ from torch import nn
 from .attention import (HunyuanDiTBlock, HunyuanTemporalTransformerBlock,
                         SelfAttentionTemporalTransformerBlock,
                         TemporalTransformerBlock)
+from .embeddings import HunyuanCombinedTimestepTextSizeStyleEmbedding
 from .norm import AdaLayerNormSingle
 from .patch import (CasualPatchEmbed3D, Patch1D, PatchEmbed3D, PatchEmbedF3D,
                     TemporalUpsampler3D, UnPatch1D)
@@ -827,7 +827,6 @@ class HunyuanTransformer3DModel(ModelMixin, ConfigMixin):
     ):
         super().__init__()
         # 4. Define output layers
-        # 4. Define output layers
         if learn_sigma:
             self.out_channels = in_channels * 2 if out_channels is None else out_channels
         else:
@@ -1081,8 +1080,8 @@ class HunyuanTransformer3DModel(ModelMixin, ConfigMixin):
                     kwargs = {
                         "basic": {"num_frames":video_length, "height":height, "width":width, "clip_encoder_hidden_states":clip_encoder_hidden_states},
                         "hybrid_attention": {"num_frames":video_length, "height":height, "width":width, "clip_encoder_hidden_states":clip_encoder_hidden_states},
+                        "motionmodule": {"num_frames":video_length, "height":height, "width":width},
                         "global_motionmodule": {"num_frames":video_length, "height":height, "width":width},
-                        "hybrid_attention": {"num_frames":video_length, "height":height, "width":width},
                     }[self.basic_block_type]
                     hidden_states = block(
                         hidden_states,
@@ -1185,17 +1184,29 @@ class HunyuanTransformer3DModel(ModelMixin, ConfigMixin):
                 state_dict['pos_embed.proj.weight'] = state_dict['pos_embed.proj.weight'].unsqueeze(2).expand(new_shape).clone()
                 state_dict['pos_embed.proj.weight'][:, :, :-1] = 0
             else:
-                model.state_dict()['pos_embed.proj.weight'][:, :4, :, :] = state_dict['pos_embed.proj.weight']
-                model.state_dict()['pos_embed.proj.weight'][:, 4:, :, :] = 0
-                state_dict['pos_embed.proj.weight'] = model.state_dict()['pos_embed.proj.weight']
-                
+                if model.state_dict()['pos_embed.proj.weight'].size()[1] > state_dict['pos_embed.proj.weight'].size()[1]:
+                    model.state_dict()['pos_embed.proj.weight'][:, :state_dict['pos_embed.proj.weight'].size()[1], :, :] = state_dict['pos_embed.proj.weight']
+                    model.state_dict()['pos_embed.proj.weight'][:, state_dict['pos_embed.proj.weight'].size()[1]:, :, :] = 0
+                    state_dict['pos_embed.proj.weight'] = model.state_dict()['pos_embed.proj.weight']
+                else:
+                    model.state_dict()['pos_embed.proj.weight'][:, :, :, :] = state_dict['pos_embed.proj.weight'][:, :model.state_dict()['pos_embed.proj.weight'].size()[1], :, :]
+                    state_dict['pos_embed.proj.weight'] = model.state_dict()['pos_embed.proj.weight']
+
         if model.state_dict()['proj_out.weight'].size() != state_dict['proj_out.weight'].size():
-            new_shape   = model.state_dict()['proj_out.weight'].size()
-            state_dict['proj_out.weight'] = torch.tile(state_dict['proj_out.weight'], [patch_size, 1])
+            if model.state_dict()['proj_out.weight'].size()[0] > state_dict['proj_out.weight'].size()[0]:
+                model.state_dict()['proj_out.weight'][:state_dict['proj_out.weight'].size()[0], :] = state_dict['proj_out.weight']
+                state_dict['proj_out.weight'] = model.state_dict()['proj_out.weight']
+            else:
+                model.state_dict()['proj_out.weight'][:, :] = state_dict['proj_out.weight'][:model.state_dict()['proj_out.weight'].size()[0], :]
+                state_dict['proj_out.weight'] = model.state_dict()['proj_out.weight']
 
         if model.state_dict()['proj_out.bias'].size() != state_dict['proj_out.bias'].size():
-            new_shape   = model.state_dict()['proj_out.bias'].size()
-            state_dict['proj_out.bias'] = torch.tile(state_dict['proj_out.bias'], [patch_size])
+            if model.state_dict()['proj_out.bias'].size()[0] > state_dict['proj_out.bias'].size()[0]:
+                model.state_dict()['proj_out.bias'][:state_dict['proj_out.bias'].size()[0]] = state_dict['proj_out.bias']
+                state_dict['proj_out.bias'] = model.state_dict()['proj_out.bias']
+            else:
+                model.state_dict()['proj_out.bias'][:, :] = state_dict['proj_out.bias'][:model.state_dict()['proj_out.bias'].size()[0], :]
+                state_dict['proj_out.bias'] = model.state_dict()['proj_out.bias']
 
         tmp_state_dict = {} 
         for key in state_dict:

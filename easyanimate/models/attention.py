@@ -29,10 +29,8 @@ else:
     from diffusers.models.attention_processor import Attention, AttnProcessor2_0
 
 from diffusers.models.attention import AdaLayerNorm, FeedForward
-from diffusers.models.attention_processor import (Attention, AttnProcessor2_0,
-                                                  HunyuanAttnProcessor2_0)
 from diffusers.models.embeddings import SinusoidalPositionalEmbedding
-from diffusers.models.normalization import AdaLayerNorm, AdaLayerNormZero
+from diffusers.models.normalization import AdaLayerNormZero
 from diffusers.utils import USE_PEFT_BACKEND
 from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import maybe_allow_in_graph
@@ -40,7 +38,7 @@ from einops import rearrange, repeat
 from torch import nn
 
 from .motion_module import PositionalEncoding, get_motion_module
-from .norm import FP32LayerNorm
+from .norm import FP32LayerNorm, AdaLayerNormShift
 
 if is_xformers_available():
     import xformers
@@ -48,12 +46,6 @@ if is_xformers_available():
 else:
     xformers = None
 
-
-def zero_module(module):
-    # Zero out the parameters of a module and return it.
-    for p in module.parameters():
-        p.detach().zero_()
-    return module
 
 
 @maybe_allow_in_graph
@@ -95,27 +87,6 @@ class GatedSelfAttentionDense(nn.Module):
         x = x + self.alpha_attn.tanh() * self.attn(self.norm1(torch.cat([x, objs], dim=1)))[:, :n_visual, :]
         x = x + self.alpha_dense.tanh() * self.ff(self.norm2(x))
 
-        return x
-
-
-class AdaLayerNormShift(nn.Module):
-    r"""
-    Norm layer modified to incorporate timestep embeddings.
-
-    Parameters:
-        embedding_dim (`int`): The size of each embedding vector.
-        num_embeddings (`int`): The size of the embeddings dictionary.
-    """
-
-    def __init__(self, embedding_dim: int, elementwise_affine=True, eps=1e-6):
-        super().__init__()
-        self.silu = nn.SiLU()
-        self.linear = nn.Linear(embedding_dim, embedding_dim)
-        self.norm = FP32LayerNorm(embedding_dim, elementwise_affine=elementwise_affine, eps=eps)
-
-    def forward(self, x: torch.Tensor, emb: torch.Tensor) -> torch.Tensor:
-        shift = self.linear(self.silu(emb.to(torch.float32)).to(emb.dtype))
-        x = self.norm(x) + shift.unsqueeze(dim=1)
         return x
 
 
@@ -688,6 +659,9 @@ class TemporalTransformerBlock(nn.Module):
             if self.pos_embed is not None and self.use_ada_layer_norm_single is None:
                 norm_hidden_states = self.pos_embed(norm_hidden_states)
 
+            if norm_hidden_states.dtype != encoder_hidden_states:
+                encoder_hidden_states = encoder_hidden_states.to(norm_hidden_states.dtype)
+                encoder_attention_mask = encoder_attention_mask.to(norm_hidden_states.dtype)
             attn_output = self.attn2(
                 norm_hidden_states,
                 encoder_hidden_states=encoder_hidden_states,

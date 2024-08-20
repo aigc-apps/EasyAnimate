@@ -27,15 +27,15 @@ from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 low_gpu_memory_mode = False
 
 # Config and model path
-config_path         = "config/easyanimate_video_slicevae_motion_module_v3.yaml"
-model_name          = "models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512"
+config_path         = "config/easyanimate_video_slicevae_multi_text_encoder_v4.yaml"
+model_name          = "models/Diffusion_Transformer/EasyAnimateV4-XL-2-InP"
 
 # Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" and "DDIM"
 sampler_name        = "Euler"
 
 # Load pretrained model if need
 transformer_path    = None
-# V2 does not need a motion module
+# V2 and V3 does not need a motion module
 motion_module_path  = None 
 vae_path            = None
 lora_path           = None
@@ -47,27 +47,36 @@ sample_size         = [384, 672]
 video_length        = 144
 fps                 = 24
 
+# Use torch.float16 if GPU does not support torch.bfloat16
+# ome graphics cards, such as v100, 2080ti, do not support torch.bfloat16
 weight_dtype        = torch.bfloat16
-prompt              = "A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
-negative_prompt     = "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion. " 
+# We support English and Chinese in V4
+prompt              = "一位年轻女子，有着美丽清澈的眼睛和金发，站在森林里，穿着白色的衣服，戴着皇冠。她似乎陷入了沉思，相机聚焦在她的脸上。质量高、杰作、最佳品质、高分辨率、超精细、梦幻般。"
+negative_prompt     = "低质量，不清晰，突变，变形，失真。"
+# prompt              = "A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
+# negative_prompt     = "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion. " 
 guidance_scale      = 7.0
 seed                = 43
 num_inference_steps = 25
-lora_weight         = 0.55
+lora_weight         = 0.60
 save_path           = "samples/easyanimate-videos"
 
 config = OmegaConf.load(config_path)
 
 # Get Transformer
-if config['enable_multi_text_encoder']:
+if config.get('enable_multi_text_encoder', False):
     Choosen_Transformer3DModel = HunyuanTransformer3DModel
 else:
     Choosen_Transformer3DModel = Transformer3DModel
 
+transformer_additional_kwargs = OmegaConf.to_container(config['transformer_additional_kwargs'])
+if weight_dtype == torch.float16:
+    transformer_additional_kwargs["upcast_attention"] = True
+
 transformer = Choosen_Transformer3DModel.from_pretrained_2d(
     model_name, 
     subfolder="transformer",
-    transformer_additional_kwargs=OmegaConf.to_container(config['transformer_additional_kwargs'])
+    transformer_additional_kwargs=transformer_additional_kwargs
 ).to(weight_dtype)
 
 if transformer_path is not None:
@@ -103,6 +112,8 @@ vae = Choosen_AutoencoderKL.from_pretrained(
     model_name, 
     subfolder="vae"
 ).to(weight_dtype)
+if OmegaConf.to_container(config['vae_kwargs'])['enable_magvit'] and weight_dtype == torch.float16:
+    vae.upcast_vae = True
 
 if vae_path is not None:
     print(f"From checkpoint: {vae_path}")
@@ -141,7 +152,7 @@ scheduler = Choosen_Scheduler.from_pretrained(
 )
 # scheduler = Choosen_Scheduler(**OmegaConf.to_container(config['noise_scheduler_kwargs']))
 
-if config['enable_multi_text_encoder']:
+if config.get('enable_multi_text_encoder', False):
     if transformer.config.in_channels != vae.config.latent_channels:
         pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
             model_name,

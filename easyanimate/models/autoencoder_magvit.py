@@ -97,10 +97,18 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         latent_channels: int = 4,
         norm_num_groups: int = 32,
         scaling_factor: float = 0.1825,
+        slice_mag_vae=True,
         slice_compression_vae=False,
+        cache_compression_vae=False,
         use_tiling=False,
+        use_tiling_encoder=False,
+        use_tiling_decoder=False,
         mini_batch_encoder=9,
         mini_batch_decoder=3,
+        upcast_vae=False,
+        spatial_group_norm=False,
+        tile_sample_min_size=384,
+        tile_overlap_factor=0.25,
     ):
         super().__init__()
         down_block_types = str_eval(down_block_types)
@@ -121,8 +129,11 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
             act_fn=act_fn,
             num_attention_heads=num_attention_heads,
             double_z=True,
+            slice_mag_vae=slice_mag_vae,
             slice_compression_vae=slice_compression_vae,
+            cache_compression_vae=cache_compression_vae,
             mini_batch_encoder=mini_batch_encoder,
+            spatial_group_norm=spatial_group_norm,
         )
 
         self.decoder = omnigen_Mag_Decoder(
@@ -140,20 +151,28 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
             norm_num_groups=norm_num_groups,
             act_fn=act_fn,
             num_attention_heads=num_attention_heads,
+            slice_mag_vae=slice_mag_vae,
             slice_compression_vae=slice_compression_vae,
+            cache_compression_vae=cache_compression_vae,
             mini_batch_decoder=mini_batch_decoder,
+            spatial_group_norm=spatial_group_norm,
         )
 
         self.quant_conv = nn.Conv3d(2 * latent_channels, 2 * latent_channels, kernel_size=1)
         self.post_quant_conv = nn.Conv3d(latent_channels, latent_channels, kernel_size=1)
 
+        self.slice_mag_vae = slice_mag_vae
         self.slice_compression_vae = slice_compression_vae
+        self.cache_compression_vae = cache_compression_vae
         self.mini_batch_encoder = mini_batch_encoder
         self.mini_batch_decoder = mini_batch_decoder
         self.use_slicing = False
         self.use_tiling = use_tiling
-        self.tile_sample_min_size = 384
-        self.tile_overlap_factor = 0.25
+        self.use_tiling_encoder = use_tiling_encoder
+        self.use_tiling_decoder = use_tiling_decoder
+        self.upcast_vae = upcast_vae
+        self.tile_sample_min_size = tile_sample_min_size
+        self.tile_overlap_factor = tile_overlap_factor
         self.tile_latent_min_size = int(self.tile_sample_min_size / (2 ** (len(ch_mult) - 1)))
         self.scaling_factor = scaling_factor
 
@@ -253,8 +272,16 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
                 The latent representations of the encoded images. If `return_dict` is True, a
                 [`~models.autoencoder_kl.AutoencoderKLOutput`] is returned, otherwise a plain `tuple` is returned.
         """
-        if self.use_tiling and (x.shape[-1] > self.tile_sample_min_size and x.shape[-2] > self.tile_sample_min_size):
-            return self.tiled_encode(x, return_dict=return_dict)
+        if self.upcast_vae:
+            x = x.float()
+            self.encoder = self.encoder.float()
+            self.quant_conv = self.quant_conv.float()
+        if self.use_tiling and (x.shape[-1] > self.tile_sample_min_size or x.shape[-2] > self.tile_sample_min_size):
+            x = self.tiled_encode(x, return_dict=return_dict)
+            return x
+        if self.use_tiling_encoder and (x.shape[-1] > self.tile_sample_min_size or x.shape[-2] > self.tile_sample_min_size):
+            x = self.tiled_encode(x, return_dict=return_dict)
+            return x
 
         if self.use_slicing and x.shape[0] > 1:
             encoded_slices = [self.encoder(x_slice) for x_slice in x.split(1)]
@@ -271,8 +298,15 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         return AutoencoderKLOutput(latent_dist=posterior)
 
     def _decode(self, z: torch.FloatTensor, return_dict: bool = True) -> Union[DecoderOutput, torch.FloatTensor]:
-        if self.use_tiling and (z.shape[-1] > self.tile_latent_min_size and z.shape[-2] > self.tile_latent_min_size):
+        if self.upcast_vae:
+            z = z.float()
+            self.decoder = self.decoder.float()
+            self.post_quant_conv = self.post_quant_conv.float()
+        if self.use_tiling and (z.shape[-1] > self.tile_latent_min_size or z.shape[-2] > self.tile_latent_min_size):
             return self.tiled_decode(z, return_dict=return_dict)
+        if self.use_tiling_decoder and (z.shape[-1] > self.tile_latent_min_size or z.shape[-2] > self.tile_latent_min_size):
+            return self.tiled_decode(z, return_dict=return_dict)
+
         z = self.post_quant_conv(z)
         dec = self.decoder(z)
 
@@ -408,6 +442,34 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
             result_rows.append(torch.cat(result_row, dim=4))
 
         dec = torch.cat(result_rows, dim=3)
+    
+        # Handle the lower right corner tile separately
+        lower_right_original = z[
+            :,
+            :,
+            :,
+            -self.tile_latent_min_size:,
+            -self.tile_latent_min_size:
+        ]
+        quantized_lower_right = self.decoder(self.post_quant_conv(lower_right_original))
+
+        # Combine
+        H, W = quantized_lower_right.size(-2), quantized_lower_right.size(-1)
+        x_weights = torch.linspace(0, 1, W).unsqueeze(0).repeat(H, 1)
+        y_weights = torch.linspace(0, 1, H).unsqueeze(1).repeat(1, W)
+        weights = torch.min(x_weights, y_weights)
+
+        if len(dec.size()) == 4:
+            weights = weights.unsqueeze(0).unsqueeze(0)
+        elif len(dec.size()) == 5:
+            weights = weights.unsqueeze(0).unsqueeze(0).unsqueeze(0)
+
+        weights = weights.to(dec.device)
+        quantized_area = dec[:, :, :, -H:, -W:]
+        combined = weights * quantized_lower_right + (1 - weights) * quantized_area
+
+        dec[:, :, :, -H:, -W:] = combined
+
         if not return_dict:
             return (dec,)
 
