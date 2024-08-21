@@ -326,29 +326,27 @@ def main(args):
             if i != 0 and i % args.saved_freq == 0:
                 state.wait_for_everyone()
                 gathered_result_dict = {k: gather_object(v) for k, v in result_dict.items()}
-                if state.is_main_process:
-                    if len(gathered_result_dict[args.video_path_column]) != 0:
-                        result_df = pd.DataFrame(gathered_result_dict)
-                        if args.saved_path.endswith(".csv"):
-                            header = False if os.path.exists(args.saved_path) else True
-                            result_df.to_csv(args.saved_path, header=header, index=False, mode="a")
-                        elif args.saved_path.endswith(".jsonl"):
-                            result_df.to_json(args.saved_path, orient="records", lines=True, mode="a", force_ascii=False)
-                        logger.info(f"Save result to {args.saved_path}.")
+                if state.is_main_process and len(gathered_result_dict[args.video_path_column]) != 0:
+                    result_df = pd.DataFrame(gathered_result_dict)
+                    if args.saved_path.endswith(".csv"):
+                        header = False if os.path.exists(args.saved_path) else True
+                        result_df.to_csv(args.saved_path, header=header, index=False, mode="a")
+                    elif args.saved_path.endswith(".jsonl"):
+                        result_df.to_json(args.saved_path, orient="records", lines=True, mode="a", force_ascii=False)
+                    logger.info(f"Save result to {args.saved_path}.")
                 for k in result_dict.keys():
                     result_dict[k] = []
     
     state.wait_for_everyone()
     gathered_result_dict = {k: gather_object(v) for k, v in result_dict.items()}
-    if state.is_main_process:
-        if len(gathered_result_dict[args.video_path_column]) != 0:
-            result_df = pd.DataFrame(gathered_result_dict)
-            if args.saved_path.endswith(".csv"):
-                header = False if os.path.exists(args.saved_path) else True
-                result_df.to_csv(args.saved_path, header=header, index=False, mode="a")
-            elif args.saved_path.endswith(".jsonl"):
-                result_df.to_json(args.saved_path, orient="records", lines=True, mode="a", force_ascii=False)
-            logger.info(f"Save result to {args.saved_path}.")
+    if state.is_main_process and len(gathered_result_dict[args.video_path_column]) != 0:
+        result_df = pd.DataFrame(gathered_result_dict)
+        if args.saved_path.endswith(".csv"):
+            header = False if os.path.exists(args.saved_path) else True
+            result_df.to_csv(args.saved_path, header=header, index=False, mode="a")
+        elif args.saved_path.endswith(".jsonl"):
+            result_df.to_json(args.saved_path, orient="records", lines=True, mode="a", force_ascii=False)
+        logger.info(f"Save result to {args.saved_path}.")
 
 
 if __name__ == "__main__":

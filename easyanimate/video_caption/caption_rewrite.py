@@ -132,8 +132,13 @@ def main():
     logger.info(f"Automatically set tensor_parallel_size={tensor_parallel_size} based on the available devices.")
 
     llm = LLM(model=args.model_name, trust_remote_code=True, tensor_parallel_size=tensor_parallel_size)
-    if "Meta-Llama-3-70B" in args.model_name:
-        tokenizer = AutoTokenizer.from_pretrained("NousResearch/Meta-Llama-3-8B-Instruct")
+    if "Meta-Llama-3" in args.model_name:
+        if "Meta-Llama-3-70B" in args.model_name:
+            # Llama-3-70B should use the tokenizer from Llama-3-8B
+            # https://github.com/vllm-project/vllm/issues/4180#issuecomment-2068292942
+            tokenizer = AutoTokenizer.from_pretrained("NousResearch/Meta-Llama-3-8B-Instruct")
+        else:
+            tokenizer = AutoTokenizer.from_pretrained(args.model_name)
         stop_token_ids = [tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids("<|eot_id|>")]
         sampling_params = SamplingParams(temperature=0.7, top_p=1, max_tokens=1024, stop_token_ids=stop_token_ids)
     else:
@@ -177,11 +182,6 @@ def main():
                     batch_result.append(output)
 
             result_dict[args.caption_column].extend(batch_result)
-            print(result_dict)
-
-        # if args.video_path_column is not None:
-        #     result_dict[args.video_path_column].extend(batch_video_path)
-        # result_dict[args.caption_column].extend(batch_output)
 
         # Save the metadata every args.saved_freq.
         if i != 0 and ((i // args.batch_size) % args.saved_freq) == 0:

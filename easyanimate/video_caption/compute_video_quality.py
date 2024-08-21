@@ -172,9 +172,8 @@ def main():
             # Save the metadata in the main process every saved_freq.
             if (idx != 0) and (idx % args.saved_freq == 0):
                 state.wait_for_everyone()
-                # if len(result_dict[args.video_path_column]) != 0.
                 gathered_result_dict = {k: gather_object(v) for k, v in result_dict.items()}
-                if state.is_main_process:
+                if state.is_main_process and len(gathered_result_dict[args.video_path_column]) != 0:
                     result_df = pd.DataFrame(gathered_result_dict)
                     if args.saved_path.endswith(".csv"):
                         header = False if os.path.exists(args.saved_path) else True
@@ -189,15 +188,14 @@ def main():
     state.wait_for_everyone()
     gathered_result_dict = {k: gather_object(v) for k, v in result_dict.items()}
     # Save the metadata in the main process.
-    if state.is_main_process:
-        if len(gathered_result_dict[args.video_path_column]) != 0:
-            result_df = pd.DataFrame(gathered_result_dict)
-            if args.saved_path.endswith(".csv"):
-                header = False if os.path.exists(args.saved_path) else True
-                result_df.to_csv(args.saved_path, header=header, index=False, mode="a")
-            elif args.saved_path.endswith(".jsonl"):
-                result_df.to_json(args.saved_path, orient="records", lines=True, mode="a", force_ascii=False)
-            logger.info(f"Save the final result to {args.saved_path}.")
+    if state.is_main_process and len(gathered_result_dict[args.video_path_column]) != 0:
+        result_df = pd.DataFrame(gathered_result_dict)
+        if args.saved_path.endswith(".csv"):
+            header = False if os.path.exists(args.saved_path) else True
+            result_df.to_csv(args.saved_path, header=header, index=False, mode="a")
+        elif args.saved_path.endswith(".jsonl"):
+            result_df.to_json(args.saved_path, orient="records", lines=True, mode="a", force_ascii=False)
+        logger.info(f"Save the final result to {args.saved_path}.")
 
 if __name__ == "__main__":
     main()
