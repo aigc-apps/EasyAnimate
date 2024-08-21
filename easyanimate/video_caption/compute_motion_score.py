@@ -13,7 +13,7 @@ from natsort import natsorted
 from tqdm import tqdm
 
 from utils.logger import logger
-from utils.video_utils import get_video_path_list
+from utils.filter import filter
 
 
 @contextmanager
@@ -103,13 +103,23 @@ def parse_args():
     parser.add_argument("--n_jobs", type=int, default=1, help="The number of concurrent processes.")
 
     parser.add_argument(
+        "--basic_metadata_path", type=str, default=None, help="The path to the basic metadata (csv/jsonl)."
+    )
+    parser.add_argument("--min_resolution", type=float, default=0, help="The resolution threshold.")
+    parser.add_argument("--min_duration", type=float, default=-1, help="The minimum duration.")
+    parser.add_argument("--max_duration", type=float, default=-1, help="The maximum duration.")
+    parser.add_argument(
         "--asethetic_score_metadata_path", type=str, default=None, help="The path to the video quality metadata (csv/jsonl)."
     )
-    parser.add_argument("--asethetic_score_threshold", type=float, default=4.0, help="The asethetic score threshold.")
+    parser.add_argument("--min_asethetic_score", type=float, default=4.0, help="The asethetic score threshold.")
+    parser.add_argument(
+        "--asethetic_score_siglip_metadata_path", type=str, default=None, help="The path to the video quality metadata (csv/jsonl)."
+    )
+    parser.add_argument("--min_asethetic_score_siglip", type=float, default=4.0, help="The asethetic score (SigLIP) threshold.")
     parser.add_argument(
         "--text_score_metadata_path", type=str, default=None, help="The path to the video text score metadata (csv/jsonl)."
     )
-    parser.add_argument("--text_score_threshold", type=float, default=0.02, help="The text threshold.")
+    parser.add_argument("--min_text_score", type=float, default=0.02, help="The text threshold.")
 
     args = parser.parse_args()
     return args
@@ -118,11 +128,13 @@ def parse_args():
 def main():
     args = parse_args()
 
-    video_path_list = get_video_path_list(
-        video_folder=args.video_folder,
-        video_metadata_path=args.video_metadata_path,
-        video_path_column=args.video_path_column
-    )
+    if args.video_metadata_path.endswith(".csv"):
+        video_metadata_df = pd.read_csv(args.video_metadata_path)
+    elif args.video_metadata_path.endswith(".jsonl"):
+        video_metadata_df = pd.read_json(args.video_metadata_path, lines=True)
+    else:
+        raise ValueError("The video_metadata_path must end with .csv or .jsonl.")
+    video_path_list = video_metadata_df[args.video_path_column].tolist()
 
     if not (args.saved_path.endswith(".csv") or args.saved_path.endswith(".jsonl")):
         raise ValueError("The saved_path must end with .csv or .jsonl.")
@@ -133,50 +145,28 @@ def main():
         elif args.saved_path.endswith(".jsonl"):
             saved_metadata_df = pd.read_json(args.saved_path, lines=True)
         saved_video_path_list = saved_metadata_df[args.video_path_column].tolist()
-        saved_video_path_list = [os.path.join(args.video_folder, video_path) for video_path in saved_video_path_list]
-        
         video_path_list = list(set(video_path_list).difference(set(saved_video_path_list)))
-        # Sorting to guarantee the same result for each process.
-        video_path_list = natsorted(video_path_list)
         logger.info(f"Resume from {args.saved_path}: {len(saved_video_path_list)} processed and {len(video_path_list)} to be processed.")
     
-    if args.asethetic_score_metadata_path is not None:
-        if args.asethetic_score_metadata_path.endswith(".csv"):
-            asethetic_score_df = pd.read_csv(args.asethetic_score_metadata_path)
-        elif args.asethetic_score_metadata_path.endswith(".jsonl"):
-            asethetic_score_df = pd.read_json(args.asethetic_score_metadata_path, lines=True)
-
-        # In pandas, csv will save lists as strings, whereas jsonl will not.
-        asethetic_score_df["aesthetic_score"] = asethetic_score_df["aesthetic_score"].apply(
-            lambda x: ast.literal_eval(x) if isinstance(x, str) else x
-        )
-        asethetic_score_df["aesthetic_score_mean"] = asethetic_score_df["aesthetic_score"].apply(lambda x: sum(x) / len(x))
-        filtered_asethetic_score_df = asethetic_score_df[asethetic_score_df["aesthetic_score_mean"] < args.asethetic_score_threshold]
-        filtered_video_path_list = filtered_asethetic_score_df[args.video_path_column].tolist()
-        filtered_video_path_list = [os.path.join(args.video_folder, video_path) for video_path in filtered_video_path_list]
-
-        video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
-        # Sorting to guarantee the same result for each process.
-        video_path_list = natsorted(video_path_list)
-        logger.info(f"Load {args.asethetic_score_metadata_path} and filter {len(filtered_video_path_list)} videos.")
-    
-    if args.text_score_metadata_path is not None:
-        if args.text_score_metadata_path.endswith(".csv"):
-            text_score_df = pd.read_csv(args.text_score_metadata_path)
-        elif args.text_score_metadata_path.endswith(".jsonl"):
-            text_score_df = pd.read_json(args.text_score_metadata_path, lines=True)
-
-        filtered_text_score_df = text_score_df[text_score_df["text_score"] > args.text_score_threshold]
-        filtered_video_path_list = filtered_text_score_df[args.video_path_column].tolist()
-        filtered_video_path_list = [os.path.join(args.video_folder, video_path) for video_path in filtered_video_path_list]
-
-        video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
-        # Sorting to guarantee the same result for each process.
-        video_path_list = natsorted(video_path_list)
-        logger.info(f"Load {args.text_score_metadata_path} and filter {len(filtered_video_path_list)} videos.")
+    video_path_list = filter(
+        video_path_list,
+        basic_metadata_path=args.basic_metadata_path,
+        min_resolution=args.min_resolution,
+        min_duration=args.min_duration,
+        max_duration=args.max_duration,
+        asethetic_score_metadata_path=args.asethetic_score_metadata_path,
+        min_asethetic_score=args.min_asethetic_score,
+        asethetic_score_siglip_metadata_path=args.asethetic_score_siglip_metadata_path,
+        min_asethetic_score_siglip=args.min_asethetic_score_siglip,
+        text_score_metadata_path=args.text_score_metadata_path,
+        min_text_score=args.min_text_score,
+    )
+    video_path_list = [os.path.join(args.video_folder, video_path) for video_path in video_path_list]
+    # Sorting to guarantee the same result for each process.
+    video_path_list = natsorted(video_path_list)
 
     for i in tqdm(range(0, len(video_path_list), args.saved_freq)):
-        result_list = Parallel(n_jobs=args.n_jobs, backend="threading")(
+        result_list = Parallel(n_jobs=args.n_jobs)(
             delayed(compute_motion_score)(video_path) for video_path in tqdm(video_path_list[i: i + args.saved_freq])
         )
         result_list = [result for result in result_list if result is not None]
@@ -188,7 +178,7 @@ def main():
             header = False if os.path.exists(args.saved_path) else True
             result_df.to_csv(args.saved_path, header=header, index=False, mode="a")
         elif args.saved_path.endswith(".jsonl"):
-            result_df.to_json(args.saved_path, orient="records", lines=True, mode="a")
+            result_df.to_json(args.saved_path, orient="records", lines=True, mode="a", force_ascii=False)
         logger.info(f"Save result to {args.saved_path}.")
 
 

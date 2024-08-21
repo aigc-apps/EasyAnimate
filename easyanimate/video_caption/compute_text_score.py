@@ -1,4 +1,3 @@
-import ast
 import argparse
 import os
 from pathlib import Path
@@ -13,7 +12,8 @@ from tqdm import tqdm
 from torchvision.datasets.utils import download_url
 
 from utils.logger import logger
-from utils.video_utils import extract_frames, get_video_path_list
+from utils.video_utils import extract_frames
+from utils.filter import filter
 
 
 def init_ocr_reader(root: str = "~/.cache/easyocr", device: str = "gpu"):
@@ -100,10 +100,25 @@ def parse_args():
     )
     parser.add_argument("--saved_path", type=str, required=True, help="The save path to the output results (csv/jsonl).")
     parser.add_argument("--saved_freq", type=int, default=100, help="The frequency to save the output results.")
+
+    parser.add_argument(
+        "--basic_metadata_path", type=str, default=None, help="The path to the basic metadata (csv/jsonl)."
+    )
+    parser.add_argument("--min_resolution", type=float, default=0, help="The resolution threshold.")
+    parser.add_argument("--min_duration", type=float, default=-1, help="The minimum duration.")
+    parser.add_argument("--max_duration", type=float, default=-1, help="The maximum duration.")
     parser.add_argument(
         "--asethetic_score_metadata_path", type=str, default=None, help="The path to the video quality metadata (csv/jsonl)."
     )
-    parser.add_argument("--asethetic_score_threshold", type=float, default=4.0, help="The asethetic score threshold.")
+    parser.add_argument("--min_asethetic_score", type=float, default=4.0, help="The asethetic score threshold.")
+    parser.add_argument(
+        "--asethetic_score_siglip_metadata_path", type=str, default=None, help="The path to the video quality metadata (csv/jsonl)."
+    )
+    parser.add_argument("--min_asethetic_score_siglip", type=float, default=4.0, help="The asethetic score (SigLIP) threshold.")
+    parser.add_argument(
+        "--motion_score_metadata_path", type=str, default=None, help="The path to the video motion score metadata (csv/jsonl)."
+    )
+    parser.add_argument("--min_motion_score", type=float, default=2, help="The motion threshold.")
 
     args = parser.parse_args()
     return args
@@ -112,11 +127,13 @@ def parse_args():
 def main():
     args = parse_args()
 
-    video_path_list = get_video_path_list(
-        video_folder=args.video_folder,
-        video_metadata_path=args.video_metadata_path,
-        video_path_column=args.video_path_column
-    )
+    if args.video_metadata_path.endswith(".csv"):
+        video_metadata_df = pd.read_csv(args.video_metadata_path)
+    elif args.video_metadata_path.endswith(".jsonl"):
+        video_metadata_df = pd.read_json(args.video_metadata_path, lines=True)
+    else:
+        raise ValueError("The video_metadata_path must end with .csv or .jsonl.")
+    video_path_list = video_metadata_df[args.video_path_column].tolist()
 
     if not (args.saved_path.endswith(".csv") or args.saved_path.endswith(".jsonl")):
         raise ValueError("The saved_path must end with .csv or .jsonl.")
@@ -127,71 +144,70 @@ def main():
         elif args.saved_path.endswith(".jsonl"):
             saved_metadata_df = pd.read_json(args.saved_path, lines=True)
         saved_video_path_list = saved_metadata_df[args.video_path_column].tolist()
-        saved_video_path_list = [os.path.join(args.video_folder, video_path) for video_path in saved_video_path_list]
-
         video_path_list = list(set(video_path_list).difference(set(saved_video_path_list)))
-        # Sorting to guarantee the same result for each process.
-        video_path_list = natsorted(video_path_list)
         logger.info(f"Resume from {args.saved_path}: {len(saved_video_path_list)} processed and {len(video_path_list)} to be processed.")
     
-    if args.asethetic_score_metadata_path is not None:
-        if args.asethetic_score_metadata_path.endswith(".csv"):
-            asethetic_score_df = pd.read_csv(args.asethetic_score_metadata_path)
-        elif args.asethetic_score_metadata_path.endswith(".jsonl"):
-            asethetic_score_df = pd.read_json(args.asethetic_score_metadata_path, lines=True)
-
-        # In pandas, csv will save lists as strings, whereas jsonl will not.
-        asethetic_score_df["aesthetic_score"] = asethetic_score_df["aesthetic_score"].apply(
-            lambda x: ast.literal_eval(x) if isinstance(x, str) else x
-        )
-        asethetic_score_df["aesthetic_score_mean"] = asethetic_score_df["aesthetic_score"].apply(lambda x: sum(x) / len(x))
-        filtered_asethetic_score_df = asethetic_score_df[asethetic_score_df["aesthetic_score_mean"] < args.asethetic_score_threshold]
-        filtered_video_path_list = filtered_asethetic_score_df[args.video_path_column].tolist()
-        filtered_video_path_list = [os.path.join(args.video_folder, video_path) for video_path in filtered_video_path_list]
-
-        video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
-        # Sorting to guarantee the same result for each process.
-        video_path_list = natsorted(video_path_list)
-        logger.info(f"Load {args.asethetic_score_metadata_path} and filter {len(filtered_video_path_list)} videos.")
+    video_path_list = filter(
+        video_path_list,
+        basic_metadata_path=args.basic_metadata_path,
+        min_resolution=args.min_resolution,
+        min_duration=args.min_duration,
+        max_duration=args.max_duration,
+        asethetic_score_metadata_path=args.asethetic_score_metadata_path,
+        min_asethetic_score=args.min_asethetic_score,
+        asethetic_score_siglip_metadata_path=args.asethetic_score_siglip_metadata_path,
+        min_asethetic_score_siglip=args.min_asethetic_score_siglip,
+        motion_score_metadata_path=args.motion_score_metadata_path,
+        min_motion_score=args.min_motion_score,
+    )
+    video_path_list = [os.path.join(args.video_folder, video_path) for video_path in video_path_list]
+    # Sorting to guarantee the same result for each process.
+    video_path_list = natsorted(video_path_list)
 
     state = PartialState()
+    if state.is_main_process:
+        # Check if the model is downloaded in the main process.
+        ocr_reader = init_ocr_reader(device="cpu")
+    state.wait_for_everyone()
     ocr_reader = init_ocr_reader(device=state.device)
 
-    # The workaround can be removed after https://github.com/huggingface/accelerate/pull/2781 is released.
     index = len(video_path_list) - len(video_path_list) % state.num_processes
-    logger.info(f"Drop {len(video_path_list) % state.num_processes} videos to avoid duplicates in state.split_between_processes.")
+    # Avoid the NCCL timeout in the final gather operation.
+    logger.info(f"Drop {len(video_path_list) % state.num_processes} videos to ensure each process handles the same number of videos.")
     video_path_list = video_path_list[:index]
+    logger.info(f"{len(video_path_list)} videos are to be processed.")
 
     result_list = []
     with state.split_between_processes(video_path_list) as splitted_video_path_list:
         for i, video_path in enumerate(tqdm(splitted_video_path_list)):
-            video_meta_info = compute_text_score(video_path, ocr_reader)
-            result_list.append(video_meta_info)
+            try:
+                video_meta_info = compute_text_score(video_path, ocr_reader)
+                result_list.append(video_meta_info)
+            except Exception as e:
+                logger.warning(f"Compute text score for video {video_path} with error: {e}.")
             if i != 0 and i % args.saved_freq == 0:
                 state.wait_for_everyone()
                 gathered_result_list = gather_object(result_list)
-                if state.is_main_process:
+                if state.is_main_process and len(gathered_result_list) != 0:
                     result_df = pd.DataFrame(gathered_result_list)
                     if args.saved_path.endswith(".csv"):
                         header = False if os.path.exists(args.saved_path) else True
                         result_df.to_csv(args.saved_path, header=header, index=False, mode="a")
                     elif args.saved_path.endswith(".jsonl"):
-                        result_df.to_json(args.saved_path, orient="records", lines=True, mode="a")
+                        result_df.to_json(args.saved_path, orient="records", lines=True, mode="a", force_ascii=False)
                     logger.info(f"Save result to {args.saved_path}.")
                 result_list = []
 
     state.wait_for_everyone()
     gathered_result_list = gather_object(result_list)
-    if state.is_main_process:
-        logger.info(len(gathered_result_list))
-        if len(gathered_result_list) != 0:
-            result_df = pd.DataFrame(gathered_result_list)
-            if args.saved_path.endswith(".csv"):
-                header = False if os.path.exists(args.saved_path) else True
-                result_df.to_csv(args.saved_path, header=header, index=False, mode="a")
-            elif args.saved_path.endswith(".jsonl"):
-                result_df.to_json(args.saved_path, orient="records", lines=True, mode="a")
-            logger.info(f"Save the final result to {args.saved_path}.")
+    if state.is_main_process and len(gathered_result_list) != 0:
+        result_df = pd.DataFrame(gathered_result_list)
+        if args.saved_path.endswith(".csv"):
+            header = False if os.path.exists(args.saved_path) else True
+            result_df.to_csv(args.saved_path, header=header, index=False, mode="a")
+        elif args.saved_path.endswith(".jsonl"):
+            result_df.to_json(args.saved_path, orient="records", lines=True, mode="a", force_ascii=False)
+        logger.info(f"Save the final result to {args.saved_path}.")
 
 
 if __name__ == "__main__":

@@ -16,22 +16,51 @@ RUN apt-get update -y && apt-get install -y zip && \
     rm -rf /var/lib/apt/lists/*
 RUN pip install wandb tqdm GitPython==3.1.32 Pillow==9.5.0 setuptools --upgrade -i https://mirrors.aliyun.com/pypi/simple/
 
-# reinstall torch to keep compatible with xformers
-RUN pip uninstall -qy torch torchvision && \
-    pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cu118
-RUN pip uninstall -qy xfromers && pip install xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu118
+RUN pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu118
+RUN pip install xformers==0.0.27.post2 --index-url https://download.pytorch.org/whl/cu118
+
+# install VILA (video-caption)
+RUN wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/package/vila-1.0.0-torch2.4.0-py3-none-any.whl
+RUN mv vila-1.0.0-torch2.4.0-py3-none-any.whl vila-1.0.0-py3-none-any.whl
+RUN pip install vila-1.0.0-py3-none-any.whl --extra-index-url https://download.pytorch.org/whl/cu118
+RUN wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/package/flash_attn-2.6.3%2Bcu118torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
+RUN pip install flash_attn-2.6.3+cu118torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
+
+# install llm-awq (video-caption)
+RUN git clone https://github.com/mit-han-lab/llm-awq /root/llm-awq
+WORKDIR /root/llm-awq
+RUN pip install -e .
+WORKDIR /root/llm-awq/awq/kernels
+# https://github.com/mit-han-lab/llm-awq/issues/93#issuecomment-2144434686
+RUN export TORCH_CUDA_ARCH_LIST="8.0 8.6 8.9 9.0+PTX" && python3 setup.py install
+
+# install vllm (video-caption)
+RUN pip install https://github.com/vllm-project/vllm/releases/download/v0.5.4/vllm-0.5.4+cu118-cp310-cp310-manylinux1_x86_64.whl --extra-index-url https://download.pytorch.org/whl/cu118
+
+# install requirements (video-caption)
+WORKDIR /root/
+COPY easyanimate/video_caption/requirements.txt /root/requirements-video_caption.txt
+RUN pip install -r /root/requirements-video_caption.txt
+RUN rm /root/requirements-video_caption.txt
 
 RUN apt-get update && apt-get install -y aria2
 RUN pip install -U http://eas-data.oss-cn-shanghai.aliyuncs.com/sdk/allspark-0.15-py2.py3-none-any.whl 
-RUN pip install https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/package/vllm-0.3.3%2Bcu118-cp310-cp310-manylinux1_x86_64.whl
-RUN pip install pandas>=2.0.0 auto_gptq sglang[srt] func_timeout -i https://mirrors.aliyun.com/pypi/simple/
 RUN pip install -e git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers
-RUN pip install pytorch_lightning==1.9.4 func_timeout -i https://mirrors.aliyun.com/pypi/simple/
+RUN pip install came-pytorch deepspeed pytorch_lightning==1.9.4 func_timeout -i https://mirrors.aliyun.com/pypi/simple/
 
 # install requirements
+RUN pip install bitsandbytes mamba-ssm causal-conv1d>=1.4.0 -i https://mirrors.aliyun.com/pypi/simple/
+RUN pip install ipykernel -i https://mirrors.aliyun.com/pypi/simple/
 COPY ./requirements.txt /root/requirements.txt
 RUN pip install -r /root/requirements.txt -i https://mirrors.aliyun.com/pypi/simple/
 RUN rm -rf /root/requirements.txt
+
+# install package patches (video-caption)
+COPY easyanimate/video_caption/package_patches/easyocr_detection_patched.py /usr/local/lib/python3.10/dist-packages/easyocr/detection.py
+COPY easyanimate/video_caption/package_patches/vila_siglip_encoder_patched.py /usr/local/lib/python3.10/dist-packages/llava/model/multimodal_encoder/siglip_encoder.py
+
+# Use the binary files provided by imageio-ffmpeg without installing the FFmpeg package (video-caption).
+RUN ln -s /usr/local/lib/python3.10/dist-packages/imageio_ffmpeg/binaries/ffmpeg-linux64-v4.2.2 /usr/local/bin/ffmpeg
 
 ENV PYTHONUNBUFFERED 1
 ENV NVIDIA_DISABLE_REQUIRE 1

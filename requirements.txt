@@ -20,6 +20,8 @@ imageio[pyav]
 tensorboard
 beautifulsoup4
 ftfy
+func_timeout
+deepspeed
 accelerate>=0.25.0
 gradio>=3.41.2
 diffusers>=0.28.2
