@@ -27,16 +27,12 @@ allowing you to easily perform video data processing on [Aliyun PAI-DLC](https:/
 AliyunDSW or Docker is recommended to setup the environment, please refer to [Quick Start](../../README.md#quick-start).
 You can also refer to the image build process in the [Dockerfile](../../Dockerfile.ds) to configure the conda environment and other dependencies locally.
 
-Since the video recaptioning depends on [llm-awq](https://github.com/mit-han-lab/llm-awq) for faster and memory efficient inference,
-the minimum GPU requirment should be RTX 3060 or A2 (CUDA Compute Capability >= 8.0).
-
 ```shell
 # pull image
-docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:
-asyanimate
+docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:video_caption
 
 # enter image
-docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:asyanimate
+docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:video_caption
 
 # clone code
 git clone https://github.com/aigc-apps/EasyAnimate.git
@@ -91,15 +87,15 @@ Please run `HF_ENDPOINT=https://hf-mirror.com sh scripts/stage_2_video_filtering
 
 
 #### Video Recaptioning
-After obtaining the aboved high-quality filtered videos, EasyAnimate utilizes [VILA1.5](https://github.com/NVlabs/VILA) to perform video recaptioning. 
-Subsequently, the recaptioning results are rewritten by LLMs to better meet with the requirements of video generation tasks. 
-Finally, an advanced VideoCLIPXL model is developed to filter out video-caption pairs with poor alignment, resulting in the final training dataset.
+After obtaining the aboved high-quality filtered videos, EasyAnimate utilizes [InternVL2](https://internvl.readthedocs.io/en/latest/internvl2.0/introduction.html) to perform video recaptioning.
+Subsequently, the recaptioning results are rewritten by LLMs to better meet with the requirements of video generation tasks.
+Finally, an advanced [VideoCLIP-XL](https://arxiv.org/abs/2410.00741) model is used to filter out video-caption pairs with poor alignment, resulting in the final training dataset.
 
-Please download the video caption model from [VILA1.5](https://huggingface.co/collections/Efficient-Large-Model/vila-on-pre-training-for-visual-language-models-65d8022a3a52cd9bcd62698e) of the appropriate size based on the GPU memory of your machine.
-For A100 with 40G VRAM, you can download [VILA1.5-40b-AWQ](https://huggingface.co/Efficient-Large-Model/VILA1.5-40b-AWQ) by running
+Please download the video caption model from [InternVL2](https://huggingface.co/collections/OpenGVLab/internvl-20-667d3961ab5eb12c7ed1463e) of the appropriate size based on the GPU memory of your machine.
+For A100 with 40G VRAM, you can download [InternVL2-40B-AWQ](https://huggingface.co/OpenGVLab/InternVL2-40B-AWQ) by running
 ```shell
 # Add HF_ENDPOINT=https://hf-mirror.com before the command if you cannot access to huggingface.com
-huggingface-cli download Efficient-Large-Model/VILA1.5-40b-AWQ --local-dir-use-symlinks False --local-dir /PATH/TO/VILA_MODEL
+huggingface-cli download OpenGVLab/InternVL2-40B-AWQ --local-dir-use-symlinks False --local-dir /PATH/TO/INTERNVL2_MODEL
 ```
 
 Optionally, you can prepare local LLMs to rewrite the recaption results.
