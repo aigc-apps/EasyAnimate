@@ -41,7 +41,7 @@ def parse_args():
     parser.add_argument(
         "--video_path_column",
         type=str,
-        default=None,
+        default="video_path",
         help="The column contains the video path (an absolute path or a relative path w.r.t the video_folder).",
     )
     parser.add_argument(

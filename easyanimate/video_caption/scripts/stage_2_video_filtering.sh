@@ -11,6 +11,7 @@ python -m utils.get_meta_file \
     --saved_path $META_FILE_PATH
 
 # Get the asethetic score (SigLIP) of all videos
+# Adjust the num_workers and batch size parameter based on the machine's computing resources to achieve maximum GPU utilization.
 accelerate launch compute_video_quality.py \
     --video_metadata_path $META_FILE_PATH \
     --video_folder $VIDEO_FOLDER \
@@ -19,7 +20,8 @@ accelerate launch compute_video_quality.py \
     --num_sampled_frames 4 \
     --saved_freq 10 \
     --saved_path $VIDEO_QUALITY_SAVED_PATH \
-    --batch_size 4
+    --num_workers 4 \
+    --batch_size 16
 
 # Get the text score of all videos filtered by the video quality score.
 accelerate launch compute_text_score.py \
@@ -31,6 +33,7 @@ accelerate launch compute_text_score.py \
     --min_asethetic_score_siglip $MIN_ASETHETIC_SCORE_SIGLIP
 
 # Get the motion score of all videos filtered by the video quality score and text score.
+# Adjust the n_jobs parameter based on the actual number of CPU cores in the machine.
 python compute_motion_score.py \
     --video_metadata_path $META_FILE_PATH \
     --video_folder $VIDEO_FOLDER \
