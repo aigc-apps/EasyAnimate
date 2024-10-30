@@ -109,13 +109,13 @@ def parse_args():
     parser.add_argument("--min_duration", type=float, default=-1, help="The minimum duration.")
     parser.add_argument("--max_duration", type=float, default=-1, help="The maximum duration.")
     parser.add_argument(
-        "--asethetic_score_metadata_path", type=str, default=None, help="The path to the video quality metadata (csv/jsonl)."
+        "--aesthetic_score_metadata_path", type=str, default=None, help="The path to the video quality metadata (csv/jsonl)."
     )
-    parser.add_argument("--min_asethetic_score", type=float, default=4.0, help="The asethetic score threshold.")
+    parser.add_argument("--min_aesthetic_score", type=float, default=4.0, help="The aesthetic score threshold.")
     parser.add_argument(
-        "--asethetic_score_siglip_metadata_path", type=str, default=None, help="The path to the video quality metadata (csv/jsonl)."
+        "--aesthetic_score_siglip_metadata_path", type=str, default=None, help="The path to the video quality metadata (csv/jsonl)."
     )
-    parser.add_argument("--min_asethetic_score_siglip", type=float, default=4.0, help="The asethetic score (SigLIP) threshold.")
+    parser.add_argument("--min_aesthetic_score_siglip", type=float, default=4.0, help="The aesthetic score (SigLIP) threshold.")
     parser.add_argument(
         "--text_score_metadata_path", type=str, default=None, help="The path to the video text score metadata (csv/jsonl)."
     )
@@ -154,10 +154,10 @@ def main():
         min_resolution=args.min_resolution,
         min_duration=args.min_duration,
         max_duration=args.max_duration,
-        asethetic_score_metadata_path=args.asethetic_score_metadata_path,
-        min_asethetic_score=args.min_asethetic_score,
-        asethetic_score_siglip_metadata_path=args.asethetic_score_siglip_metadata_path,
-        min_asethetic_score_siglip=args.min_asethetic_score_siglip,
+        aesthetic_score_metadata_path=args.aesthetic_score_metadata_path,
+        min_aesthetic_score=args.min_aesthetic_score,
+        aesthetic_score_siglip_metadata_path=args.aesthetic_score_siglip_metadata_path,
+        min_aesthetic_score_siglip=args.min_aesthetic_score_siglip,
         text_score_metadata_path=args.text_score_metadata_path,
         min_text_score=args.min_text_score,
     )
