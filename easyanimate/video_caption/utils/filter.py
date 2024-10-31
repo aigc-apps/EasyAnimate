@@ -188,7 +188,7 @@ def filter(
             video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
             logger.info(
                 f"Load {f} ({len(semantic_consistency_score_df)}) and filter {len(filtered_video_path_list)} videos "
-                f"with semantic consistency score smaller than {min_semantic_consistency_score}."
+                f"with the minimum semantic consistency score smaller than {min_semantic_consistency_score}."
             )
     
     return video_path_list
