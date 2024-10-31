@@ -84,6 +84,7 @@ def parse_args():
         "--motion_score_metadata_path", type=str, default=None, help="The path to the video motion score metadata (csv/jsonl)."
     )
     parser.add_argument("--min_motion_score", type=float, default=2, help="The motion threshold.")
+    parser.add_argument("--max_motion_score", type=float, default=999999, help="The maximum motion threshold.")
 
     args = parser.parse_args()
     return args
@@ -125,7 +126,9 @@ def main():
         text_score_metadata_path=args.text_score_metadata_path,
         min_text_score=args.min_text_score,
         motion_score_metadata_path=args.motion_score_metadata_path,
-        min_motion_score=args.min_motion_score
+        min_motion_score=args.min_motion_score,
+        max_motion_score=args.max_motion_score,
+        video_path_column=args.video_path_column
     )
     video_path_list = [os.path.join(args.video_folder, video_path) for video_path in video_path_list]
     # Sorting to guarantee the same result for each process.
