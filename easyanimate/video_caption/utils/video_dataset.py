@@ -10,7 +10,7 @@ from .logger import logger
 from .video_utils import extract_frames
 
 
-ALL_VIDEO_EXT = set(["mp4", "webm", "mkv", "avi", "flv", "mov"])
+ALL_VIDEO_EXT = set([".mp4", ".webm", ".mkv", ".avi", ".flv", ".mov", ".ts"])
 VIDEO_READER_TIMEOUT = 300
 
 
