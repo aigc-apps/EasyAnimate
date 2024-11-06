@@ -157,6 +157,7 @@ def encode_prompt(
             text_input_ids
         )[0]
     prompt_embeds = prompt_embeds.to(dtype=dtype, device=device)
+    prompt_attention_mask = prompt_attention_mask.to(dtype=dtype, device=device)
     return prompt_embeds, prompt_attention_mask
 
 def get_random_downsample_ratio(sample_size, image_ratio=[], all_choices=False, rng=None):
@@ -1727,14 +1728,13 @@ def main():
                         sub_loss = F.mse_loss(gt_sub_noise, pre_sub_noise, reduction="mean")
                         loss = loss * (1 - args.motion_sub_loss_ratio) + sub_loss * args.motion_sub_loss_ratio
                 else:
-                    # Calculate loss of Pixart
                     added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
                     if unwrap_model(transformer3d).config.sample_size == 128:
                         bs, height, width = bsz, batch["pixel_values"].size()[-2], batch["pixel_values"].size()[-1]
                         resolution = torch.tensor([height, width]).repeat(bs, 1)
                         aspect_ratio = torch.tensor([float(height / width)]).repeat(bs, 1)
-                        resolution = resolution.to(dtype=prompt_embeds.dtype, device=latents.device)
-                        aspect_ratio = aspect_ratio.to(dtype=prompt_embeds.dtype, device=latents.device)
+                        resolution = resolution.to(accelerator.device, dtype=weight_dtype)
+                        aspect_ratio = aspect_ratio.to(accelerator.device, dtype=weight_dtype)
                         added_cond_kwargs = {"resolution": resolution, "aspect_ratio": aspect_ratio}
 
                     loss_term = train_diffusion.training_losses(
@@ -1743,8 +1743,8 @@ def main():
                         timesteps, 
                         noise=noise,
                         model_kwargs=dict(
-                            encoder_hidden_states=prompt_embeds.to(latents.device, latents.dtype), 
-                            encoder_attention_mask=prompt_attention_mask.to(latents.device, latents.dtype), 
+                            encoder_hidden_states=prompt_embeds, 
+                            encoder_attention_mask=prompt_attention_mask, 
                             added_cond_kwargs=added_cond_kwargs, 
                             control_latents=control_latents,
                             return_dict=False

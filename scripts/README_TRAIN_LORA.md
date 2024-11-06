@@ -14,7 +14,7 @@ Some parameters in the sh file can be confusing, and they are explained in this 
   - At 768x768 resolution, the number of video frames is 21;
   - At 1024x1024 resolution, the number of video frames is 9;
   - These resolutions combined with their corresponding lengths allow the model to generate videos of different sizes.
-- `train_mode` is used to specify the training mode, which can be either normal or inpaint. Since EasyAnimate uses the Inpaint model to achieve text-to-video generation, the default is set to inpaint mode. If you only wish to achieve text-to-video generation, you can remove this line, and it will default to the text-to-video mode.
+- `train_mode` is used to specify the training mode, which can be either normal or inpaint. Since EasyAnimate uses the Inpaint model to achieve image-to-video generation, the default is set to inpaint mode. If you only wish to achieve text-to-video generation, you can remove this line, and it will default to the text-to-video mode.
 - `uniform_sampling` is used to ensure that each batch can be uniformly sampled from 0 to 1000.
 - The default parameter for training is the Inpaint model. If you only want to train the T2V model, please set train_made="normal" and use the EasyAnimateV5-12b-zh model.
 
@@ -124,7 +124,7 @@ accelerate launch --mixed_precision="bf16" scripts/train_lora.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
   --train_data_dir=$DATASET_NAME \
   --train_data_meta=$DATASET_META_NAME \
-  --config_path "config/easyanimate_video_slicevae_multi_text_encoder_v4.yaml" \
+  --config_path "config/easyanimate_video_v4_slicevae_multi_text_encoder.yaml" \
   --image_sample_size=512 \
   --video_sample_size=512 \
   --video_sample_stride=1 \
@@ -168,7 +168,7 @@ accelerate launch --use_deepspeed --deepspeed_config_file config/zero_stage2_con
   --pretrained_model_name_or_path=$MODEL_NAME \
   --train_data_dir=$DATASET_NAME \
   --train_data_meta=$DATASET_META_NAME \
-  --config_path "config/easyanimate_video_slicevae_multi_text_encoder_v4.yaml" \
+  --config_path "config/easyanimate_video_v4_slicevae_multi_text_encoder.yaml" \
   --image_sample_size=512 \
   --video_sample_size=512 \
   --video_sample_stride=1 \
@@ -216,7 +216,7 @@ accelerate launch --mixed_precision="bf16" scripts/train_lora.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
   --train_data_dir=$DATASET_NAME \
   --train_data_meta=$DATASET_META_NAME \
-  --config_path "config/easyanimate_video_slicevae_motion_module_v3.yaml" \
+  --config_path "config/easyanimate_video_v3_slicevae_motion_module.yaml" \
   --image_sample_size=512 \
   --video_sample_size=512 \
   --video_sample_stride=1 \
@@ -260,7 +260,7 @@ accelerate launch --mixed_precision="bf16" scripts/train_t2iv_lora.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
   --train_data_dir=$DATASET_NAME \
   --train_data_meta=$DATASET_META_NAME \
-  --config_path "config/easyanimate_video_magvit_motion_module_v2.yaml" \
+  --config_path "config/easyanimate_video_v2_magvit_motion_module.yaml" \
   --image_sample_size=512 \
   --video_sample_size=512 \
   --video_sample_stride=1 \
