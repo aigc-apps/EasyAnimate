@@ -242,14 +242,14 @@ def log_validation(
             with torch.no_grad():
                 with torch.autocast("cuda", dtype=weight_dtype):
                     if vae.cache_mag_vae:
-                        video_length = int((video_length - 1) // vae.mini_batch_encoder * vae.mini_batch_encoder) + 1 if video_length != 1 else 1
+                        video_length = int((args.video_sample_n_frames - 1) // vae.mini_batch_encoder * vae.mini_batch_encoder) + 1 if args.video_sample_n_frames != 1 else 1
                     else:
-                        video_length = int(video_length // vae.mini_batch_encoder * vae.mini_batch_encoder) if video_length != 1 else 1
+                        video_length = int(args.video_sample_n_frames // vae.mini_batch_encoder * vae.mini_batch_encoder) if args.video_sample_n_frames != 1 else 1
                     
                     input_video, input_video_mask, clip_image = get_video_to_video_latent(args.validation_paths[i], video_length=video_length, sample_size=[args.video_sample_size, args.video_sample_size])
                     sample = pipeline(
                         args.validation_prompts[i], 
-                        video_length = args.video_sample_n_frames,
+                        video_length = video_length,
                         negative_prompt = "bad detailed",
                         height      = args.video_sample_size,
                         width       = args.video_sample_size,
@@ -336,6 +336,13 @@ def parse_args():
             "For debugging purposes or quicker training, truncate the number of training examples to this "
             "value if set."
         ),
+    )
+    parser.add_argument(
+        "--validation_paths",
+        type=str,
+        default=None,
+        nargs="+",
+        help=("A set of control videos evaluated every `--validation_epochs` and logged to `--report_to`."),
     )
     parser.add_argument(
         "--validation_prompts",
@@ -1338,6 +1345,7 @@ def main():
     if accelerator.is_main_process:
         tracker_config = dict(vars(args))
         tracker_config.pop("validation_prompts")
+        tracker_config.pop("validation_paths")
         tracker_config.pop("trainable_modules")
         tracker_config.pop("trainable_modules_low_learning_rate")
         accelerator.init_trackers(args.tracker_project_name, tracker_config)

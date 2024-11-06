@@ -29,7 +29,7 @@ from easyanimate.utils.utils import get_video_to_video_latent, save_videos_grid
 GPU_memory_mode     = "model_cpu_offload"
 
 # Config and model path
-config_path         = "config/easyanimate_video_v5_zh_magvit_multi_text_encoder.yaml"
+config_path         = "config/easyanimate_video_v5_magvit_multi_text_encoder.yaml"
 model_name          = "models/Diffusion_Transformer/EasyAnimateV5-12b-zh-Control"
 
 # Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" and "DDIM"

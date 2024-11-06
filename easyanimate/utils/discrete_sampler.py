@@ -5,11 +5,13 @@ import torch
 class DiscreteSampling:
     def __init__(self, num_idx, uniform_sampling=False):
         self.num_idx = num_idx
-        world_size = torch.distributed.get_world_size()
-        self.rank = torch.distributed.get_rank()
-
         self.uniform_sampling = uniform_sampling
-        if self.uniform_sampling:
+        self.is_distributed = torch.distributed.is_available() and torch.distributed.is_initialized()
+
+        if self.is_distributed and self.uniform_sampling:
+            world_size = torch.distributed.get_world_size()
+            self.rank = torch.distributed.get_rank()
+
             i = 1
             while True:
                 if world_size % i != 0 or num_idx % (world_size // i) != 0:
@@ -27,7 +29,7 @@ class DiscreteSampling:
                   self.group_width, self.sigma_interval))
         
     def __call__(self, n_samples, generator=None, device=None):
-        if self.uniform_sampling: 
+        if self.is_distributed and self.uniform_sampling: 
             group_index = self.rank // self.group_width
             idx = torch.randint(
                     group_index * self.sigma_interval,
@@ -35,11 +37,10 @@ class DiscreteSampling:
                     (n_samples,), 
                     generator=generator, device=device,
                 )
+            print('proc[%d] idx=%s' % (self.rank, idx))
         else:   
             idx = torch.randint(
                     0, self.num_idx, (n_samples,), 
                     generator=generator, device=device,
                 )
-
-        print('proc[%d] idx=%s' % (self.rank, idx))
         return idx

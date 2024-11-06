@@ -36,7 +36,7 @@ GPU_memory_mode     = "model_cpu_offload"
 
 # Config and model path
 config_path         = "config/easyanimate_video_v5_magvit_multi_text_encoder.yaml"
-model_name          = "models/Diffusion_Transformer/EasyAnimateV5-12b-zh"
+model_name          = "models/Diffusion_Transformer/EasyAnimateV5-12b-zh-InP"
 
 # Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" and "DDIM"
 # EasyAnimateV1, V2 and V3 cannot use DDIM.

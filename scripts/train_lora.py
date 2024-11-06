@@ -301,13 +301,13 @@ def log_validation(
                 if args.train_mode != "normal":
                     with torch.autocast("cuda", dtype=weight_dtype):
                         if vae.cache_mag_vae:
-                            video_length = int((video_length - 1) // vae.mini_batch_encoder * vae.mini_batch_encoder) + 1 if video_length != 1 else 1
+                            video_length = int((args.video_sample_n_frames - 1) // vae.mini_batch_encoder * vae.mini_batch_encoder) + 1 if args.video_sample_n_frames != 1 else 1
                         else:
-                            video_length = int(video_length // vae.mini_batch_encoder * vae.mini_batch_encoder) if video_length != 1 else 1
+                            video_length = int(args.video_sample_n_frames // vae.mini_batch_encoder * vae.mini_batch_encoder) if args.video_sample_n_frames != 1 else 1
                         input_video, input_video_mask, clip_image = get_image_to_video_latent(None, None, video_length=video_length, sample_size=[args.video_sample_size, args.video_sample_size])
                         sample = pipeline(
                             args.validation_prompts[i], 
-                            video_length = args.video_sample_n_frames,
+                            video_length = video_length,
                             negative_prompt = "bad detailed",
                             height      = args.video_sample_size,
                             width       = args.video_sample_size,
@@ -340,7 +340,7 @@ def log_validation(
                     with torch.autocast("cuda", dtype=weight_dtype):
                         sample = pipeline(
                             args.validation_prompts[i], 
-                            video_length = args.video_sample_n_frames,
+                            video_length = video_length,
                             negative_prompt = "bad detailed",
                             height      = args.video_sample_size,
                             width       = args.video_sample_size,
@@ -580,6 +580,9 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--report_model_info", action="store_true", help="Whether or not to report more info about model (such as norm, grad)."
+    )
+    parser.add_argument(
         "--mixed_precision",
         type=str,
         default=None,
@@ -669,6 +672,9 @@ def parse_args():
     )
     parser.add_argument(
         "--snr_loss", action="store_true", help="Whether or not to use snr_loss."
+    )
+    parser.add_argument(
+        "--uniform_sampling", action="store_true", help="Whether or not to use uniform_sampling."
     )
     parser.add_argument(
         "--not_sigma_loss", action="store_true", help="Whether or not to not use sigma_loss."
@@ -797,6 +803,22 @@ def parse_args():
         help=(
             'The format of training data. Support `"normal"`'
             ' (default), `"inpaint"`.'
+        ),
+    )
+    parser.add_argument(
+        "--abnormal_norm_clip_start",
+        type=int,
+        default=1000,
+        help=(
+            'When do we start doing additional processing on abnormal gradients. '
+        ),
+    )
+    parser.add_argument(
+        "--initial_grad_norm_ratio",
+        type=int,
+        default=5,
+        help=(
+            'The initial gradient is relative to the multiple of the max_grad_norm. '
         ),
     )
 
@@ -974,6 +996,9 @@ def main():
         image_processor = CLIPImageProcessor.from_pretrained(
             args.pretrained_model_name_or_path, subfolder="image_encoder"
         )
+    else:
+        image_encoder = None
+        image_processor = None
 
     # Freeze vae and text_encoder and set transformer3d to trainable
     vae.requires_grad_(False)
