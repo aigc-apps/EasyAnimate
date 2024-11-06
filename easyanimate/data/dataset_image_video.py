@@ -28,7 +28,7 @@ def get_random_mask(shape):
         mask_index = np.random.choice([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], p=[0.05, 0.2, 0.2, 0.2, 0.05, 0.05, 0.05, 0.1, 0.05, 0.05]) 
     else:
         mask_index = np.random.choice([0, 1], p = [0.2, 0.8])
-    mask = torch.zeros((f, 1, h, w), dtype=torch.uint8)
+    mask = torch.zeros((f, 3, h, w), dtype=torch.uint8)
 
     if mask_index == 0:
         center_x = torch.randint(0, w, (1,)).item()
@@ -74,7 +74,7 @@ def get_random_mask(shape):
             block_width = random.randint(1, w // 4)
             top_left_y = random.randint(0, h - block_height)
             top_left_x = random.randint(0, w - block_width)
-            mask[i, 0, top_left_y:top_left_y + block_height, top_left_x:top_left_x + block_width] = 1
+            mask[i, :, top_left_y:top_left_y + block_height, top_left_x:top_left_x + block_width] = 1
     elif mask_index == 7:
         center_x = torch.randint(0, w, (1,)).item()
         center_y = torch.randint(0, h, (1,)).item()
