@@ -8,12 +8,11 @@ import pandas as pd
 from accelerate import PartialState
 from accelerate.utils import gather_object
 from natsort import natsorted
-from tqdm import tqdm
 from torchvision.datasets.utils import download_url
-
+from tqdm import tqdm
+from utils.filter import filter
 from utils.logger import logger
 from utils.video_utils import extract_frames
-from utils.filter import filter
 
 
 def init_ocr_reader(root: str = "~/.cache/easyocr", device: str = "gpu"):

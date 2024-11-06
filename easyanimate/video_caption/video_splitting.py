@@ -2,14 +2,12 @@ import argparse
 import os
 import subprocess
 from datetime import datetime, timedelta
-from pathlib import Path
 from multiprocessing import Pool
+from pathlib import Path
 
 import pandas as pd
 from tqdm import tqdm
-
 from utils.logger import logger
-
 
 MIN_SECONDS = int(os.getenv("MIN_SECONDS", 3))
 MAX_SECONDS = int(os.getenv("MAX_SECONDS", 10))

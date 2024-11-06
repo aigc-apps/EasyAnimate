@@ -1,5 +1,5 @@
-import ast
 import argparse
+import ast
 import gc
 import os
 from contextlib import contextmanager
@@ -11,9 +11,8 @@ import pandas as pd
 from joblib import Parallel, delayed
 from natsort import natsorted
 from tqdm import tqdm
-
-from utils.logger import logger
 from utils.filter import filter
+from utils.logger import logger
 
 
 @contextmanager

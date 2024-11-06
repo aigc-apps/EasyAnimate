@@ -1,10 +1,10 @@
+from typing import Any, Dict
+
 import torch
 import torch.nn as nn
-import numpy as np
-from typing import Any, Dict, Optional, Tuple
-from einops import rearrange, repeat
-from diffusers.utils import (USE_PEFT_BACKEND, BaseOutput, is_torch_version,
-                             logging)
+from diffusers.utils import is_torch_version
+from einops import rearrange
+
 from ..modules.vaemodules.activations import get_activation
 from ..modules.vaemodules.common import CausalConv3d
 from ..modules.vaemodules.down_blocks import get_down_block
@@ -71,6 +71,7 @@ class Encoder(nn.Module):
         slice_mag_vae: bool = False,
         slice_compression_vae: bool = False,
         cache_compression_vae: bool = False,
+        cache_mag_vae: bool = False,
         spatial_group_norm: bool = False,
         mini_batch_encoder: int = 9,
         verbose = False,
@@ -138,6 +139,7 @@ class Encoder(nn.Module):
         self.slice_mag_vae = slice_mag_vae
         self.slice_compression_vae = slice_compression_vae
         self.cache_compression_vae = cache_compression_vae
+        self.cache_mag_vae = cache_mag_vae
         self.mini_batch_encoder = mini_batch_encoder
         self.spatial_group_norm = spatial_group_norm
         self.verbose = verbose
@@ -163,6 +165,28 @@ class Encoder(nn.Module):
                 _set_padding_more_frame(sub_name, sub_mod)
         for name, module in self.named_children():
             _set_padding_more_frame(name, module)
+
+    def set_magvit_padding_one_frame(self):
+        def _set_magvit_padding_one_frame(name, module):
+            if hasattr(module, 'padding_flag'):
+                if self.verbose:
+                    print('Set pad mode for module[%s] type=%s' % (name, str(type(module))))
+                module.padding_flag = 3
+            for sub_name, sub_mod in module.named_children():
+                _set_magvit_padding_one_frame(sub_name, sub_mod)
+        for name, module in self.named_children():
+            _set_magvit_padding_one_frame(name, module)
+            
+    def set_magvit_padding_more_frame(self):
+        def _set_magvit_padding_more_frame(name, module):
+            if hasattr(module, 'padding_flag'):
+                if self.verbose:
+                    print('Set pad mode for module[%s] type=%s' % (name, str(type(module))))
+                module.padding_flag = 4
+            for sub_name, sub_mod in module.named_children():
+                _set_magvit_padding_more_frame(sub_name, sub_mod)
+        for name, module in self.named_children():
+            _set_magvit_padding_more_frame(name, module)
 
     def set_cache_slice_vae_padding_one_frame(self):
         def _set_cache_slice_vae_padding_one_frame(name, module):
@@ -199,6 +223,8 @@ class Encoder(nn.Module):
 
     def single_forward(self, x: torch.Tensor, previous_features: torch.Tensor, after_features: torch.Tensor) -> torch.Tensor:
         # x: (B, C, T, H, W)
+        if self.training:
+            ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
         if previous_features is not None and after_features is None:
             x = torch.concat([previous_features, x], 2)
         elif previous_features is None and after_features is not None:
@@ -206,11 +232,23 @@ class Encoder(nn.Module):
         elif previous_features is not None and after_features is not None:
             x = torch.concat([previous_features, x, after_features], 2)
 
-        x = self.conv_in(x)
-
-        ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
+        if self.training:
+            x = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(self.conv_in),
+                    x,
+                    **ckpt_kwargs,
+                )
+        else:
+            x = self.conv_in(x)
         for down_block in self.down_blocks:
-            x = down_block(x)
+            if self.training:
+                x = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(down_block),
+                    x,
+                    **ckpt_kwargs,
+                )
+            else:
+                x = down_block(x)
 
         x = self.mid_block(x)
 
@@ -236,7 +274,16 @@ class Encoder(nn.Module):
         if self.spatial_group_norm:
             self.set_3dgroupnorm_for_submodule()
 
-        if self.cache_compression_vae:
+        if self.cache_mag_vae:
+            self.set_magvit_padding_one_frame()
+            first_frames = self.single_forward(x[:, :, 0:1, :, :], None, None)
+            self.set_magvit_padding_more_frame()
+            new_pixel_values = [first_frames]
+            for i in range(1, x.shape[2], self.mini_batch_encoder):
+                next_frames = self.single_forward(x[:, :, i: i + self.mini_batch_encoder, :, :], None, None)
+                new_pixel_values.append(next_frames)
+            new_pixel_values = torch.cat(new_pixel_values, dim=2)
+        elif self.cache_compression_vae:
             _, _, f, _, _ = x.size()
             if f % 2 != 0:
                 self.set_padding_one_frame()
@@ -329,6 +376,7 @@ class Decoder(nn.Module):
         slice_mag_vae: bool = False,
         slice_compression_vae: bool = False,
         cache_compression_vae: bool = False,
+        cache_mag_vae: bool = False,
         spatial_group_norm: bool = False,
         mini_batch_decoder: int = 3, 
         verbose = False,
@@ -399,6 +447,7 @@ class Decoder(nn.Module):
         self.slice_mag_vae = slice_mag_vae
         self.slice_compression_vae = slice_compression_vae
         self.cache_compression_vae = cache_compression_vae
+        self.cache_mag_vae = cache_mag_vae
         self.mini_batch_decoder = mini_batch_decoder
         self.spatial_group_norm = spatial_group_norm
         self.verbose = verbose
@@ -424,6 +473,28 @@ class Decoder(nn.Module):
                 _set_padding_more_frame(sub_name, sub_mod)
         for name, module in self.named_children():
             _set_padding_more_frame(name, module)
+
+    def set_magvit_padding_one_frame(self):
+        def _set_magvit_padding_one_frame(name, module):
+            if hasattr(module, 'padding_flag'):
+                if self.verbose:
+                    print('Set pad mode for module[%s] type=%s' % (name, str(type(module))))
+                module.padding_flag = 3
+            for sub_name, sub_mod in module.named_children():
+                _set_magvit_padding_one_frame(sub_name, sub_mod)
+        for name, module in self.named_children():
+            _set_magvit_padding_one_frame(name, module)
+            
+    def set_magvit_padding_more_frame(self):
+        def _set_magvit_padding_more_frame(name, module):
+            if hasattr(module, 'padding_flag'):
+                if self.verbose:
+                    print('Set pad mode for module[%s] type=%s' % (name, str(type(module))))
+                module.padding_flag = 4
+            for sub_name, sub_mod in module.named_children():
+                _set_magvit_padding_more_frame(sub_name, sub_mod)
+        for name, module in self.named_children():
+            _set_magvit_padding_more_frame(name, module)
 
     def set_cache_slice_vae_padding_one_frame(self):
         def _set_cache_slice_vae_padding_one_frame(name, module):
@@ -471,7 +542,8 @@ class Decoder(nn.Module):
             
     def single_forward(self, x: torch.Tensor, previous_features: torch.Tensor, after_features: torch.Tensor) -> torch.Tensor:
         # x: (B, C, T, H, W)
-        ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
+        if self.training:
+            ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
         if previous_features is not None and after_features is None:
             b, c, t, h, w = x.size()
             x = torch.concat([previous_features, x], 2)
@@ -492,11 +564,30 @@ class Decoder(nn.Module):
             x = self.mid_block(x)
             x = x[:, :, t_1:(t_1 + t_2)]
         else:
-            x = self.conv_in(x)
-            x = self.mid_block(x)
-
+            if self.training:
+                x = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(self.conv_in),
+                    x,
+                    **ckpt_kwargs,
+                )
+                x = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(self.mid_block),
+                    x,
+                    **ckpt_kwargs,
+                )
+            else:
+                x = self.conv_in(x)
+                x = self.mid_block(x)
+                
         for up_block in self.up_blocks:
-            x = up_block(x)
+            if self.training:
+                x = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(up_block),
+                    x,
+                    **ckpt_kwargs,
+                )
+            else:
+                x = up_block(x)
 
         if self.spatial_group_norm:
             batch_size = x.shape[0]
@@ -515,7 +606,16 @@ class Decoder(nn.Module):
         if self.spatial_group_norm:
             self.set_3dgroupnorm_for_submodule()
 
-        if self.cache_compression_vae:
+        if self.cache_mag_vae:
+            self.set_magvit_padding_one_frame()
+            first_frames = self.single_forward(x[:, :, 0:1, :, :], None, None)
+            self.set_magvit_padding_more_frame()
+            new_pixel_values = [first_frames]
+            for i in range(1, x.shape[2], self.mini_batch_decoder):
+                next_frames = self.single_forward(x[:, :, i: i + self.mini_batch_decoder, :, :], None, None)
+                new_pixel_values.append(next_frames)
+            new_pixel_values = torch.cat(new_pixel_values, dim=2)
+        elif self.cache_compression_vae:
             _, _, f, _, _ = x.size()
             if f == 1:
                 self.set_padding_one_frame()

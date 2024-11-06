@@ -78,6 +78,43 @@ class CausalConv3d(nn.Conv3d):
             )
             x = x.to(dtype=dtype)
             return super().forward(x)
+        elif self.padding_flag == 3:
+            x = F.pad(
+                x,
+                pad=(0, 0, 0, 0, self.temporal_padding, 0),
+                mode="replicate",     # TODO: check if this is necessary
+            )
+            x = x.to(dtype=dtype)
+            self.prev_features = x[:, :, -self.temporal_padding:]
+
+            b, c, f, h, w = x.size()
+            outputs = []
+            i = 0
+            while i + self.temporal_padding + 1 <= f:
+                out = super().forward(x[:, :, i:i + self.temporal_padding + 1])
+                i += self.t_stride
+                outputs.append(out)
+            return torch.concat(outputs, 2)
+        elif self.padding_flag == 4:
+            if self.t_stride == 2:
+                x = torch.concat(
+                    [self.prev_features[:, :, -(self.temporal_padding - 1):], x], dim = 2
+                )
+            else:
+                x = torch.concat(
+                    [self.prev_features, x], dim = 2
+                )
+            x = x.to(dtype=dtype)
+            self.prev_features = x[:, :, -self.temporal_padding:]
+
+            b, c, f, h, w = x.size()
+            outputs = []
+            i = 0
+            while i + self.temporal_padding + 1 <= f:
+                out = super().forward(x[:, :, i:i + self.temporal_padding + 1])
+                i += self.t_stride
+                outputs.append(out)
+            return torch.concat(outputs, 2)
         elif self.padding_flag == 5:
             x = F.pad(
                 x,

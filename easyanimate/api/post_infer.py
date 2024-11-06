@@ -7,7 +7,6 @@ from io import BytesIO
 
 import cv2
 import requests
-import base64
 
 
 def post_diffusion_transformer(diffusion_transformer_path, url='http://127.0.0.1:7860'):

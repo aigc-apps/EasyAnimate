@@ -1,4 +1,3 @@
-import itertools
 from dataclasses import dataclass
 from typing import Optional
 
@@ -7,7 +6,6 @@ import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange
 
 from ..util import instantiate_from_config
 from .omnigen_enc_dec import Decoder as omnigen_Mag_Decoder
@@ -116,6 +114,7 @@ class AutoencoderKLMagvit_fromOmnigen(pl.LightningModule):
         slice_mag_vae=False,
         slice_compression_vae=False,
         cache_compression_vae=False,
+        cache_mag_vae=False,
         spatial_group_norm=False,
         mini_batch_encoder=9,
         mini_batch_decoder=3,
@@ -167,6 +166,7 @@ class AutoencoderKLMagvit_fromOmnigen(pl.LightningModule):
             slice_mag_vae=slice_mag_vae,
             slice_compression_vae=slice_compression_vae,
             cache_compression_vae=cache_compression_vae,
+            cache_mag_vae=cache_mag_vae,
             spatial_group_norm=spatial_group_norm,
             mini_batch_decoder=mini_batch_decoder,
         )
@@ -180,10 +180,12 @@ class AutoencoderKLMagvit_fromOmnigen(pl.LightningModule):
         self.train_encoder_only = train_encoder_only
         if train_decoder_only:
             self.encoder.requires_grad_(False)
-            self.quant_conv.requires_grad_(False)
+            if self.quant_conv is not None:
+                self.quant_conv.requires_grad_(False)
         if train_encoder_only:
             self.decoder.requires_grad_(False)
-            self.post_quant_conv.requires_grad_(False)
+            if self.post_quant_conv is not None:
+                self.post_quant_conv.requires_grad_(False)
         if monitor is not None:
             self.monitor = monitor
         if ckpt_path is not None:
@@ -205,27 +207,27 @@ class AutoencoderKLMagvit_fromOmnigen(pl.LightningModule):
                 if k.startswith(ik):
                     print("Deleting key {} from state_dict.".format(k))
                     del sd[k]
-        self.load_state_dict(sd, strict=False) # loss.item can be ignored successfully
+        m, u = self.load_state_dict(sd, strict=False) # loss.item can be ignored successfully
         print(f"Restored from {path}")
+        print(f"missing keys: {str(m)}, unexpected keys: {str(u)}")
 
     def encode(self, x: torch.Tensor) -> EncoderOutput:
         h = self.encoder(x)
 
-        moments: torch.Tensor = self.quant_conv(h)
+        if self.quant_conv is not None:
+            moments: torch.Tensor = self.quant_conv(h)
+        else:
+            moments: torch.Tensor = h
         mean, logvar = moments.chunk(2, dim=1)
         posterior = DiagonalGaussianDistribution(mean, logvar)
 
-        # return EncoderOutput(latent_dist=posterior)
         return posterior
 
     def decode(self, z: torch.Tensor) -> DecoderOutput:
-        z = self.post_quant_conv(z)
-
+        if self.post_quant_conv is not None:
+            z = self.post_quant_conv(z)
         decoded = self.decoder(z)
-
-        # return DecoderOutput(sample=decoded)
         return decoded
-
 
     def forward(self, input, sample_posterior=True):
         if input.ndim==4:
@@ -250,30 +252,22 @@ class AutoencoderKLMagvit_fromOmnigen(pl.LightningModule):
         return x
 
     def training_step(self, batch, batch_idx, optimizer_idx):
-        # tic = time.time()
         inputs = self.get_input(batch, self.image_key)
-        # print(f"get_input time {time.time() - tic}")
-        # tic = time.time()
         reconstructions, posterior = self(inputs)
-        # print(f"model forward time {time.time() - tic}")
 
         if optimizer_idx == 0:
-            # train encoder+decoder+logvar
             aeloss, log_dict_ae = self.loss(inputs, reconstructions, posterior, optimizer_idx, self.global_step,
                                             last_layer=self.get_last_layer(), split="train")
             self.log("aeloss", aeloss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
             self.log_dict(log_dict_ae, prog_bar=False, logger=True, on_step=True, on_epoch=False)
-            # print(f"cal loss time {time.time() - tic}")
             return aeloss
 
         if optimizer_idx == 1:
-            # train the discriminator
             discloss, log_dict_disc = self.loss(inputs, reconstructions, posterior, optimizer_idx, self.global_step,
                                                 last_layer=self.get_last_layer(), split="train")
 
             self.log("discloss", discloss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
             self.log_dict(log_dict_disc, prog_bar=False, logger=True, on_step=True, on_epoch=False)
-            # print(f"cal loss time {time.time() - tic}")
             return discloss
 
     def validation_step(self, batch, batch_idx):
@@ -294,21 +288,28 @@ class AutoencoderKLMagvit_fromOmnigen(pl.LightningModule):
     def configure_optimizers(self):
         lr = self.learning_rate
         if self.train_decoder_only:
-            opt_ae = torch.optim.Adam(list(self.decoder.parameters())+
-                                    list(self.post_quant_conv.parameters()),
-                                    lr=lr, betas=(0.5, 0.9))
+            if self.post_quant_conv is not None:
+                training_list = list(self.decoder.parameters()) + list(self.post_quant_conv.parameters())
+            else:
+                training_list = list(self.decoder.parameters())
+            opt_ae = torch.optim.Adam(training_list, lr=lr, betas=(0.5, 0.9))
         elif self.train_encoder_only:
-            opt_ae = torch.optim.Adam(list(self.encoder.parameters())+
-                                    list(self.quant_conv.parameters()),
-                                    lr=lr, betas=(0.5, 0.9))
+            if self.quant_conv is not None:
+                training_list = list(self.encoder.parameters()) + list(self.quant_conv.parameters())
+            else:
+                training_list = list(self.encoder.parameters())
+            opt_ae = torch.optim.Adam(training_list, lr=lr, betas=(0.5, 0.9))
         else:
-            opt_ae = torch.optim.Adam(list(self.encoder.parameters())+
-                                    list(self.decoder.parameters())+
-                                    list(self.quant_conv.parameters())+
-                                    list(self.post_quant_conv.parameters()),
-                                    lr=lr, betas=(0.5, 0.9))
-        opt_disc = torch.optim.Adam(list(self.loss.discriminator3d.parameters()) + list(self.loss.discriminator.parameters()),
-                                    lr=lr, betas=(0.5, 0.9))
+            training_list = list(self.encoder.parameters()) + list(self.decoder.parameters())
+            if self.quant_conv is not None:
+                training_list = training_list + list(self.quant_conv.parameters())
+            if self.post_quant_conv is not None:
+                training_list = training_list + list(self.post_quant_conv.parameters())
+            opt_ae = torch.optim.Adam(training_list, lr=lr, betas=(0.5, 0.9))
+        opt_disc = torch.optim.Adam(
+            list(self.loss.discriminator3d.parameters()) + list(self.loss.discriminator.parameters()),
+            lr=lr, betas=(0.5, 0.9)
+        )
         return [opt_ae, opt_disc], []
 
     def get_last_layer(self):

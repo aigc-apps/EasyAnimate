@@ -2,7 +2,8 @@ from typing import Any, Dict, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
-from diffusers.models.embeddings import TimestepEmbedding, Timesteps
+from diffusers.models.embeddings import (CombinedTimestepLabelEmbeddings,
+                                         TimestepEmbedding, Timesteps)
 from torch import nn
 
 
@@ -11,7 +12,6 @@ def zero_module(module):
     for p in module.parameters():
         p.detach().zero_()
     return module
-
 
 class FP32LayerNorm(nn.LayerNorm):
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
@@ -115,3 +115,36 @@ class AdaLayerNormShift(nn.Module):
         shift = self.linear(self.silu(emb.to(torch.float32)).to(emb.dtype))
         x = self.norm(x) + shift.unsqueeze(dim=1)
         return x
+
+class EasyAnimateLayerNormZero(nn.Module):
+    # Modified from https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/normalization.py
+    # Add fp32 layer norm
+    def __init__(
+        self,
+        conditioning_dim: int,
+        embedding_dim: int,
+        elementwise_affine: bool = True,
+        eps: float = 1e-5,
+        bias: bool = True,
+        norm_type: str = "fp32_layer_norm",
+    ) -> None:
+        super().__init__()
+
+        self.silu = nn.SiLU()
+        self.linear = nn.Linear(conditioning_dim, 6 * embedding_dim, bias=bias)
+        if norm_type == "layer_norm":
+            self.norm = nn.LayerNorm(embedding_dim, elementwise_affine=elementwise_affine, eps=eps)
+        elif norm_type == "fp32_layer_norm":
+            self.norm = FP32LayerNorm(embedding_dim, elementwise_affine=elementwise_affine, eps=eps)
+        else:
+            raise ValueError(
+                f"Unsupported `norm_type` ({norm_type}) provided. Supported ones are: 'layer_norm', 'fp32_layer_norm'."
+            )
+
+    def forward(
+        self, hidden_states: torch.Tensor, encoder_hidden_states: torch.Tensor, temb: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        shift, scale, gate, enc_shift, enc_scale, enc_gate = self.linear(self.silu(temb)).chunk(6, dim=1)
+        hidden_states = self.norm(hidden_states) * (1 + scale)[:, None, :] + shift[:, None, :]
+        encoder_hidden_states = self.norm(encoder_hidden_states) * (1 + enc_scale)[:, None, :] + enc_shift[:, None, :]
+        return hidden_states, encoder_hidden_states, gate[:, None, :], enc_gate[:, None, :]

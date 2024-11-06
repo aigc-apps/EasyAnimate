@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
+import gc
 import html
 import inspect
 import re
-import gc
-import copy
 import urllib.parse as ul
 from dataclasses import dataclass
-from PIL import Image
 from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -34,9 +33,10 @@ from diffusers.utils import (BACKENDS_MAPPING, BaseOutput, deprecate,
                              replace_example_docstring)
 from diffusers.utils.torch_utils import randn_tensor
 from einops import rearrange
+from PIL import Image
 from tqdm import tqdm
-from transformers import T5EncoderModel, T5Tokenizer
-from transformers import CLIPVisionModelWithProjection,  CLIPImageProcessor
+from transformers import (CLIPImageProcessor, CLIPVisionModelWithProjection,
+                          T5EncoderModel, T5Tokenizer)
 
 from ..models.transformer3d import Transformer3DModel
 

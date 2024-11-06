@@ -37,10 +37,6 @@ except:
     from diffusers.models.embeddings import \
         CaptionProjection as PixArtAlphaTextProjection
 
-from .attention import (KVCompressionTransformerBlock,
-                        SelfAttentionTemporalTransformerBlock,
-                        TemporalTransformerBlock)
-
 
 @dataclass
 class Transformer2DModelOutput(BaseOutput):
@@ -196,58 +192,29 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
                 interpolation_scale=interpolation_scale,
             )
 
-        basic_block = {
-            "basic": BasicTransformerBlock,
-            "kvcompression": KVCompressionTransformerBlock,
-        }[self.basic_block_type]
-        if self.basic_block_type == "kvcompression":
-            self.transformer_blocks = nn.ModuleList(
-                [
-                    basic_block(
-                        inner_dim,
-                        num_attention_heads,
-                        attention_head_dim,
-                        dropout=dropout,
-                        cross_attention_dim=cross_attention_dim,
-                        activation_fn=activation_fn,
-                        num_embeds_ada_norm=num_embeds_ada_norm,
-                        attention_bias=attention_bias,
-                        only_cross_attention=only_cross_attention,
-                        double_self_attention=double_self_attention,
-                        upcast_attention=upcast_attention,
-                        norm_type=norm_type,
-                        norm_elementwise_affine=norm_elementwise_affine,
-                        norm_eps=norm_eps,
-                        attention_type=attention_type,
-                        kvcompression=False if d < 14 else True,
-                    )
-                    for d in range(num_layers)
-                ]
-            )
-        else:
-            # 3. Define transformers blocks
-            self.transformer_blocks = nn.ModuleList(
-                [
-                    BasicTransformerBlock(
-                        inner_dim,
-                        num_attention_heads,
-                        attention_head_dim,
-                        dropout=dropout,
-                        cross_attention_dim=cross_attention_dim,
-                        activation_fn=activation_fn,
-                        num_embeds_ada_norm=num_embeds_ada_norm,
-                        attention_bias=attention_bias,
-                        only_cross_attention=only_cross_attention,
-                        double_self_attention=double_self_attention,
-                        upcast_attention=upcast_attention,
-                        norm_type=norm_type,
-                        norm_elementwise_affine=norm_elementwise_affine,
-                        norm_eps=norm_eps,
-                        attention_type=attention_type,
-                    )
-                    for d in range(num_layers)
-                ]
-            )
+        # 3. Define transformers blocks
+        self.transformer_blocks = nn.ModuleList(
+            [
+                BasicTransformerBlock(
+                    inner_dim,
+                    num_attention_heads,
+                    attention_head_dim,
+                    dropout=dropout,
+                    cross_attention_dim=cross_attention_dim,
+                    activation_fn=activation_fn,
+                    num_embeds_ada_norm=num_embeds_ada_norm,
+                    attention_bias=attention_bias,
+                    only_cross_attention=only_cross_attention,
+                    double_self_attention=double_self_attention,
+                    upcast_attention=upcast_attention,
+                    norm_type=norm_type,
+                    norm_elementwise_affine=norm_elementwise_affine,
+                    norm_eps=norm_eps,
+                    attention_type=attention_type,
+                )
+                for d in range(num_layers)
+            ]
+        )
 
         # 4. Define output layers
         self.out_channels = in_channels if out_channels is None else out_channels
@@ -413,7 +380,6 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
             if self.training and self.gradient_checkpointing:
                 args = {
                     "basic": [],
-                    "kvcompression": [1, height, width],
                 }[self.basic_block_type]
                 hidden_states = torch.utils.checkpoint.checkpoint(
                     block,
@@ -430,7 +396,6 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
             else:
                 kwargs = {
                     "basic": {},
-                    "kvcompression": {"num_frames":1, "height":height, "width":width},
                 }[self.basic_block_type]
                 hidden_states = block(
                     hidden_states,

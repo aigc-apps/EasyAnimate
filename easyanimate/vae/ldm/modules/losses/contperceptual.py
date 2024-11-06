@@ -2,7 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from taming.modules.losses.vqperceptual import *  # TODO: taming dependency yes/no?
+
 from ..vaemodules.discriminator import Discriminator3D
+
 
 class LPIPSWithDiscriminator(nn.Module):
     def __init__(self, disc_start, logvar_init=0.0, kl_weight=1.0, pixelloss_weight=1.0,
@@ -62,15 +64,6 @@ class LPIPSWithDiscriminator(nn.Module):
 
         # get new loss_weight
         loss_weights = 1
-        # b, _ ,f, _, _ = reconstructions.size()
-        # loss_weights = torch.ones([b, f]).view(b, 1, f, 1, 1)
-        # loss_weights[:, :, 0] = 3
-        # for i in range(1, f, 8):
-        #     loss_weights[:, :, i - 1] = 3
-        #     loss_weights[:, :, i] = 3
-        # loss_weights[:, :, -1] = 3
-        # loss_weights = loss_weights.permute(0, 2, 1, 3, 4).flatten(0, 1).to(reconstructions.device)
-
         inputs = inputs.permute(0, 2, 1, 3, 4).flatten(0, 1)
         reconstructions = reconstructions.permute(0, 2, 1, 3, 4).flatten(0, 1)
 

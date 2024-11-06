@@ -17,7 +17,7 @@ from decord import VideoReader
 from func_timeout import FunctionTimedOut, func_set_timeout
 from omegaconf import OmegaConf
 from PIL import Image
-from torch.utils.data import (BatchSampler, Dataset, Sampler)
+from torch.utils.data import BatchSampler, Dataset, Sampler
 from tqdm import tqdm
 
 from ..modules.image_degradation import (degradation_fn_bsr,
@@ -164,15 +164,18 @@ class ImageVideoDataset(Dataset):
         return self.base[index].get('type', 'image')
 
     def __getitem__(self, i):
-        @func_set_timeout(3) # time wait 3 seconds
+        @func_set_timeout(15) # time wait 3 seconds
         def get_video_item(example):
             if self.data_root is not None:
                 video_reader = VideoReader(os.path.join(self.data_root, example['file_path']))
             else:
                 video_reader = VideoReader(example['file_path'])
             video_length = len(video_reader)
-            
-            clip_length = min(video_length, (self.video_len - 1) * self.slice_interval + 1)
+            if self.slice_interval == "rand":
+                slice_interval = np.random.choice([1, 2, 3])
+            else:
+                slice_interval = int(self.slice_interval)
+            clip_length = min(video_length, (self.video_len - 1) * slice_interval + 1)
             start_idx   = random.randint(0, video_length - clip_length)
             batch_index = np.linspace(start_idx, start_idx + clip_length - 1, self.video_len, dtype=int)
 

@@ -1,17 +1,19 @@
 """Modified from https://github.com/JaidedAI/EasyOCR/blob/803b907/easyocr/detection.py.
 1. Disable DataParallel.
 """
-import torch
-import torch.backends.cudnn as cudnn
-from torch.autograd import Variable
-from PIL import Image
 from collections import OrderedDict
 
 import cv2
 import numpy as np
-from .craft_utils import getDetBoxes, adjustResultCoordinates
-from .imgproc import resize_aspect_ratio, normalizeMeanVariance
+import torch
+import torch.backends.cudnn as cudnn
+from PIL import Image
+from torch.autograd import Variable
+
 from .craft import CRAFT
+from .craft_utils import adjustResultCoordinates, getDetBoxes
+from .imgproc import normalizeMeanVariance, resize_aspect_ratio
+
 
 def copyStateDict(state_dict):
     if list(state_dict.keys())[0].startswith("module"):

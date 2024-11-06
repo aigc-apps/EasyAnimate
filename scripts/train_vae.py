@@ -21,17 +21,17 @@ from pytorch_lightning.callbacks import (Callback, LearningRateMonitor,
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.utilities import rank_zero_info, rank_zero_only
-from torch.utils.data import (DataLoader, Dataset, RandomSampler,
-                              Sampler, Subset, random_split)
+from torch.utils.data import (DataLoader, Dataset, RandomSampler, Sampler,
+                              Subset, random_split)
 
 current_file_path = os.path.abspath(__file__)
 project_roots = [os.path.dirname(current_file_path), os.path.dirname(os.path.dirname(current_file_path))]
 for project_root in project_roots:
     sys.path.insert(0, project_root) if project_root not in sys.path else None
 from easyanimate.vae.ldm.data.base import Txt2ImgIterableBaseDataset
+from easyanimate.vae.ldm.data.dataset_callback import DatasetCallback
 from easyanimate.vae.ldm.data.dataset_image_video import ImageVideoSampler
 from easyanimate.vae.ldm.util import instantiate_from_config
-from easyanimate.vae.ldm.data.dataset_callback import DatasetCallback
 
 
 def get_parser(**parser_kwargs):

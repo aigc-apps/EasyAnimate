@@ -1,15 +1,14 @@
 import argparse
-import re
 import os
-from tqdm import tqdm
+import re
 
 import pandas as pd
 import torch
 from natsort import index_natsorted
-from vllm import LLM, SamplingParams
+from tqdm import tqdm
 from transformers import AutoTokenizer
-
 from utils.logger import logger
+from vllm import LLM, SamplingParams
 
 
 def extract_output(s, prefix='"rewritten description": '):

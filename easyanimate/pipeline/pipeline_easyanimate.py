@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import html
 import inspect
-import copy
 import re
 import urllib.parse as ul
 from dataclasses import dataclass

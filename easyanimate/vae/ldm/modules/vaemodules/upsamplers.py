@@ -148,7 +148,7 @@ class SpatialTemporalUpsampler3D(Upsampler):
                 first_frame, x = x[:, :, :1], x[:, :, 1:]
                 x = F.interpolate(x, scale_factor=(2, 1, 1), mode="trilinear" if not self.set_3dgroupnorm else "nearest")
                 x = torch.cat([first_frame, x], dim=2)
-        elif self.padding_flag == 2 or self.padding_flag == 5 or self.padding_flag == 6:
+        elif self.padding_flag == 2 or self.padding_flag == 4 or self.padding_flag == 5 or self.padding_flag == 6:
             x = F.interpolate(x, scale_factor=(2, 1, 1), mode="trilinear" if not self.set_3dgroupnorm else "nearest")
         return x
 

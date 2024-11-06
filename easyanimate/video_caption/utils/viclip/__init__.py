@@ -1,9 +1,11 @@
+import os
+
+import cv2
+import numpy as np
+import torch
+
 from .simple_tokenizer import SimpleTokenizer as _Tokenizer
 from .viclip import ViCLIP
-import torch
-import numpy as np
-import cv2
-import os
 
 
 def get_viclip(size='l', 

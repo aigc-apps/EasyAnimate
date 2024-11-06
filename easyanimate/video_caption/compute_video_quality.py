@@ -2,14 +2,13 @@ import argparse
 import os
 
 import pandas as pd
+import utils.image_evaluator as image_evaluator
+import utils.video_evaluator as video_evaluator
 from accelerate import PartialState
 from accelerate.utils import gather_object
 from natsort import index_natsorted
-from tqdm import tqdm
 from torch.utils.data import DataLoader
-
-import utils.image_evaluator as image_evaluator
-import utils.video_evaluator as video_evaluator
+from tqdm import tqdm
 from utils.logger import logger
 from utils.video_dataset import VideoDataset, collate_fn
 

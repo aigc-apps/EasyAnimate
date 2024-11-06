@@ -7,7 +7,6 @@ from tqdm import tqdm
 
 from .logger import logger
 
-
 ALL_VIDEO_EXT = set(["mp4", "webm", "mkv", "avi", "flv", "mov"])
 ALL_IMGAE_EXT = set(["png", "webp", "jpg", "jpeg", "bmp", "gif"])
 
