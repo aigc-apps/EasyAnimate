@@ -21,6 +21,7 @@ from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import (get_video_to_video_latent,
                                      save_videos_grid)
+from easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
 
 # GPU memory mode, which can be choosen in [model_cpu_offload, model_cpu_offload_and_qfloat8, sequential_cpu_offload].
 # model_cpu_offload means that the entire model will be moved to the CPU after use, which can save some GPU memory.
@@ -223,9 +224,8 @@ if GPU_memory_mode == "sequential_cpu_offload":
     pipeline.enable_sequential_cpu_offload()
 elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
     pipeline.enable_model_cpu_offload()
-    from optimum.quanto import freeze, qfloat8, quantize
-    quantize(pipeline.transformer, weights=qfloat8)
-    freeze(pipeline.transformer)
+    pipeline.enable_autocast_float8_transformer()
+    convert_weight_dtype_wrapper(pipeline.transformer, weight_dtype)
 else:
     pipeline.enable_model_cpu_offload()
 

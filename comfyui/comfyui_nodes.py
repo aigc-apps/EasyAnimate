@@ -36,6 +36,7 @@ from ..easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_control impo
 from ..easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from ..easyanimate.utils.utils import (get_image_to_video_latent,
                                        get_video_to_video_latent)
+from ..easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
 
 # Compatible with Alibaba EAS for quick launch
 eas_cache_dir       = '/stable-diffusion-cache/models'
@@ -274,9 +275,8 @@ class LoadEasyAnimateModel:
             pipeline.enable_sequential_cpu_offload()
         elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
             pipeline.enable_model_cpu_offload()
-            from optimum.quanto import freeze, qfloat8, quantize
-            quantize(pipeline.transformer, weights=qfloat8)
-            freeze(pipeline.transformer)
+            pipeline.enable_autocast_float8_transformer()
+            convert_weight_dtype_wrapper(transformer, weight_dtype)
         else:
             pipeline.enable_model_cpu_offload()
         easyanimate_model = {

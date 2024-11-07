@@ -179,6 +179,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
 
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
+        self.enable_autocast_float8_transformer_flag = False
         self.register_to_config(requires_safety_checker=requires_safety_checker)
 
     def enable_sequential_cpu_offload(self, *args, **kwargs):
@@ -576,6 +577,9 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
     def interrupt(self):
         return self._interrupt
 
+    def enable_autocast_float8_transformer(self):
+        self.enable_autocast_float8_transformer_flag = True
+
     @torch.no_grad()
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
@@ -829,6 +833,9 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         style = style.to(device=device).repeat(batch_size * num_images_per_prompt)
 
         torch.cuda.empty_cache()
+        if self.enable_autocast_float8_transformer_flag:
+            origin_weight_dtype = self.transformer.dtype
+            self.transformer = self.transformer.to(torch.float8_e4m3fn)
         # 8. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         self._num_timesteps = len(timesteps)
@@ -897,6 +904,9 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
 
                 if comfyui_progressbar:
                     pbar.update(1)
+
+        if self.enable_autocast_float8_transformer_flag:
+            self.transformer = self.transformer.to("cpu", origin_weight_dtype)
 
         torch.cuda.empty_cache()
         # Post-processing

@@ -129,6 +129,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         self.mask_processor = VaeImageProcessor(
             vae_scale_factor=self.vae_scale_factor, do_normalize=False, do_binarize=True, do_convert_grayscale=True
         )
+        self.enable_autocast_float8_transformer_flag = False
 
     # Adapted from https://github.com/PixArt-alpha/PixArt-alpha/blob/master/diffusion/model/utils.py
     def mask_text_embeddings(self, emb, mask):
@@ -683,6 +684,9 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
 
         return timesteps, num_inference_steps - t_start
 
+    def enable_autocast_float8_transformer(self):
+        self.enable_autocast_float8_transformer_flag = True
+
     @torch.no_grad()
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
@@ -996,6 +1000,9 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         gc.collect()
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
+        if self.enable_autocast_float8_transformer_flag:
+            origin_weight_dtype = self.transformer.dtype
+            self.transformer = self.transformer.to(torch.float8_e4m3fn)
 
         # 10. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
@@ -1074,16 +1081,17 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
 
                 if comfyui_progressbar:
                     pbar.update(1)
+
+        if self.enable_autocast_float8_transformer_flag:
+            self.transformer = self.transformer.to("cpu", origin_weight_dtype)
+
         gc.collect()
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
 
         # Post-processing
         video = self.decode_latents(latents)
-        
-        gc.collect()
-        torch.cuda.empty_cache()
-        torch.cuda.ipc_collect()
+
         # Convert to tensor
         if output_type == "latent":
             video = torch.from_numpy(video)
