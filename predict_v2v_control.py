@@ -60,7 +60,7 @@ control_video           = "asset/pose.mp4"
 # EasyAnimateV1, V2 and V3 support English.
 # EasyAnimateV4 and V5 support English and Chinese.
 prompt                  = "A person wearing a knee-length white sleeveless dress and white high-heeled sandals performs a dance in a well-lit room with wooden flooring. The room's background features a closed door, a shelf displaying clear glass bottles of alcoholic beverages, and a partially visible dark-colored sofa. "
-negative_prompt         = "The video is not of a high quality, it has a low resolution. Watermark present in each frame. The background is solid. Strange body and strange trajectory. Distortion. "
+negative_prompt         = "Unclear, mutated, deformed, distorted, dark frames, fixed frames, comic book, comic book, small and indistinguishable subject."
 guidance_scale          = 6.0
 seed                    = 43
 num_inference_steps     = 50

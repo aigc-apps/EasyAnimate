@@ -69,9 +69,9 @@ denoise_strength        = 0.70
 # # EasyAnimateV1, V2 and V3 support English.
 # EasyAnimateV4 and V5 support English and Chinese.
 prompt                  = "一只猫正在弹吉他。"
-negative_prompt         = "视频质量不高，分辨率低。每帧中都有水印。背景是坚实的。奇怪的身体和奇怪的轨迹。扭曲。"
+negative_prompt         = "模糊，突变，变形，失真，画面暗，画面固定，连环画，漫画，线稿，没有主体。"
 # prompt                  = "A cute cat is playing the guitar. "
-# negative_prompt         = "The video is not of a high quality, it has a low resolution. Watermark present in each frame. The background is solid. Strange body and strange trajectory. Distortion. "
+# negative_prompt         = "Unclear, mutated, deformed, distorted, dark frames, fixed frames, comic book, comic book, small and indistinguishable subject."
 guidance_scale          = 6.0
 seed                    = 43
 num_inference_steps     = 50

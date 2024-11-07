@@ -66,9 +66,9 @@ weight_dtype        = torch.bfloat16
 # # EasyAnimateV1, V2 and V3 support English.
 # EasyAnimateV4 and V5 support English and Chinese.
 prompt              = "一条狗正在摇头。质量高、杰作、最佳品质、高分辨率、超精细、梦幻般。"
-negative_prompt     = "视频质量不高，分辨率低。每帧中都有水印。背景是坚实的。奇怪的身体和奇怪的轨迹。扭曲。"
+negative_prompt     = "模糊，突变，变形，失真，画面暗，画面固定，连环画，漫画，线稿，没有主体。"
 # prompt              = "A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
-# negative_prompt     = "The video is not of a high quality, it has a low resolution. Watermark present in each frame. The background is solid. Strange body and strange trajectory. Distortion. "
+# negative_prompt     = "Unclear, mutated, deformed, distorted, dark frames, fixed frames, comic book, comic book, small and indistinguishable subject."
 guidance_scale      = 6.0
 seed                = 43
 num_inference_steps = 50
