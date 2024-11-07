@@ -43,6 +43,7 @@ from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import (
     get_image_to_video_latent, get_video_to_video_latent,
     get_width_and_height_from_image_and_base_resolution, save_videos_grid)
+from easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
 
 scheduler_dict = {
     "Euler": EulerDiscreteScheduler,
@@ -279,9 +280,8 @@ class EasyAnimateController:
             self.pipeline.enable_sequential_cpu_offload()
         elif self.GPU_memory_mode == "model_cpu_offload_and_qfloat8":
             self.pipeline.enable_model_cpu_offload()
-            from optimum.quanto import freeze, qfloat8, quantize
-            quantize(self.pipeline.transformer, weights=qfloat8)
-            freeze(self.pipeline.transformer)
+            self.pipeline.enable_autocast_float8_transformer()
+            convert_weight_dtype_wrapper(self.pipeline.transformer, self.weight_dtype)
         else:
             self.GPU_memory_mode.enable_model_cpu_offload()
         print("Update diffusion transformer done")
@@ -360,7 +360,7 @@ class EasyAnimateController:
         validation_video,
         validation_video_mask,
         control_video,
-        denoise_strength,
+        denoise_strength, 
         seed_textbox,
         is_api = False,
     ):
@@ -426,6 +426,7 @@ class EasyAnimateController:
             else:
                 raise gr.Error(f"If specifying the ending image of the video, please specify a starting image of the video.")
 
+        fps = {"v1": 12, "v2": 24, "v3": 24, "v4": 24, "v5": 8}[self.edition]
         is_image = True if generation_method == "Image Generation" else False
 
         if is_xformers_available() and not self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False): self.transformer.enable_xformers_memory_efficient_attention()
@@ -511,7 +512,7 @@ class EasyAnimateController:
                         else:
                             length_slider = int(length_slider // self.vae.mini_batch_encoder * self.vae.mini_batch_encoder)
                         if validation_video is not None:
-                            input_video, input_video_mask, clip_image = get_video_to_video_latent(validation_video, length_slider if not is_image else 1, sample_size=(height_slider, width_slider), validation_video_mask=validation_video_mask, fps=8)
+                            input_video, input_video_mask, clip_image = get_video_to_video_latent(validation_video, length_slider if not is_image else 1, sample_size=(height_slider, width_slider), validation_video_mask=validation_video_mask, fps=fps)
                             strength = denoise_strength
                         else:
                             input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
@@ -552,7 +553,7 @@ class EasyAnimateController:
                     length_slider = int((length_slider - 1) // self.vae.mini_batch_encoder * self.vae.mini_batch_encoder) + 1
                 else:
                     length_slider = int(length_slider // self.vae.mini_batch_encoder * self.vae.mini_batch_encoder)
-                input_video, input_video_mask, clip_image = get_video_to_video_latent(control_video, length_slider if not is_image else 1, sample_size=(height_slider, width_slider), fps=8)
+                input_video, input_video_mask, clip_image = get_video_to_video_latent(control_video, length_slider if not is_image else 1, sample_size=(height_slider, width_slider), fps=fps)
 
                 sample = self.pipeline(
                     prompt_textbox,
@@ -627,7 +628,7 @@ class EasyAnimateController:
                     return gr.Image.update(value=save_sample_path, visible=True), gr.Video.update(value=None, visible=False), "Success"
         else:
             save_sample_path = os.path.join(self.savedir_sample, prefix + f".mp4")
-            save_videos_grid(sample, save_sample_path, fps=12 if self.edition == "v1" else 24)
+            save_videos_grid(sample, save_sample_path, fps=fps)
 
             if is_api:
                 return save_sample_path, "Success"
@@ -888,7 +889,7 @@ def ui(GPU_memory_mode, weight_dtype):
                 elif generation_method == "Image Generation":
                     return [gr.update(visible=False), gr.update(visible=False), gr.update(visible=False)]
                 else:
-                    return [gr.update(visible=True, maximum=1344), gr.update(visible=True), gr.update(visible=True)]
+                    return [gr.update(visible=True, maximum=1200), gr.update(visible=True), gr.update(visible=True)]
             generation_method.change(
                 upload_generation_method, generation_method, [length_slider, overlap_video_length, partial_video_length]
             )
@@ -1112,9 +1113,8 @@ class EasyAnimateController_Modelscope:
             self.pipeline.enable_sequential_cpu_offload()
         elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
             self.pipeline.enable_model_cpu_offload()
-            from optimum.quanto import freeze, qfloat8, quantize
-            quantize(self.pipeline.transformer, weights=qfloat8)
-            freeze(self.pipeline.transformer)
+            self.pipeline.enable_autocast_float8_transformer()
+            convert_weight_dtype_wrapper(self.pipeline.transformer, weight_dtype)
         else:
             GPU_memory_mode.enable_model_cpu_offload()
         print("Update diffusion transformer done")
@@ -1135,6 +1135,7 @@ class EasyAnimateController_Modelscope:
     def generate(
         self,
         diffusion_transformer_dropdown,
+        motion_module_dropdown,
         base_model_dropdown,
         lora_model_dropdown, 
         lora_alpha_slider,
@@ -1156,7 +1157,7 @@ class EasyAnimateController_Modelscope:
         validation_video,
         validation_video_mask,
         control_video,
-        denoise_strength,
+        denoise_strength, 
         seed_textbox,
         is_api = False,
     ):    
@@ -1213,6 +1214,7 @@ class EasyAnimateController_Modelscope:
             else:
                 raise gr.Error(f"If specifying the ending image of the video, please specify a starting image of the video.")
 
+        fps = {"v1": 12, "v2": 24, "v3": 24, "v4": 24, "v5": 8}[self.edition]
         is_image = True if generation_method == "Image Generation" else False
 
         self.pipeline.scheduler = scheduler_dict[sampler_dropdown].from_config(self.pipeline.scheduler.config)
@@ -1233,7 +1235,7 @@ class EasyAnimateController_Modelscope:
                     
                 if self.transformer.config.in_channels != self.vae.config.latent_channels:
                     if validation_video is not None:
-                        input_video, input_video_mask, clip_image = get_video_to_video_latent(validation_video, length_slider if not is_image else 1, sample_size=(height_slider, width_slider), validation_video_mask=validation_video_mask, fps=8)
+                        input_video, input_video_mask, clip_image = get_video_to_video_latent(validation_video, length_slider if not is_image else 1, sample_size=(height_slider, width_slider), validation_video_mask=validation_video_mask, fps=fps)
                         strength = denoise_strength
                     else:
                         input_video, input_video_mask, clip_image = get_image_to_video_latent(start_image, end_image, length_slider if not is_image else 1, sample_size=(height_slider, width_slider))
@@ -1270,7 +1272,7 @@ class EasyAnimateController_Modelscope:
                 else:
                     length_slider = int(length_slider // self.vae.mini_batch_encoder * self.vae.mini_batch_encoder)
 
-                input_video, input_video_mask, clip_image = get_video_to_video_latent(control_video, length_slider if not is_image else 1, sample_size=(height_slider, width_slider), fps=8)
+                input_video, input_video_mask, clip_image = get_video_to_video_latent(control_video, length_slider if not is_image else 1, sample_size=(height_slider, width_slider), fps=fps)
 
                 sample = self.pipeline(
                     prompt_textbox,
@@ -1328,7 +1330,7 @@ class EasyAnimateController_Modelscope:
                     return gr.Image.update(value=save_sample_path, visible=True), gr.Video.update(value=None, visible=False), "Success"
         else:
             save_sample_path = os.path.join(self.savedir_sample, prefix + f".mp4")
-            save_videos_grid(sample, save_sample_path, fps=12 if self.edition == "v1" else 24)
+            save_videos_grid(sample, save_sample_path, fps=fps)
             if is_api:
                 return save_sample_path, "Success"
             else:
@@ -1392,7 +1394,7 @@ def ui_modelscope(model_type, edition, config_path, model_name, savedir_sample, 
                             label="Select LoRA model",
                             choices=["none"],
                             value="none",
-                            interactive=True,
+                            interactive=False,
                         )
 
                         lora_alpha_slider = gr.Slider(label="LoRA alpha (LoRA权重)", value=0.55, minimum=0, maximum=2, interactive=True)
@@ -1434,8 +1436,8 @@ def ui_modelscope(model_type, edition, config_path, model_name, savedir_sample, 
                             value="Generate by",
                             show_label=False,
                         )
-                        width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=128, maximum=1280, step=16, interactive=False)
-                        height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=128, maximum=1280, step=16, interactive=False)
+                        width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=128, maximum=1344, step=16, interactive=False)
+                        height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=128, maximum=1344, step=16, interactive=False)
                         base_resolution  = gr.Radio(label="Base Resolution of Pretrained Models", value=512, choices=[512, 768, 960], interactive=False, visible=False)
 
                         with gr.Group():
@@ -1549,9 +1551,9 @@ def ui_modelscope(model_type, edition, config_path, model_name, savedir_sample, 
                     f_value = 49
 
                 if generation_method == "Video Generation":
-                    return gr.update(visible=True, maximum=f_maximum, value=f_value, interactive=False)
+                    return gr.update(visible=True, maximum=f_maximum, value=f_value)
                 elif generation_method == "Image Generation":
-                    return gr.update(visible=False, interactive=False)
+                    return gr.update(visible=False)
             generation_method.change(
                 upload_generation_method, generation_method, [length_slider]
             )
@@ -1706,9 +1708,9 @@ class EasyAnimateController_EAS:
         cfg_scale_slider, 
         start_image, 
         end_image, 
-        validation_video, 
-        validation_video_mask, 
-        denoise_strength,
+        validation_video,
+        validation_video_mask,
+        denoise_strength, 
         seed_textbox
     ):
         is_image = True if generation_method == "Image Generation" else False
@@ -1806,7 +1808,7 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                             label="Select LoRA model",
                             choices=["none"],
                             value="none",
-                            interactive=True,
+                            interactive=False,
                         )
 
                         lora_alpha_slider = gr.Slider(label="LoRA alpha (LoRA权重)", value=0.55, minimum=0, maximum=2, interactive=True)
@@ -1846,8 +1848,8 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                             value="Generate by",
                             show_label=False,
                         )
-                        width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=128, maximum=1280, step=16, interactive=False)
-                        height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=128, maximum=1280, step=16, interactive=False)
+                        width_slider     = gr.Slider(label="Width (视频宽度)",            value=672, minimum=128, maximum=1344, step=16, interactive=False)
+                        height_slider    = gr.Slider(label="Height (视频高度)",           value=384, minimum=128, maximum=1344, step=16, interactive=False)
                         base_resolution  = gr.Radio(label="Base Resolution of Pretrained Models", value=512, choices=[512, 768, 960], interactive=False, visible=False)
 
                         with gr.Group():
@@ -1947,9 +1949,9 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                     f_value = 49
 
                 if generation_method == "Video Generation":
-                    return gr.update(visible=True, maximum=f_maximum, value=f_value, interactive=False)
+                    return gr.update(visible=True, maximum=f_maximum, value=f_value)
                 elif generation_method == "Image Generation":
-                    return gr.update(visible=False, interactive=False)
+                    return gr.update(visible=False)
             generation_method.change(
                 upload_generation_method, generation_method, [length_slider]
             )

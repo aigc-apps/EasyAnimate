@@ -40,7 +40,7 @@ if __name__ == "__main__":
     savedir_sample = "samples"
 
     if ui_mode == "modelscope":
-        demo, controller = ui_modelscope(edition, config_path, model_name, savedir_sample, GPU_memory_mode, weight_dtype)
+        demo, controller = ui_modelscope(model_type, edition, config_path, model_name, savedir_sample, GPU_memory_mode, weight_dtype)
     elif ui_mode == "eas":
         demo, controller = ui_eas(edition, config_path, model_name, savedir_sample)
     else:
