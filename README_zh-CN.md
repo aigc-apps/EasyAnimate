@@ -244,6 +244,7 @@ qfloat8会降低模型的性能，但可以节省更多的显存。如果显存�
 一个完整的EasyAnimate训练链路应该包括数据预处理、Video VAE训练、Video DiT训练。其中Video VAE训练是一个可选项，因为我们已经提供了训练好的Video VAE。
 
 <h4 id="data-preprocess">a.数据预处理</h4>
+
 我们给出了一个简单的demo通过图片数据训练lora模型，详情可以查看[wiki](https://github.com/aigc-apps/EasyAnimate/wiki/Training-Lora)。
 
 一个完整的长视频切分、清洗、描述的数据预处理链路可以参考video caption部分的[README](easyanimate/video_caption/README.md)进行。
