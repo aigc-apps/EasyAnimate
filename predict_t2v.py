@@ -33,7 +33,7 @@ from easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
 # 
 # sequential_cpu_offload means that each layer of the model will be moved to the CPU after use, 
 # resulting in slower speeds but saving a large amount of GPU memory.
-GPU_memory_mode     = "model_cpu_offload_and_qfloat8"
+GPU_memory_mode     = "model_cpu_offload"
 
 # Config and model path
 config_path         = "config/easyanimate_video_v5_magvit_multi_text_encoder.yaml"
@@ -68,7 +68,7 @@ weight_dtype        = torch.bfloat16
 prompt              = "一条狗正在摇头。质量高、杰作、最佳品质、高分辨率、超精细、梦幻般。"
 negative_prompt     = "模糊，突变，变形，失真，画面暗，画面固定，连环画，漫画，线稿，没有主体。"
 # prompt              = "A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
-# negative_prompt     = "Unclear, mutated, deformed, distorted, dark frames, fixed frames, comic book, comic book, small and indistinguishable subject."
+# negative_prompt     = "Blurring, mutation, deformation, distortion, dark and solid, comics."
 guidance_scale      = 6.0
 seed                = 43
 num_inference_steps = 50

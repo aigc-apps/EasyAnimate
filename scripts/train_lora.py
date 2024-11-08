@@ -1891,7 +1891,17 @@ def main():
                     )[0]
                     if noise_pred.size()[1] != vae.config.latent_channels:
                         noise_pred, _ = noise_pred.chunk(2, dim=1)
-                    loss = F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
+
+                    def custom_mse_loss(noise_pred, target, threshold=50):
+                        noise_pred = noise_pred.float()
+                        target = target.float()
+                        diff = noise_pred - target
+                        mse_loss = F.mse_loss(noise_pred, target, reduction='none')
+                        mask = (diff.abs() <= threshold).float()
+                        masked_loss = mse_loss * mask
+                        final_loss = masked_loss.mean()
+                        return final_loss
+                    loss = custom_mse_loss(noise_pred.float(), target.float())
 
                     if args.motion_sub_loss and noise_pred.size()[2] > 2:
                         gt_sub_noise = noise_pred[:, :, 1:].float() - noise_pred[:, :, :-1].float()

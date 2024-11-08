@@ -59,8 +59,8 @@ control_video           = "asset/pose.mp4"
 
 # EasyAnimateV1, V2 and V3 support English.
 # EasyAnimateV4 and V5 support English and Chinese.
-prompt                  = "A person wearing a knee-length white sleeveless dress and white high-heeled sandals performs a dance in a well-lit room with wooden flooring. The room's background features a closed door, a shelf displaying clear glass bottles of alcoholic beverages, and a partially visible dark-colored sofa. "
-negative_prompt         = "Unclear, mutated, deformed, distorted, dark frames, fixed frames, comic book, comic book, small and indistinguishable subject."
+prompt                  = "一位年轻女子，有着美丽清澈的眼睛和金发，穿着白色的衣服在扭动身体，相机聚焦在她的脸上。质量高、杰作、最佳品质、高分辨率、超精细、梦幻般。"
+negative_prompt         = "模糊，突变，变形，失真，画面暗，画面固定，连环画，漫画，线稿，没有主体。"
 guidance_scale          = 6.0
 seed                    = 43
 num_inference_steps     = 50

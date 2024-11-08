@@ -752,7 +752,7 @@ def ui(GPU_memory_mode, weight_dtype):
             )
             
             prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Unclear, mutated, deformed, distorted, dark frames, fixed frames, comic book, comic book, small and indistinguishable subject." )
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Blurring, mutation, deformation, distortion, dark and solid, comics." )
                 
             with gr.Row():
                 with gr.Column():
@@ -1407,7 +1407,7 @@ def ui_modelscope(model_type, edition, config_path, model_name, savedir_sample, 
             )
 
             prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Unclear, mutated, deformed, distorted, dark frames, fixed frames, comic book, comic book, small and indistinguishable subject." )
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Blurring, mutation, deformation, distortion, dark and solid, comics." )
                 
             with gr.Row():
                 with gr.Column():
@@ -1821,7 +1821,7 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
             )
             
             prompt_textbox = gr.Textbox(label="Prompt", lines=2, value="A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="Unclear, mutated, deformed, distorted, dark frames, fixed frames, comic book, comic book, small and indistinguishable subject." )
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="Blurring, mutation, deformation, distortion, dark and solid, comics." )
                 
             with gr.Row():
                 with gr.Column():

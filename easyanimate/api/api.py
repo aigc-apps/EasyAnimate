@@ -93,7 +93,7 @@ def infer_forward_api(_: gr.Blocks, app: FastAPI, controller):
         lora_model_path = datas.get('lora_model_path', 'none')
         lora_alpha_slider = datas.get('lora_alpha_slider', 0.55)
         prompt_textbox = datas.get('prompt_textbox', None)
-        negative_prompt_textbox = datas.get('negative_prompt_textbox', 'Unclear, mutated, deformed, distorted, dark frames, fixed frames, comic book, comic book, small and indistinguishable subject.')
+        negative_prompt_textbox = datas.get('negative_prompt_textbox', 'Blurring, mutation, deformation, distortion, dark and solid, comics.')
         sampler_dropdown = datas.get('sampler_dropdown', 'Euler')
         sample_step_slider = datas.get('sample_step_slider', 30)
         resize_method = datas.get('resize_method', "Generate by")
