@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import html
 import inspect
-import copy
 import re
 import urllib.parse as ul
 from dataclasses import dataclass
@@ -154,7 +154,8 @@ class EasyAnimatePipeline(DiffusionPipeline):
 
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
-
+        self.enable_autocast_float8_transformer_flag = False
+        
     # Adapted from https://github.com/PixArt-alpha/PixArt-alpha/blob/master/diffusion/model/utils.py
     def mask_text_embeddings(self, emb, mask):
         if emb.shape[0] == 1:
@@ -579,6 +580,9 @@ class EasyAnimatePipeline(DiffusionPipeline):
         video = video.cpu().float().numpy()
         return video
 
+    def enable_autocast_float8_transformer(self):
+        self.enable_autocast_float8_transformer_flag = True
+
     @torch.no_grad()
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
@@ -753,9 +757,13 @@ class EasyAnimatePipeline(DiffusionPipeline):
 
             added_cond_kwargs = {"resolution": resolution, "aspect_ratio": aspect_ratio}
 
+        torch.cuda.empty_cache()
+        if self.enable_autocast_float8_transformer_flag:
+            origin_weight_dtype = self.transformer.dtype
+            self.transformer = self.transformer.to(torch.float8_e4m3fn)
+
         # 7. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
-
         if comfyui_progressbar:
             from comfy.utils import ProgressBar
             pbar = ProgressBar(num_inference_steps)
@@ -812,6 +820,9 @@ class EasyAnimatePipeline(DiffusionPipeline):
 
                 if comfyui_progressbar:
                     pbar.update(1)
+
+        if self.enable_autocast_float8_transformer_flag:
+            self.transformer = self.transformer.to("cpu", origin_weight_dtype)
 
         # Post-processing
         video = self.decode_latents(latents)

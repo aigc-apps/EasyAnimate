@@ -6,8 +6,8 @@
       "id": 80,
       "type": "Note",
       "pos": [
-        20,
-        -300
+        19.46723632812501,
+        -310.0837280273436
       ],
       "size": {
         "0": 210,
@@ -115,87 +115,11 @@
       ]
     },
     {
-      "id": 17,
-      "type": "VHS_VideoCombine",
-      "pos": [
-        1163,
-        34
-      ],
-      "size": [
-        390.9534912109375,
-        535.9734235491071
-      ],
-      "flags": {},
-      "order": 7,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 53,
-          "label": "图像",
-          "slot_index": 0
-        },
-        {
-          "name": "audio",
-          "type": "VHS_AUDIO",
-          "link": null,
-          "label": "音频"
-        },
-        {
-          "name": "meta_batch",
-          "type": "VHS_BatchManager",
-          "link": null,
-          "label": "批次管理"
-        },
-        {
-          "name": "vae",
-          "type": "VAE",
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "name": "Filenames",
-          "type": "VHS_FILENAMES",
-          "links": null,
-          "shape": 3,
-          "label": "文件名",
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "VHS_VideoCombine"
-      },
-      "widgets_values": {
-        "frame_rate": 24,
-        "loop_count": 0,
-        "filename_prefix": "EasyAnimate",
-        "format": "video/h264-mp4",
-        "pix_fmt": "yuv420p",
-        "crf": 22,
-        "save_metadata": true,
-        "pingpong": false,
-        "save_output": true,
-        "videopreview": {
-          "hidden": false,
-          "paused": false,
-          "params": {
-            "filename": "EasyAnimate_00038.mp4",
-            "subfolder": "",
-            "type": "output",
-            "format": "video/h264-mp4",
-            "frame_rate": 24
-          }
-        }
-      }
-    },
-    {
       "id": 96,
       "type": "LoadEasyAnimateLora",
       "pos": [
-        717,
-        -306
+        716.467236328125,
+        -316.0837280273436
       ],
       "size": {
         "0": 461.959228515625,
@@ -292,12 +216,12 @@
       "id": 95,
       "type": "LoadEasyAnimateModel",
       "pos": [
-        244,
-        -305
+        243.467236328125,
+        -315.0837280273436
       ],
       "size": {
         "0": 436.8020324707031,
-        "1": 130
+        "1": 154
       },
       "flags": {},
       "order": 4,
@@ -318,10 +242,87 @@
       },
       "widgets_values": [
         "EasyAnimateV4-XL-2-InP",
-        false,
-        "easyanimate_video_slicevae_multi_text_encoder_v4.yaml",
+        "model_cpu_offload",
+        "Inpaint",
+        "easyanimate_video_v4_slicevae_multi_text_encoder.yaml",
         "bf16"
       ]
+    },
+    {
+      "id": 17,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        1163,
+        34
+      ],
+      "size": [
+        390.9534912109375,
+        535.9734235491071
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 53,
+          "label": "图像",
+          "slot_index": 0
+        },
+        {
+          "name": "audio",
+          "type": "VHS_AUDIO",
+          "link": null,
+          "label": "音频"
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "label": "批次管理"
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null,
+          "shape": 3,
+          "label": "文件名",
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 24,
+        "loop_count": 0,
+        "filename_prefix": "EasyAnimate",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 22,
+        "save_metadata": true,
+        "pingpong": false,
+        "save_output": true,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "filename": "EasyAnimate_00054.mp4",
+            "subfolder": "",
+            "type": "output",
+            "format": "video/h264-mp4",
+            "frame_rate": 24
+          }
+        }
+      }
     }
   ],
   "links": [
@@ -381,10 +382,10 @@
     {
       "title": "Load EasyAnimate",
       "bounding": [
-        220,
-        -380,
-        984,
-        222
+        219,
+        -390,
+        985,
+        240
       ],
       "color": "#b06634",
       "font_size": 24
@@ -395,8 +396,8 @@
     "ds": {
       "scale": 0.9090909090909091,
       "offset": [
-        37.69186709817238,
-        437.95756823454843
+        38.375070223172365,
+        449.4001463595484
       ]
     },
     "workspace_info": {

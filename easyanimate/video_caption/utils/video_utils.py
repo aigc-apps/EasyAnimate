@@ -1,7 +1,7 @@
 import gc
 import random
 from contextlib import contextmanager
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 from decord import VideoReader

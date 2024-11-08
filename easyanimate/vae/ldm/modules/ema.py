@@ -1,7 +1,8 @@
 #-*- encoding:utf-8 -*-
 import torch
-from torch import nn
 from pytorch_lightning.callbacks import Callback
+from torch import nn
+
 
 class LitEma(nn.Module):
     def __init__(self, model, decay=0.9999, use_num_upates=True):

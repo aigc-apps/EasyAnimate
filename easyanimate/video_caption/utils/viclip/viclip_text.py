@@ -1,15 +1,16 @@
-import os
+import functools
 import logging
+import os
 from collections import OrderedDict
-from pkg_resources import packaging
-from .simple_tokenizer import SimpleTokenizer as _Tokenizer
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch import nn
 import torch.utils.checkpoint as checkpoint
-import functools
+from pkg_resources import packaging
+from torch import nn
+
+from .simple_tokenizer import SimpleTokenizer as _Tokenizer
 
 logger = logging.getLogger(__name__)
 

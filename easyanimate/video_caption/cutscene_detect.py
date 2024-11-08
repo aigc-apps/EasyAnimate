@@ -1,14 +1,13 @@
 import argparse
 import os
 from copy import deepcopy
-from pathlib import Path
 from multiprocessing import Pool
+from pathlib import Path
 
 import pandas as pd
-from scenedetect import open_video, SceneManager
+from scenedetect import SceneManager, open_video
 from scenedetect.detectors import ContentDetector
 from tqdm import tqdm
-
 from utils.logger import logger
 
 

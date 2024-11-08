@@ -1,4 +1,4 @@
-# Copyright 2024 HunyuanDiT Authors and The HuggingFace Team. All rights reserved.
+# Copyright 2024 EasyAnimate Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,22 +19,23 @@ import numpy as np
 import torch
 from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
 from diffusers.image_processor import VaeImageProcessor
-from diffusers.models import AutoencoderKL, HunyuanDiT2DModel
-from diffusers.models.embeddings import get_2d_rotary_pos_embed
+from diffusers.models.embeddings import (get_2d_rotary_pos_embed,
+                                         get_3d_rotary_pos_embed)
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline
 from diffusers.pipelines.stable_diffusion import StableDiffusionPipelineOutput
 from diffusers.pipelines.stable_diffusion.safety_checker import \
     StableDiffusionSafetyChecker
-from diffusers.schedulers import DDPMScheduler
+from diffusers.schedulers import DDIMScheduler
 from diffusers.utils import (is_torch_xla_available, logging,
                              replace_example_docstring)
 from diffusers.utils.torch_utils import randn_tensor
 from einops import rearrange
 from tqdm import tqdm
 from transformers import (BertModel, BertTokenizer, CLIPImageProcessor,
-                          MT5Tokenizer, T5EncoderModel)
+                          T5Tokenizer, T5EncoderModel)
 
 from .pipeline_easyanimate import EasyAnimatePipelineOutput
+from ..models import AutoencoderKLMagvit, EasyAnimateTransformer3DModel
 
 if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
@@ -49,66 +50,17 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 EXAMPLE_DOC_STRING = """
     Examples:
         ```py
-        >>> import torch
-        >>> from diffusers import HunyuanDiTPipeline
-
-        >>> pipe = HunyuanDiTPipeline.from_pretrained("Tencent-Hunyuan/HunyuanDiT", torch_dtype=torch.float16)
-        >>> pipe.to("cuda")
-
-        >>> # You may also use English prompt as HunyuanDiT supports both English and Chinese
-        >>> # prompt = "An astronaut riding a horse"
-        >>> prompt = "一个宇航员在骑马"
-        >>> image = pipe(prompt).images[0]
+        >>> pass
         ```
 """
 
-STANDARD_RATIO = np.array(
-    [
-        1.0,  # 1:1
-        4.0 / 3.0,  # 4:3
-        3.0 / 4.0,  # 3:4
-        16.0 / 9.0,  # 16:9
-        9.0 / 16.0,  # 9:16
-    ]
-)
-STANDARD_SHAPE = [
-    [(1024, 1024), (1280, 1280)],  # 1:1
-    [(1024, 768), (1152, 864), (1280, 960)],  # 4:3
-    [(768, 1024), (864, 1152), (960, 1280)],  # 3:4
-    [(1280, 768)],  # 16:9
-    [(768, 1280)],  # 9:16
-]
-STANDARD_AREA = [np.array([w * h for w, h in shapes]) for shapes in STANDARD_SHAPE]
-SUPPORTED_SHAPE = [
-    (1024, 1024),
-    (1280, 1280),  # 1:1
-    (1024, 768),
-    (1152, 864),
-    (1280, 960),  # 4:3
-    (768, 1024),
-    (864, 1152),
-    (960, 1280),  # 3:4
-    (1280, 768),  # 16:9
-    (768, 1280),  # 9:16
-]
 
-
-def map_to_standard_shapes(target_width, target_height):
-    target_ratio = target_width / target_height
-    closest_ratio_idx = np.argmin(np.abs(STANDARD_RATIO - target_ratio))
-    closest_area_idx = np.argmin(np.abs(STANDARD_AREA[closest_ratio_idx] - target_width * target_height))
-    width, height = STANDARD_SHAPE[closest_ratio_idx][closest_area_idx]
-    return width, height
-
-
-def get_resize_crop_region_for_grid(src, tgt_size):
-    th = tw = tgt_size
+def get_resize_crop_region_for_grid(src, tgt_width, tgt_height):
+    tw = tgt_width
+    th = tgt_height
     h, w = src
-
     r = h / w
-
-    # resize
-    if r > 1:
+    if r > (th / tw):
         resize_height = th
         resize_width = int(round(th / h * w))
     else:
@@ -138,31 +90,30 @@ def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
 
 class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
     r"""
-    Pipeline for English/Chinese-to-image generation using HunyuanDiT.
+    Pipeline for text-to-video generation using EasyAnimate.
 
     This model inherits from [`DiffusionPipeline`]. Check the superclass documentation for the generic methods the
     library implements for all the pipelines (such as downloading or saving, running on a particular device, etc.)
 
-    HunyuanDiT uses two text encoders: [mT5](https://huggingface.co/google/mt5-base) and [bilingual CLIP](fine-tuned by
-    ourselves)
+    EasyAnimate uses two text encoders: [mT5](https://huggingface.co/google/mt5-base) and [bilingual CLIP](fine-tuned by
+    HunyuanDiT team)
 
     Args:
-        vae ([`AutoencoderKL`]):
-            Variational Auto-Encoder (VAE) Model to encode and decode images to and from latent representations. We use
-            `sdxl-vae-fp16-fix`.
+        vae ([`AutoencoderKLMagvit`]):
+            Variational Auto-Encoder (VAE) Model to encode and decode video to and from latent representations. 
         text_encoder (Optional[`~transformers.BertModel`, `~transformers.CLIPTextModel`]):
             Frozen text-encoder ([clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14)).
-            HunyuanDiT uses a fine-tuned [bilingual CLIP].
+            EasyAnimate uses a fine-tuned [bilingual CLIP].
         tokenizer (Optional[`~transformers.BertTokenizer`, `~transformers.CLIPTokenizer`]):
             A `BertTokenizer` or `CLIPTokenizer` to tokenize text.
-        transformer ([`HunyuanDiT2DModel`]):
-            The HunyuanDiT model designed by Tencent Hunyuan.
+        transformer ([`EasyAnimateTransformer3DModel`]):
+            The EasyAnimate model designed by Tencent Hunyuan.
         text_encoder_2 (`T5EncoderModel`):
-            The mT5 embedder. Specifically, it is 't5-v1_1-xxl'.
-        tokenizer_2 (`MT5Tokenizer`):
+            The mT5 embedder. 
+        tokenizer_2 (`T5Tokenizer`):
             The tokenizer for the mT5 embedder.
-        scheduler ([`DDPMScheduler`]):
-            A scheduler to be used in combination with HunyuanDiT to denoise the encoded image latents.
+        scheduler ([`DDIMScheduler`]):
+            A scheduler to be used in combination with EasyAnimate to denoise the encoded image latents.
     """
 
     model_cpu_offload_seq = "text_encoder->text_encoder_2->transformer->vae"
@@ -185,16 +136,16 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
 
     def __init__(
         self,
-        vae: AutoencoderKL,
+        vae: AutoencoderKLMagvit,
         text_encoder: BertModel,
         tokenizer: BertTokenizer,
-        transformer: HunyuanDiT2DModel,
-        scheduler: DDPMScheduler,
+        text_encoder_2: T5EncoderModel,
+        tokenizer_2: T5Tokenizer,
+        transformer: EasyAnimateTransformer3DModel,
+        scheduler: DDIMScheduler,
         safety_checker: StableDiffusionSafetyChecker,
         feature_extractor: CLIPImageProcessor,
         requires_safety_checker: bool = True,
-        text_encoder_2=T5EncoderModel,
-        tokenizer_2=MT5Tokenizer,
     ):
         super().__init__()
 
@@ -228,8 +179,15 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
 
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
+        self.enable_autocast_float8_transformer_flag = False
         self.register_to_config(requires_safety_checker=requires_safety_checker)
-        self.default_sample_size = self.transformer.config.sample_size
+
+    def enable_sequential_cpu_offload(self, *args, **kwargs):
+        super().enable_sequential_cpu_offload(*args, **kwargs)
+        if hasattr(self.transformer, "clip_projection") and self.transformer.clip_projection is not None:
+            import accelerate
+            accelerate.hooks.remove_hook_from_module(self.transformer.clip_projection, recurse=True)
+            self.transformer.clip_projection = self.transformer.clip_projection.to("cuda")
 
     def encode_prompt(
         self,
@@ -245,7 +203,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
         max_sequence_length: Optional[int] = None,
         text_encoder_index: int = 0,
-        actual_max_sequence_length: int = 140,
+        actual_max_sequence_length: int = 256
     ):
         r"""
         Encodes the prompt into text encoder hidden states.
@@ -288,9 +246,9 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
 
         if max_sequence_length is None:
             if text_encoder_index == 0:
-                max_length = 77
+                max_length = min(self.tokenizer.model_max_length, actual_max_sequence_length)
             if text_encoder_index == 1:
-                max_length = 256
+                max_length = min(self.tokenizer_2.model_max_length, actual_max_sequence_length)
         else:
             max_length = max_sequence_length
 
@@ -334,10 +292,16 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
                     f" {_actual_max_sequence_length} tokens: {removed_text}"
                 )
             prompt_attention_mask = text_inputs.attention_mask.to(device)
-            prompt_embeds = text_encoder(
-                text_input_ids.to(device),
-                attention_mask=prompt_attention_mask,
-            )
+
+            if self.transformer.config.enable_text_attention_mask:
+                prompt_embeds = text_encoder(
+                    text_input_ids.to(device),
+                    attention_mask=prompt_attention_mask,
+                )
+            else:
+                prompt_embeds = text_encoder(
+                    text_input_ids.to(device)
+                )
             prompt_embeds = prompt_embeds[0]
             prompt_attention_mask = prompt_attention_mask.repeat(num_images_per_prompt, 1)
 
@@ -391,10 +355,15 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
                 uncond_input_ids = uncond_input.input_ids
 
             negative_prompt_attention_mask = uncond_input.attention_mask.to(device)
-            negative_prompt_embeds = text_encoder(
-                uncond_input.input_ids.to(device),
-                attention_mask=negative_prompt_attention_mask,
-            )
+            if self.transformer.config.enable_text_attention_mask:
+                negative_prompt_embeds = text_encoder(
+                    uncond_input.input_ids.to(device),
+                    attention_mask=negative_prompt_attention_mask,
+                )
+            else:
+                negative_prompt_embeds = text_encoder(
+                    uncond_input.input_ids.to(device)
+                )
             negative_prompt_embeds = negative_prompt_embeds[0]
             negative_prompt_attention_mask = negative_prompt_attention_mask.repeat(num_images_per_prompt, 1)
 
@@ -520,10 +489,15 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
 
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.prepare_latents
     def prepare_latents(self, batch_size, num_channels_latents, video_length, height, width, dtype, device, generator, latents=None):
-        if self.vae.quant_conv.weight.ndim==5:
-            mini_batch_encoder = self.vae.mini_batch_encoder
-            mini_batch_decoder = self.vae.mini_batch_decoder
-            shape = (batch_size, num_channels_latents, int(video_length // mini_batch_encoder * mini_batch_decoder) if video_length != 1 else 1, height // self.vae_scale_factor, width // self.vae_scale_factor)
+        if self.vae.quant_conv is None or self.vae.quant_conv.weight.ndim==5:
+            if self.vae.cache_mag_vae:
+                mini_batch_encoder = self.vae.mini_batch_encoder
+                mini_batch_decoder = self.vae.mini_batch_decoder
+                shape = (batch_size, num_channels_latents, int((video_length - 1) // mini_batch_encoder * mini_batch_decoder + 1) if video_length != 1 else 1, height // self.vae_scale_factor, width // self.vae_scale_factor)
+            else:
+                mini_batch_encoder = self.vae.mini_batch_encoder
+                mini_batch_decoder = self.vae.mini_batch_decoder
+                shape = (batch_size, num_channels_latents, int(video_length // mini_batch_encoder * mini_batch_decoder) if video_length != 1 else 1, height // self.vae_scale_factor, width // self.vae_scale_factor)
         else:
             shape = (batch_size, num_channels_latents, video_length, height // self.vae_scale_factor, width // self.vae_scale_factor)
 
@@ -542,7 +516,6 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         latents = latents * self.scheduler.init_noise_sigma
         return latents
 
-
     def smooth_output(self, video, mini_batch_encoder, mini_batch_decoder):
         if video.size()[2] <= mini_batch_encoder:
             return video
@@ -560,17 +533,14 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         return video
 
     def decode_latents(self, latents):
-        self.vae.decoder = self.vae.decoder.float()
-        self.vae.post_quant_conv = self.vae.post_quant_conv.float()
-        latents = latents.float()
         video_length = latents.shape[2]
         latents = 1 / self.vae.config.scaling_factor * latents
-        if self.vae.quant_conv.weight.ndim==5:
+        if self.vae.quant_conv is None or self.vae.quant_conv.weight.ndim==5:
             mini_batch_encoder = self.vae.mini_batch_encoder
             mini_batch_decoder = self.vae.mini_batch_decoder
             video = self.vae.decode(latents)[0]
             video = video.clamp(-1, 1)
-            if not self.vae.cache_compression_vae:
+            if not self.vae.cache_compression_vae and not self.vae.cache_mag_vae:
                 video = self.smooth_output(video, mini_batch_encoder, mini_batch_decoder).cpu().clamp(-1, 1)
         else:
             latents = rearrange(latents, "b c f h w -> (b f) c h w")
@@ -583,7 +553,6 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         # we always cast to float32 as this does not cause significant overhead and is compatible with bfloa16
         video = video.cpu().float().numpy()
         return video
-
 
     @property
     def guidance_scale(self):
@@ -607,6 +576,9 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
     @property
     def interrupt(self):
         return self._interrupt
+
+    def enable_autocast_float8_transformer(self):
+        self.enable_autocast_float8_transformer_flag = True
 
     @torch.no_grad()
     @replace_example_docstring(EXAMPLE_DOC_STRING)
@@ -641,80 +613,66 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         original_size: Optional[Tuple[int, int]] = (1024, 1024),
         target_size: Optional[Tuple[int, int]] = None,
         crops_coords_top_left: Tuple[int, int] = (0, 0),
-        use_resolution_binning: bool = False,
+        comfyui_progressbar: bool = False,
     ):
         r"""
-        The call function to the pipeline for generation with HunyuanDiT.
-
-        Args:
-            prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to guide image generation. If not defined, you need to pass `prompt_embeds`.
-            height (`int`):
-                The height in pixels of the generated image.
-            width (`int`):
-                The width in pixels of the generated image.
-            num_inference_steps (`int`, *optional*, defaults to 50):
-                The number of denoising steps. More denoising steps usually lead to a higher quality image at the
-                expense of slower inference. This parameter is modulated by `strength`.
-            guidance_scale (`float`, *optional*, defaults to 7.5):
-                A higher guidance scale value encourages the model to generate images closely linked to the text
-                `prompt` at the expense of lower image quality. Guidance scale is enabled when `guidance_scale > 1`.
-            negative_prompt (`str` or `List[str]`, *optional*):
-                The prompt or prompts to guide what to not include in image generation. If not defined, you need to
-                pass `negative_prompt_embeds` instead. Ignored when not using guidance (`guidance_scale < 1`).
-            num_images_per_prompt (`int`, *optional*, defaults to 1):
-                The number of images to generate per prompt.
-            eta (`float`, *optional*, defaults to 0.0):
-                Corresponds to parameter eta (η) from the [DDIM](https://arxiv.org/abs/2010.02502) paper. Only applies
-                to the [`~schedulers.DDIMScheduler`], and is ignored in other schedulers.
-            generator (`torch.Generator` or `List[torch.Generator]`, *optional*):
-                A [`torch.Generator`](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make
-                generation deterministic.
-            prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs (prompt weighting). If not
-                provided, text embeddings are generated from the `prompt` input argument.
-            prompt_embeds_2 (`torch.Tensor`, *optional*):
-                Pre-generated text embeddings. Can be used to easily tweak text inputs (prompt weighting). If not
-                provided, text embeddings are generated from the `prompt` input argument.
-            negative_prompt_embeds (`torch.Tensor`, *optional*):
-                Pre-generated negative text embeddings. Can be used to easily tweak text inputs (prompt weighting). If
-                not provided, `negative_prompt_embeds` are generated from the `negative_prompt` input argument.
-            negative_prompt_embeds_2 (`torch.Tensor`, *optional*):
-                Pre-generated negative text embeddings. Can be used to easily tweak text inputs (prompt weighting). If
-                not provided, `negative_prompt_embeds` are generated from the `negative_prompt` input argument.
-            prompt_attention_mask (`torch.Tensor`, *optional*):
-                Attention mask for the prompt. Required when `prompt_embeds` is passed directly.
-            prompt_attention_mask_2 (`torch.Tensor`, *optional*):
-                Attention mask for the prompt. Required when `prompt_embeds_2` is passed directly.
-            negative_prompt_attention_mask (`torch.Tensor`, *optional*):
-                Attention mask for the negative prompt. Required when `negative_prompt_embeds` is passed directly.
-            negative_prompt_attention_mask_2 (`torch.Tensor`, *optional*):
-                Attention mask for the negative prompt. Required when `negative_prompt_embeds_2` is passed directly.
-            output_type (`str`, *optional*, defaults to `"pil"`):
-                The output format of the generated image. Choose between `PIL.Image` or `np.array`.
-            return_dict (`bool`, *optional*, defaults to `True`):
-                Whether or not to return a [`~pipelines.stable_diffusion.StableDiffusionPipelineOutput`] instead of a
-                plain tuple.
-            callback_on_step_end (`Callable[[int, int, Dict], None]`, `PipelineCallback`, `MultiPipelineCallbacks`, *optional*):
-                A callback function or a list of callback functions to be called at the end of each denoising step.
-            callback_on_step_end_tensor_inputs (`List[str]`, *optional*):
-                A list of tensor inputs that should be passed to the callback function. If not defined, all tensor
-                inputs will be passed.
-            guidance_rescale (`float`, *optional*, defaults to 0.0):
-                Rescale the noise_cfg according to `guidance_rescale`. Based on findings of [Common Diffusion Noise
-                Schedules and Sample Steps are Flawed](https://arxiv.org/pdf/2305.08891.pdf). See Section 3.4
-            original_size (`Tuple[int, int]`, *optional*, defaults to `(1024, 1024)`):
-                The original size of the image. Used to calculate the time ids.
-            target_size (`Tuple[int, int]`, *optional*):
-                The target size of the image. Used to calculate the time ids.
-            crops_coords_top_left (`Tuple[int, int]`, *optional*, defaults to `(0, 0)`):
-                The top left coordinates of the crop. Used to calculate the time ids.
-            use_resolution_binning (`bool`, *optional*, defaults to `True`):
-                Whether to use resolution binning or not. If `True`, the input resolution will be mapped to the closest
-                standard resolution. Supported resolutions are 1024x1024, 1280x1280, 1024x768, 1152x864, 1280x960,
-                768x1024, 864x1152, 960x1280, 1280x768, and 768x1280. It is recommended to set this to `True`.
+        Generates images or video using the EasyAnimate pipeline based on the provided prompts.
 
         Examples:
+            prompt (`str` or `List[str]`, *optional*): 
+                Text prompts to guide the image or video generation. If not provided, use `prompt_embeds` instead.
+            video_length (`int`, *optional*): 
+                Length of the generated video (in frames).
+            height (`int`, *optional*): 
+                Height of the generated image in pixels.
+            width (`int`, *optional*): 
+                Width of the generated image in pixels.
+            num_inference_steps (`int`, *optional*, defaults to 50): 
+                Number of denoising steps during generation. More steps generally yield higher quality images but slow down inference.
+            guidance_scale (`float`, *optional*, defaults to 5.0): 
+                Encourages the model to align outputs with prompts. A higher value may decrease image quality.
+            negative_prompt (`str` or `List[str]`, *optional*): 
+                Prompts indicating what to exclude in generation. If not specified, use `negative_prompt_embeds`.
+            num_images_per_prompt (`int`, *optional*, defaults to 1): 
+                Number of images to generate for each prompt.
+            eta (`float`, *optional*, defaults to 0.0): 
+                Applies to DDIM scheduling. Controlled by the eta parameter from the related literature.
+            generator (`torch.Generator` or `List[torch.Generator]`, *optional*): 
+                A generator to ensure reproducibility in image generation.
+            latents (`torch.Tensor`, *optional*): 
+                Predefined latent tensors to condition generation.
+            prompt_embeds (`torch.Tensor`, *optional*): 
+                Text embeddings for the prompts. Overrides prompt string inputs for more flexibility.
+            prompt_embeds_2 (`torch.Tensor`, *optional*): 
+                Secondary text embeddings to supplement or replace the initial prompt embeddings.
+            negative_prompt_embeds (`torch.Tensor`, *optional*): 
+                Embeddings for negative prompts. Overrides string inputs if defined.
+            negative_prompt_embeds_2 (`torch.Tensor`, *optional*): 
+                Secondary embeddings for negative prompts, similar to `negative_prompt_embeds`.
+            prompt_attention_mask (`torch.Tensor`, *optional*): 
+                Attention mask for the primary prompt embeddings.
+            prompt_attention_mask_2 (`torch.Tensor`, *optional*): 
+                Attention mask for the secondary prompt embeddings.
+            negative_prompt_attention_mask (`torch.Tensor`, *optional*): 
+                Attention mask for negative prompt embeddings.
+            negative_prompt_attention_mask_2 (`torch.Tensor`, *optional*): 
+                Attention mask for secondary negative prompt embeddings.
+            output_type (`str`, *optional*, defaults to "latent"): 
+                Format of the generated output, either as a PIL image or as a NumPy array.
+            return_dict (`bool`, *optional*, defaults to `True`): 
+                If `True`, returns a structured output. Otherwise returns a simple tuple.
+            callback_on_step_end (`Callable`, *optional*): 
+                Functions called at the end of each denoising step.
+            callback_on_step_end_tensor_inputs (`List[str]`, *optional*): 
+                Tensor names to be included in callback function calls.
+            guidance_rescale (`float`, *optional*, defaults to 0.0): 
+                Adjusts noise levels based on guidance scale.
+            original_size (`Tuple[int, int]`, *optional*, defaults to `(1024, 1024)`): 
+                Original dimensions of the output.
+            target_size (`Tuple[int, int]`, *optional*): 
+                Desired output dimensions for calculations.
+            crops_coords_top_left (`Tuple[int, int]`, *optional*, defaults to `(0, 0)`): 
+                Coordinates for cropping.
 
         Returns:
             [`~pipelines.stable_diffusion.StableDiffusionPipelineOutput`] or `tuple`:
@@ -728,16 +686,8 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
             callback_on_step_end_tensor_inputs = callback_on_step_end.tensor_inputs
 
         # 0. default height and width
-        height = height or self.default_sample_size * self.vae_scale_factor
-        width = width or self.default_sample_size * self.vae_scale_factor
         height = int((height // 16) * 16)
         width = int((width // 16) * 16)
-
-        if use_resolution_binning and (height, width) not in SUPPORTED_SHAPE:
-            width, height = map_to_standard_shapes(width, height)
-            height = int(height)
-            width = int(width)
-            logger.warning(f"Reshaped to (height, width)=({height}, {width}), Supported shapes are {SUPPORTED_SHAPE}")
 
         # 1. Check inputs. Raise error if not correct
         self.check_inputs(
@@ -770,7 +720,6 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         device = self._execution_device
 
         # 3. Encode input prompt
-
         (
             prompt_embeds,
             negative_prompt_embeds,
@@ -787,7 +736,6 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
             negative_prompt_embeds=negative_prompt_embeds,
             prompt_attention_mask=prompt_attention_mask,
             negative_prompt_attention_mask=negative_prompt_attention_mask,
-            max_sequence_length=77,
             text_encoder_index=0,
         )
         (
@@ -806,13 +754,16 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
             negative_prompt_embeds=negative_prompt_embeds_2,
             prompt_attention_mask=prompt_attention_mask_2,
             negative_prompt_attention_mask=negative_prompt_attention_mask_2,
-            max_sequence_length=256,
             text_encoder_index=1,
         )
+        torch.cuda.empty_cache()
 
         # 4. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)
         timesteps = self.scheduler.timesteps
+        if comfyui_progressbar:
+            from comfy.utils import ProgressBar
+            pbar = ProgressBar(num_inference_steps + 1)
 
         # 5. Prepare latent variables
         num_channels_latents = self.transformer.config.in_channels
@@ -827,6 +778,8 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
             generator,
             latents,
         )
+        if comfyui_progressbar:
+            pbar.update(1)
 
         # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
@@ -834,12 +787,27 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         # 7 create image_rotary_emb, style embedding & time ids
         grid_height = height // 8 // self.transformer.config.patch_size
         grid_width = width // 8 // self.transformer.config.patch_size
-        base_size = 512 // 8 // self.transformer.config.patch_size
-        grid_crops_coords = get_resize_crop_region_for_grid((grid_height, grid_width), base_size)
-        image_rotary_emb = get_2d_rotary_pos_embed(
-            self.transformer.inner_dim // self.transformer.num_heads, grid_crops_coords, (grid_height, grid_width)
-        )
+        if self.transformer.config.get("time_position_encoding_type", "2d_rope") == "3d_rope":
+            base_size_width = 720 // 8 // self.transformer.config.patch_size
+            base_size_height = 480 // 8 // self.transformer.config.patch_size
 
+            grid_crops_coords = get_resize_crop_region_for_grid(
+                (grid_height, grid_width), base_size_width, base_size_height
+            )
+            image_rotary_emb = get_3d_rotary_pos_embed(
+                self.transformer.config.attention_head_dim, grid_crops_coords, grid_size=(grid_height, grid_width),
+                temporal_size=latents.size(2), use_real=True,
+            )
+        else:
+            base_size = 512 // 8 // self.transformer.config.patch_size
+            grid_crops_coords = get_resize_crop_region_for_grid(
+                (grid_height, grid_width), base_size, base_size
+            )
+            image_rotary_emb = get_2d_rotary_pos_embed(
+                self.transformer.config.attention_head_dim, grid_crops_coords, (grid_height, grid_width)
+            )
+
+        # Get other hunyuan params
         style = torch.tensor([0], device=device)
 
         target_size = target_size or (height, width)
@@ -854,6 +822,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
             add_time_ids = torch.cat([add_time_ids] * 2, dim=0)
             style = torch.cat([style] * 2, dim=0)
 
+        # To latents.device
         prompt_embeds = prompt_embeds.to(device=device)
         prompt_attention_mask = prompt_attention_mask.to(device=device)
         prompt_embeds_2 = prompt_embeds_2.to(device=device)
@@ -863,11 +832,10 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         )
         style = style.to(device=device).repeat(batch_size * num_images_per_prompt)
 
-        # Empty vae cache
-        self.transformer = self.transformer.to(device)
-        self.vae = self.vae.to("cpu")
         torch.cuda.empty_cache()
-
+        if self.enable_autocast_float8_transformer_flag:
+            origin_weight_dtype = self.transformer.dtype
+            self.transformer = self.transformer.to(torch.float8_e4m3fn)
         # 8. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         self._num_timesteps = len(timesteps)
@@ -898,8 +866,9 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
                     image_rotary_emb=image_rotary_emb,
                     return_dict=False,
                 )[0]
-
-                noise_pred, _ = noise_pred.chunk(2, dim=1)
+                
+                if noise_pred.size()[1] != self.vae.config.latent_channels:
+                    noise_pred, _ = noise_pred.chunk(2, dim=1)
 
                 # perform guidance
                 if self.do_classifier_free_guidance:
@@ -933,11 +902,13 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
                 if XLA_AVAILABLE:
                     xm.mark_step()
 
-        # Make vae to cuda
-        self.transformer = self.transformer.to("cpu")
-        self.vae = self.vae.to(device)
-        torch.cuda.empty_cache()
+                if comfyui_progressbar:
+                    pbar.update(1)
 
+        if self.enable_autocast_float8_transformer_flag:
+            self.transformer = self.transformer.to("cpu", origin_weight_dtype)
+
+        torch.cuda.empty_cache()
         # Post-processing
         video = self.decode_latents(latents)
 

@@ -5,31 +5,23 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import tinychat.utils.constants
 import torch
-from accelerate import load_checkpoint_and_dispatch, PartialState
+from accelerate import PartialState, load_checkpoint_and_dispatch
 from accelerate.utils import gather_object
 from decord import VideoReader
-from PIL import Image
 from natsort import natsorted
-from tqdm import tqdm
-from transformers import AutoConfig, AutoTokenizer
-
-import tinychat.utils.constants
+from PIL import Image
 # from tinychat.models.llava_llama import LlavaLlamaForCausalLM
 from tinychat.models.vila_llama import VilaLlamaForCausalLM
 from tinychat.stream_generators.llava_stream_gen import LlavaStreamGenerator
 from tinychat.utils.conversation_utils import gen_params
 from tinychat.utils.llava_image_processing import process_images
-from tinychat.utils.prompt_templates import (
-    get_image_token,
-    get_prompter,
-    get_stop_token_ids,
-)
-from tinychat.utils.tune import (
-    device_warmup,
-    tune_llava_patch_embedding,
-)
-
+from tinychat.utils.prompt_templates import (get_image_token, get_prompter,
+                                             get_stop_token_ids)
+from tinychat.utils.tune import device_warmup, tune_llava_patch_embedding
+from tqdm import tqdm
+from transformers import AutoConfig, AutoTokenizer
 from utils.filter import filter
 from utils.logger import logger
 
@@ -232,6 +224,7 @@ def main(args):
 
     elif args.precision == "W4A16":
         from tinychat.utils.load_quant import load_awq_model
+
         # Auto load quant_path from the 3b/8b/13b/40b model.
         if args.quant_path is None:
             if "VILA1.5-3b-s2-AWQ" in args.model_path:
@@ -245,12 +238,8 @@ def main(args):
             elif "VILA1.5-40b-AWQ" in args.model_path:
                 args.quant_path = os.path.join(args.model_path, "llm/vila-1.5-40b-w4-g128-awq-v2.pt")
         model.llm = load_awq_model(model.llm, args.quant_path, 4, 128, state.device)
-        from tinychat.modules import (
-            make_fused_mlp,
-            make_fused_vision_attn,
-            make_quant_attn,
-            make_quant_norm,
-        )
+        from tinychat.modules import (make_fused_mlp, make_fused_vision_attn,
+                                      make_quant_attn, make_quant_norm)
 
         make_quant_attn(model.llm, state.device)
         make_quant_norm(model.llm)

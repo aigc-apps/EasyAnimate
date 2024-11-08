@@ -153,15 +153,6 @@ class TemporalUpsampler3D(Upsampler):
             x = torch.cat([first_frame, x], dim=2)
         return x
 
-def cast_tuple(t, length = 1):
-    return t if isinstance(t, tuple) else ((t,) * length)
-
-def divisible_by(num, den):
-    return (num % den) == 0
-
-def is_odd(n):
-    return not divisible_by(n, 2)
-
 class CausalConv3d(nn.Conv3d):
     def __init__(
         self,

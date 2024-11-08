@@ -1,0 +1,19 @@
+transformer_additional_kwargs:
+  transformer_type:                           "EasyAnimateTransformer3DModel"
+  after_norm:                                 false
+  time_position_encoding_type:                "3d_rope"
+  resize_inpaint_mask_directly:               true
+  enable_text_attention_mask:                 false
+  enable_clip_in_inpaint:                     false
+
+vae_kwargs:
+  vae_type: "AutoencoderKLMagvit"
+  mini_batch_encoder: 4
+  mini_batch_decoder: 1
+  slice_mag_vae: false
+  slice_compression_vae: false
+  cache_compression_vae: false
+  cache_mag_vae: true
+
+text_encoder_kwargs:
+  enable_multi_text_encoder: true

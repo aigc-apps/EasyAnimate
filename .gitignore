@@ -4,6 +4,7 @@ output*
 samples*
 datasets*
 asset*
+_*
 __pycache__/
 *.py[cod]
 *$py.class
