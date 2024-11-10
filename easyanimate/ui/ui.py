@@ -283,7 +283,7 @@ class EasyAnimateController:
             self.pipeline.enable_autocast_float8_transformer()
             convert_weight_dtype_wrapper(self.pipeline.transformer, self.weight_dtype)
         else:
-            self.GPU_memory_mode.enable_model_cpu_offload()
+            self.pipeline.enable_model_cpu_offload()
         print("Update diffusion transformer done")
         return gr.update()
 
