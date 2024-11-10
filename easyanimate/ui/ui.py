@@ -752,7 +752,13 @@ def ui(GPU_memory_mode, weight_dtype):
             )
             
             prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Blurring, mutation, deformation, distortion, dark and solid, comics." )
+            gr.Markdown(
+                """
+                Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics." can increase stability. Adding words such as "quiet, solid" to the neg prompt can increase dynamism.   
+                使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性。在neg prompt中添加"安静，固定"等词语可以增加动态性。
+                """
+            )
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Low quality, text subtitles, distortion, comics, quiet. " )
                 
             with gr.Row():
                 with gr.Column():
@@ -1407,7 +1413,13 @@ def ui_modelscope(model_type, edition, config_path, model_name, savedir_sample, 
             )
 
             prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Blurring, mutation, deformation, distortion, dark and solid, comics." )
+            gr.Markdown(
+                """
+                Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics." can increase stability. Adding words such as "quiet, solid" to the neg prompt can increase dynamism.   
+                使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性。在neg prompt中添加"安静，固定"等词语可以增加动态性。
+                """
+            )
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Low quality, text subtitles, distortion, comics, quiet. " )
                 
             with gr.Row():
                 with gr.Column():
@@ -1821,7 +1833,13 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
             )
             
             prompt_textbox = gr.Textbox(label="Prompt", lines=2, value="A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="Blurring, mutation, deformation, distortion, dark and solid, comics." )
+            gr.Markdown(
+                """
+                Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics." can increase stability. Adding words such as "quiet, solid" to the neg prompt can increase dynamism.   
+                使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性。在neg prompt中添加"安静，固定"等词语可以增加动态性。
+                """
+            )
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="Low quality, text subtitles, distortion, comics, quiet. " )
                 
             with gr.Row():
                 with gr.Column():

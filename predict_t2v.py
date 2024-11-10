@@ -63,12 +63,18 @@ fps                 = 8
 # Use torch.float16 if GPU does not support torch.bfloat16
 # ome graphics cards, such as v100, 2080ti, do not support torch.bfloat16
 weight_dtype        = torch.bfloat16
-# # EasyAnimateV1, V2 and V3 support English.
+
+# EasyAnimateV1, V2 and V3 support English.
 # EasyAnimateV4 and V5 support English and Chinese.
+# 使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性
+# 在neg prompt中添加"安静，固定"等词语可以增加动态性。
 prompt              = "一条狗正在摇头。质量高、杰作、最佳品质、高分辨率、超精细、梦幻般。"
-negative_prompt     = "模糊，突变，变形，失真，画面暗，画面固定，连环画，漫画，线稿，没有主体。"
-# prompt              = "A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
-# negative_prompt     = "Blurring, mutation, deformation, distortion, dark and solid, comics."
+negative_prompt     = "低质量，文本字幕，变形，漫画，安静。"
+# 
+# Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics." can increase stability
+# Adding words such as "quiet, solid" to the neg prompt can increase dynamism.
+# prompt              = "The dog is shaking head. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
+# negative_prompt     = "Low quality, text subtitles, distortion, comics, quiet"
 guidance_scale      = 6.0
 seed                = 43
 num_inference_steps = 50
