@@ -59,15 +59,15 @@ control_video           = "asset/pose.mp4"
 
 # EasyAnimateV1, V2 and V3 support English.
 # EasyAnimateV4 and V5 support English and Chinese.
-# 使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性
+# 使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性
 # 在neg prompt中添加"安静，固定"等词语可以增加动态性。
 prompt                  = "一位年轻女子，有着美丽清澈的眼睛和金发，穿着白色的衣服在扭动身体，相机聚焦在她的脸上。质量高、杰作、最佳品质、高分辨率、超精细、梦幻般。"
-negative_prompt         = "低质量，文本字幕，变形，漫画，安静。"
+negative_prompt         = "扭曲的身体，肢体残缺，文本字幕，漫画，静止，丑陋，错误，乱码。"
 # 
-# Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics." can increase stability
+# Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics, text subtitles, line art." can increase stability
 # Adding words such as "quiet, solid" to the neg prompt can increase dynamism.
 # prompt                  = "A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
-# negative_prompt         = "Low quality, text subtitles, distortion, comics, quiet"
+# negative_prompt         = "Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code."
 guidance_scale          = 6.0
 seed                    = 43
 num_inference_steps     = 50
