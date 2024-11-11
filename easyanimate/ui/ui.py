@@ -39,6 +39,8 @@ from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import \
     EasyAnimatePipeline_Multi_Text_Encoder
 from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import \
     EasyAnimatePipeline_Multi_Text_Encoder_Inpaint
+from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_control import \
+    EasyAnimatePipeline_Multi_Text_Encoder_Control
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import (
     get_image_to_video_latent, get_video_to_video_latent,
@@ -225,56 +227,69 @@ class EasyAnimateController:
             subfolder="scheduler"
         )
 
-        if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
-            if self.transformer.config.in_channels != self.vae.config.latent_channels:
-                self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
-                    diffusion_transformer_dropdown,
-                    text_encoder=text_encoder,
-                    text_encoder_2=text_encoder_2,
-                    tokenizer=tokenizer,
-                    tokenizer_2=tokenizer_2,
-                    vae=self.vae,
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype,
-                    clip_image_encoder=clip_image_encoder,
-                    clip_image_processor=clip_image_processor,
-                )
+        if self.model_type == "Inpaint":
+            if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
+                if self.transformer.config.in_channels != self.vae.config.latent_channels:
+                    self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
+                        diffusion_transformer_dropdown,
+                        text_encoder=text_encoder,
+                        text_encoder_2=text_encoder_2,
+                        tokenizer=tokenizer,
+                        tokenizer_2=tokenizer_2,
+                        vae=self.vae,
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype,
+                        clip_image_encoder=clip_image_encoder,
+                        clip_image_processor=clip_image_processor,
+                    )
+                else:
+                    self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
+                        diffusion_transformer_dropdown,
+                        text_encoder=text_encoder,
+                        text_encoder_2=text_encoder_2,
+                        tokenizer=tokenizer,
+                        tokenizer_2=tokenizer_2,
+                        vae=self.vae,
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype
+                    )
             else:
-                self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
-                    diffusion_transformer_dropdown,
-                    text_encoder=text_encoder,
-                    text_encoder_2=text_encoder_2,
-                    tokenizer=tokenizer,
-                    tokenizer_2=tokenizer_2,
-                    vae=self.vae,
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype
-                )
+                if self.transformer.config.in_channels != self.vae.config.latent_channels:
+                    self.pipeline = EasyAnimateInpaintPipeline(
+                        diffusion_transformer_dropdown,
+                        text_encoder=text_encoder,
+                        tokenizer=tokenizer,
+                        vae=self.vae,
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype,
+                        clip_image_encoder=clip_image_encoder,
+                        clip_image_processor=clip_image_processor,
+                    )
+                else:
+                    self.pipeline = EasyAnimatePipeline(
+                        diffusion_transformer_dropdown,
+                        text_encoder=text_encoder,
+                        tokenizer=tokenizer,
+                        vae=self.vae, 
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype
+                    )
         else:
-            if self.transformer.config.in_channels != self.vae.config.latent_channels:
-                self.pipeline = EasyAnimateInpaintPipeline(
-                    diffusion_transformer_dropdown,
-                    text_encoder=text_encoder,
-                    tokenizer=tokenizer,
-                    vae=self.vae,
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype,
-                    clip_image_encoder=clip_image_encoder,
-                    clip_image_processor=clip_image_processor,
-                )
-            else:
-                self.pipeline = EasyAnimatePipeline(
-                    diffusion_transformer_dropdown,
-                    text_encoder=text_encoder,
-                    tokenizer=tokenizer,
-                    vae=self.vae, 
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype
-                )
+            self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Control.from_pretrained(
+                diffusion_transformer_dropdown,
+                text_encoder=text_encoder,
+                text_encoder_2=text_encoder_2,
+                tokenizer=tokenizer,
+                tokenizer_2=tokenizer_2,
+                vae=self.vae,
+                transformer=self.transformer,
+                scheduler=scheduler,
+                torch_dtype=self.weight_dtype
+            )
 
         if self.GPU_memory_mode == "sequential_cpu_offload":
             self.pipeline.enable_sequential_cpu_offload()
@@ -283,7 +298,7 @@ class EasyAnimateController:
             self.pipeline.enable_autocast_float8_transformer()
             convert_weight_dtype_wrapper(self.pipeline.transformer, self.weight_dtype)
         else:
-            self.GPU_memory_mode.enable_model_cpu_offload()
+            self.pipeline.enable_model_cpu_offload()
         print("Update diffusion transformer done")
         return gr.update()
 
@@ -752,7 +767,13 @@ def ui(GPU_memory_mode, weight_dtype):
             )
             
             prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Blurring, mutation, deformation, distortion, dark and solid, comics." )
+            gr.Markdown(
+                """
+                Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics, text subtitles, line art." can increase stability. Adding words such as "quiet, solid" to the neg prompt can increase dynamism.   
+                使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性。在neg prompt中添加"安静，固定"等词语可以增加动态性。
+                """
+            )
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code.. " )
                 
             with gr.Row():
                 with gr.Column():
@@ -1058,56 +1079,69 @@ class EasyAnimateController_Modelscope:
             subfolder="scheduler"
         )
 
-        if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
-            if self.transformer.config.in_channels != self.vae.config.latent_channels:
-                self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
-                    model_name,
-                    text_encoder=text_encoder,
-                    text_encoder_2=text_encoder_2,
-                    tokenizer=tokenizer,
-                    tokenizer_2=tokenizer_2,
-                    vae=self.vae,
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype,
-                    clip_image_encoder=clip_image_encoder,
-                    clip_image_processor=clip_image_processor,
-                )
+        if model_type == "Inpaint":
+            if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
+                if self.transformer.config.in_channels != self.vae.config.latent_channels:
+                    self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
+                        model_name,
+                        text_encoder=text_encoder,
+                        text_encoder_2=text_encoder_2,
+                        tokenizer=tokenizer,
+                        tokenizer_2=tokenizer_2,
+                        vae=self.vae,
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype,
+                        clip_image_encoder=clip_image_encoder,
+                        clip_image_processor=clip_image_processor,
+                    )
+                else:
+                    self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
+                        model_name,
+                        text_encoder=text_encoder,
+                        text_encoder_2=text_encoder_2,
+                        tokenizer=tokenizer,
+                        tokenizer_2=tokenizer_2,
+                        vae=self.vae,
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype
+                    )
             else:
-                self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
-                    model_name,
-                    text_encoder=text_encoder,
-                    text_encoder_2=text_encoder_2,
-                    tokenizer=tokenizer,
-                    tokenizer_2=tokenizer_2,
-                    vae=self.vae,
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype
-                )
+                if self.transformer.config.in_channels != self.vae.config.latent_channels:
+                    self.pipeline = EasyAnimateInpaintPipeline(
+                        model_name,
+                        text_encoder=text_encoder,
+                        tokenizer=tokenizer,
+                        vae=self.vae,
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype,
+                        clip_image_encoder=clip_image_encoder,
+                        clip_image_processor=clip_image_processor,
+                    )
+                else:
+                    self.pipeline = EasyAnimatePipeline(
+                        model_name,
+                        text_encoder=text_encoder,
+                        tokenizer=tokenizer,
+                        vae=self.vae, 
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype
+                    )
         else:
-            if self.transformer.config.in_channels != self.vae.config.latent_channels:
-                self.pipeline = EasyAnimateInpaintPipeline(
-                    model_name,
-                    text_encoder=text_encoder,
-                    tokenizer=tokenizer,
-                    vae=self.vae,
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype,
-                    clip_image_encoder=clip_image_encoder,
-                    clip_image_processor=clip_image_processor,
-                )
-            else:
-                self.pipeline = EasyAnimatePipeline(
-                    model_name,
-                    text_encoder=text_encoder,
-                    tokenizer=tokenizer,
-                    vae=self.vae, 
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype
-                )
+            pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Control.from_pretrained(
+                model_name,
+                text_encoder=text_encoder,
+                text_encoder_2=text_encoder_2,
+                tokenizer=tokenizer,
+                tokenizer_2=tokenizer_2,
+                vae=self.vae,
+                transformer=self.transformer,
+                scheduler=scheduler,
+                torch_dtype=weight_dtype
+            )
 
         if GPU_memory_mode == "sequential_cpu_offload":
             self.pipeline.enable_sequential_cpu_offload()
@@ -1407,7 +1441,13 @@ def ui_modelscope(model_type, edition, config_path, model_name, savedir_sample, 
             )
 
             prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Blurring, mutation, deformation, distortion, dark and solid, comics." )
+            gr.Markdown(
+                """
+                Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics, text subtitles, line art." can increase stability. Adding words such as "quiet, solid" to the neg prompt can increase dynamism.   
+                使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性。在neg prompt中添加"安静，固定"等词语可以增加动态性。
+                """
+            )
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code.. " )
                 
             with gr.Row():
                 with gr.Column():
@@ -1821,7 +1861,13 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
             )
             
             prompt_textbox = gr.Textbox(label="Prompt", lines=2, value="A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="Blurring, mutation, deformation, distortion, dark and solid, comics." )
+            gr.Markdown(
+                """
+                Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics, text subtitles, line art." can increase stability. Adding words such as "quiet, solid" to the neg prompt can increase dynamism.   
+                使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性。在neg prompt中添加"安静，固定"等词语可以增加动态性。
+                """
+            )
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code.. " )
                 
             with gr.Row():
                 with gr.Column():

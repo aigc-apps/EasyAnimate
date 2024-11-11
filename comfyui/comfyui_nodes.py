@@ -265,12 +265,16 @@ class LoadEasyAnimateModel:
                     )
         else:
             pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Control.from_pretrained(
-                    model_name,
-                    vae=vae, 
-                    transformer=transformer,
-                    scheduler=scheduler,
-                    torch_dtype=weight_dtype
-                )
+                model_name,
+                text_encoder=text_encoder,
+                text_encoder_2=text_encoder_2,
+                tokenizer=tokenizer,
+                tokenizer_2=tokenizer_2,
+                vae=vae,
+                transformer=transformer,
+                scheduler=scheduler,
+                torch_dtype=weight_dtype
+            )
         if GPU_memory_mode == "sequential_cpu_offload":
             pipeline.enable_sequential_cpu_offload()
         elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":

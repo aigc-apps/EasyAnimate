@@ -1,5 +1,5 @@
 {
-  "last_node_id": 87,
+  "last_node_id": 88,
   "last_link_id": 53,
   "nodes": [
     {
@@ -108,7 +108,7 @@
         "Node name for S&R": "TextBox"
       },
       "widgets_values": [
-        "模糊，突变，变形，失真，画面暗，画面固定，连环画，漫画，线稿，没有主体。"
+        "扭曲的身体，肢体残缺，文本字幕，漫画，静止，丑陋，错误，乱码。"
       ]
     },
     {
@@ -120,10 +120,10 @@
       },
       "size": [
         390.9534912109375,
-        973.1686096191406
+        310
       ],
       "flags": {},
-      "order": 8,
+      "order": 9,
       "mode": 0,
       "inputs": [
         {
@@ -131,7 +131,8 @@
           "type": "IMAGE",
           "link": 48,
           "slot_index": 0,
-          "label": "图像"
+          "label": "图像",
+          "shape": 7
         },
         {
           "name": "audio",
@@ -236,7 +237,7 @@
       },
       "size": [
         252.056640625,
-        688.5451388888889
+        262
       ],
       "flags": {},
       "order": 5,
@@ -358,7 +359,7 @@
         "1": 306
       },
       "flags": {},
-      "order": 7,
+      "order": 8,
       "mode": 0,
       "inputs": [
         {
@@ -416,6 +417,31 @@
         1,
         "DDIM"
       ]
+    },
+    {
+      "id": 88,
+      "type": "Note",
+      "pos": {
+        "0": -99,
+        "1": 197
+      },
+      "size": [
+        326.1556114026207,
+        145.20905264909447
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": ""
+      },
+      "widgets_values": [
+        "Using longer neg prompt such as \"Blurring, mutation, deformation, distortion, dark and solid, comics.\" can increase stability. Adding words such as \"quiet, solid\" to the neg prompt can increase dynamism.\n(使用更长的neg prompt如\"模糊，突变，变形，失真，画面暗，画面固定，连环画，漫画，线稿，没有主体。\"，可以增加稳定性。在neg prompt中添加\"安静，固定\"等词语可以增加动态性。)"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
     }
   ],
   "links": [
@@ -501,10 +527,10 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.7247295000000012,
+      "scale": 0.7513148009015777,
       "offset": [
-        302.3321359435954,
-        322.8143100800612
+        206.91128312862938,
+        440.0942364134056
       ]
     },
     "workspace_info": {
