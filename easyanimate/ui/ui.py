@@ -39,6 +39,8 @@ from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import \
     EasyAnimatePipeline_Multi_Text_Encoder
 from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import \
     EasyAnimatePipeline_Multi_Text_Encoder_Inpaint
+from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_control import \
+    EasyAnimatePipeline_Multi_Text_Encoder_Control
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import (
     get_image_to_video_latent, get_video_to_video_latent,
@@ -225,56 +227,69 @@ class EasyAnimateController:
             subfolder="scheduler"
         )
 
-        if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
-            if self.transformer.config.in_channels != self.vae.config.latent_channels:
-                self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
-                    diffusion_transformer_dropdown,
-                    text_encoder=text_encoder,
-                    text_encoder_2=text_encoder_2,
-                    tokenizer=tokenizer,
-                    tokenizer_2=tokenizer_2,
-                    vae=self.vae,
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype,
-                    clip_image_encoder=clip_image_encoder,
-                    clip_image_processor=clip_image_processor,
-                )
+        if self.model_type == "Inpaint":
+            if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
+                if self.transformer.config.in_channels != self.vae.config.latent_channels:
+                    self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
+                        diffusion_transformer_dropdown,
+                        text_encoder=text_encoder,
+                        text_encoder_2=text_encoder_2,
+                        tokenizer=tokenizer,
+                        tokenizer_2=tokenizer_2,
+                        vae=self.vae,
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype,
+                        clip_image_encoder=clip_image_encoder,
+                        clip_image_processor=clip_image_processor,
+                    )
+                else:
+                    self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
+                        diffusion_transformer_dropdown,
+                        text_encoder=text_encoder,
+                        text_encoder_2=text_encoder_2,
+                        tokenizer=tokenizer,
+                        tokenizer_2=tokenizer_2,
+                        vae=self.vae,
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype
+                    )
             else:
-                self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
-                    diffusion_transformer_dropdown,
-                    text_encoder=text_encoder,
-                    text_encoder_2=text_encoder_2,
-                    tokenizer=tokenizer,
-                    tokenizer_2=tokenizer_2,
-                    vae=self.vae,
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype
-                )
+                if self.transformer.config.in_channels != self.vae.config.latent_channels:
+                    self.pipeline = EasyAnimateInpaintPipeline(
+                        diffusion_transformer_dropdown,
+                        text_encoder=text_encoder,
+                        tokenizer=tokenizer,
+                        vae=self.vae,
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype,
+                        clip_image_encoder=clip_image_encoder,
+                        clip_image_processor=clip_image_processor,
+                    )
+                else:
+                    self.pipeline = EasyAnimatePipeline(
+                        diffusion_transformer_dropdown,
+                        text_encoder=text_encoder,
+                        tokenizer=tokenizer,
+                        vae=self.vae, 
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype
+                    )
         else:
-            if self.transformer.config.in_channels != self.vae.config.latent_channels:
-                self.pipeline = EasyAnimateInpaintPipeline(
-                    diffusion_transformer_dropdown,
-                    text_encoder=text_encoder,
-                    tokenizer=tokenizer,
-                    vae=self.vae,
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype,
-                    clip_image_encoder=clip_image_encoder,
-                    clip_image_processor=clip_image_processor,
-                )
-            else:
-                self.pipeline = EasyAnimatePipeline(
-                    diffusion_transformer_dropdown,
-                    text_encoder=text_encoder,
-                    tokenizer=tokenizer,
-                    vae=self.vae, 
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype
-                )
+            self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Control.from_pretrained(
+                diffusion_transformer_dropdown,
+                text_encoder=text_encoder,
+                text_encoder_2=text_encoder_2,
+                tokenizer=tokenizer,
+                tokenizer_2=tokenizer_2,
+                vae=self.vae,
+                transformer=self.transformer,
+                scheduler=scheduler,
+                torch_dtype=self.weight_dtype
+            )
 
         if self.GPU_memory_mode == "sequential_cpu_offload":
             self.pipeline.enable_sequential_cpu_offload()
@@ -1064,56 +1079,69 @@ class EasyAnimateController_Modelscope:
             subfolder="scheduler"
         )
 
-        if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
-            if self.transformer.config.in_channels != self.vae.config.latent_channels:
-                self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
-                    model_name,
-                    text_encoder=text_encoder,
-                    text_encoder_2=text_encoder_2,
-                    tokenizer=tokenizer,
-                    tokenizer_2=tokenizer_2,
-                    vae=self.vae,
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype,
-                    clip_image_encoder=clip_image_encoder,
-                    clip_image_processor=clip_image_processor,
-                )
+        if model_type == "Inpaint":
+            if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
+                if self.transformer.config.in_channels != self.vae.config.latent_channels:
+                    self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
+                        model_name,
+                        text_encoder=text_encoder,
+                        text_encoder_2=text_encoder_2,
+                        tokenizer=tokenizer,
+                        tokenizer_2=tokenizer_2,
+                        vae=self.vae,
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype,
+                        clip_image_encoder=clip_image_encoder,
+                        clip_image_processor=clip_image_processor,
+                    )
+                else:
+                    self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
+                        model_name,
+                        text_encoder=text_encoder,
+                        text_encoder_2=text_encoder_2,
+                        tokenizer=tokenizer,
+                        tokenizer_2=tokenizer_2,
+                        vae=self.vae,
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype
+                    )
             else:
-                self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
-                    model_name,
-                    text_encoder=text_encoder,
-                    text_encoder_2=text_encoder_2,
-                    tokenizer=tokenizer,
-                    tokenizer_2=tokenizer_2,
-                    vae=self.vae,
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype
-                )
+                if self.transformer.config.in_channels != self.vae.config.latent_channels:
+                    self.pipeline = EasyAnimateInpaintPipeline(
+                        model_name,
+                        text_encoder=text_encoder,
+                        tokenizer=tokenizer,
+                        vae=self.vae,
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype,
+                        clip_image_encoder=clip_image_encoder,
+                        clip_image_processor=clip_image_processor,
+                    )
+                else:
+                    self.pipeline = EasyAnimatePipeline(
+                        model_name,
+                        text_encoder=text_encoder,
+                        tokenizer=tokenizer,
+                        vae=self.vae, 
+                        transformer=self.transformer,
+                        scheduler=scheduler,
+                        torch_dtype=self.weight_dtype
+                    )
         else:
-            if self.transformer.config.in_channels != self.vae.config.latent_channels:
-                self.pipeline = EasyAnimateInpaintPipeline(
-                    model_name,
-                    text_encoder=text_encoder,
-                    tokenizer=tokenizer,
-                    vae=self.vae,
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype,
-                    clip_image_encoder=clip_image_encoder,
-                    clip_image_processor=clip_image_processor,
-                )
-            else:
-                self.pipeline = EasyAnimatePipeline(
-                    model_name,
-                    text_encoder=text_encoder,
-                    tokenizer=tokenizer,
-                    vae=self.vae, 
-                    transformer=self.transformer,
-                    scheduler=scheduler,
-                    torch_dtype=self.weight_dtype
-                )
+            pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Control.from_pretrained(
+                model_name,
+                text_encoder=text_encoder,
+                text_encoder_2=text_encoder_2,
+                tokenizer=tokenizer,
+                tokenizer_2=tokenizer_2,
+                vae=self.vae,
+                transformer=self.transformer,
+                scheduler=scheduler,
+                torch_dtype=weight_dtype
+            )
 
         if GPU_memory_mode == "sequential_cpu_offload":
             self.pipeline.enable_sequential_cpu_offload()

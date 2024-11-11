@@ -129,8 +129,7 @@ EasyAnimateV5:
 
 ### EasyAnimateV5-12b-zh-InP
 
-Resolution-1024
-
+#### I2V
 <table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
   <tr>
       <td>
@@ -149,8 +148,6 @@ Resolution-1024
 </table>
 
 
-Resolution-768
-
 <table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
   <tr>
       <td>
@@ -168,8 +165,6 @@ Resolution-768
   </tr>
 </table>
 
-Resolution-512
-
 <table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
   <tr>
       <td>
@@ -183,6 +178,41 @@ Resolution-512
      </td>
       <td>
           <video src="https://github.com/user-attachments/assets/bcec22f4-732c-446f-958c-2ebbfd8f94be" width="100%" controls autoplay loop></video>
+     </td>
+  </tr>
+</table>
+
+#### T2V
+<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
+  <tr>
+      <td>
+          <video src="https://github.com/user-attachments/assets/eccb0797-4feb-48e9-91d3-5769ce30142b" width="100%" controls autoplay loop></video>
+      </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/76b3db64-9c7a-4d38-8854-dba940240ceb" width="100%" controls autoplay loop></video>
+      </td>
+       <td>
+          <video src="https://github.com/user-attachments/assets/0b8fab66-8de7-44ff-bd43-8f701bad6bb7" width="100%" controls autoplay loop></video>
+     </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/9fbddf5f-7fcd-4cc6-9d7c-3bdf1d4ce59e" width="100%" controls autoplay loop></video>
+     </td>
+  </tr>
+</table>
+
+<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
+  <tr>
+      <td>
+          <video src="https://github.com/user-attachments/assets/19c1742b-e417-45ac-97d6-8bf3a80d8e13" width="100%" controls autoplay loop></video>
+      </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/641e56c8-a3d9-489d-a3a6-42c50a9aeca1" width="100%" controls autoplay loop></video>
+      </td>
+       <td>
+          <video src="https://github.com/user-attachments/assets/2b16be76-518b-44c6-a69b-5c49d76df365" width="100%" controls autoplay loop></video>
+     </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/e7d9c0fc-136f-405c-9fab-629389e196be" width="100%" controls autoplay loop></video>
      </td>
   </tr>
 </table>
