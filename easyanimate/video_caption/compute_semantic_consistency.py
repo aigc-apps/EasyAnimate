@@ -137,18 +137,6 @@ def main():
     if not any(name in args.model_path for name in ALL_MODEL_NAME):
         raise ValueError(f"The model_path should be among the following list: {ALL_MODEL_NAME}.")
 
-    if os.path.exists(args.saved_path):
-        if args.saved_path.endswith(".csv"):
-            saved_metadata_df = pd.read_csv(args.saved_path)
-        elif args.saved_path.endswith(".jsonl"):
-            saved_metadata_df = pd.read_json(args.saved_path, lines=True)
-
-        saved_video_path_list = saved_metadata_df["video"].tolist()
-        video_path_list = list(set(video_path_list).difference(set(saved_video_path_list)))
-        logger.info(
-            f"Resume from {args.saved_path}: {len(saved_video_path_list)} processed and {len(video_path_list)} to be processed."
-        )
-
     state = PartialState()
     if state.is_main_process:
         # Check if the model is downloaded in the main process.
