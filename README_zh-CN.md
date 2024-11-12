@@ -11,7 +11,7 @@
 [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-yellow)](https://huggingface.co/spaces/alibaba-pai/EasyAnimate)
 [![Discord Page](https://img.shields.io/badge/Discord-Page-blue)](https://discord.gg/UzkpB4Bn)
 
-[English](./README.md) | 简体中文 | [日本語](./README_ja.md)
+[English](./README.md) | 简体中文 | [日本語](./README_ja-JP.md)
 
 # 目录
 - [目录](#目录)
