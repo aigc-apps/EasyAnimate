@@ -112,7 +112,7 @@ huggingface-cli download NousResearch/Meta-Llama-3-8B-Instruct --local-dir-use-s
 The entire workflow of video recaption is in the [stage_3_video_recaptioning.sh](./scripts/stage_3_video_recaptioning.sh).
 After running
 ```shell
-VILA_MODEL_PATH=/PATH/TO/VILA_MODEL REWRITE_MODEL_PATH=/PATH/TO/REWRITE_MODEL sh scripts/stage_3_video_recaptioning.sh
+INTERNVL2_MODEL_PATH=/PATH/TO/INTERNVL2_MODEL REWRITE_MODEL_PATH=/PATH/TO/REWRITE_MODEL sh scripts/stage_3_video_recaptioning.sh
 ``` 
 the final train file is obtained in `easyanimate/video_caption/datasets/panda_70m/videos_clips/meta_train_info.json`.
 
