@@ -64,7 +64,7 @@ EasyAnimateV5:
 ## Node types
 - **LoadEasyAnimateModel**
     - Loads the EasyAnimate model
-- **TextBox**
+- **EasyAnimate_TextBox**
     - Write the prompt for EasyAnimate model
 - **EasyAnimateI2VSampler**
     - EasyAnimate Sampler for Image to Video 

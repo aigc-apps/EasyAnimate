@@ -116,7 +116,7 @@
     },
     {
       "id": 73,
-      "type": "TextBox",
+      "type": "EasyAnimate_TextBox",
       "pos": {
         "0": 250,
         "1": 160
@@ -142,7 +142,7 @@
       ],
       "title": "Negtive Prompt（反向提示词）",
       "properties": {
-        "Node name for S&R": "TextBox"
+        "Node name for S&R": "EasyAnimate_TextBox"
       },
       "widgets_values": [
         "扭曲的身体，肢体残缺，文本字幕，漫画，静止，丑陋，错误，乱码。"
@@ -150,7 +150,7 @@
     },
     {
       "id": 75,
-      "type": "TextBox",
+      "type": "EasyAnimate_TextBox",
       "pos": {
         "0": 250,
         "1": -50
@@ -176,7 +176,7 @@
       ],
       "title": "Positive Prompt（正向提示词）",
       "properties": {
-        "Node name for S&R": "TextBox"
+        "Node name for S&R": "EasyAnimate_TextBox"
       },
       "widgets_values": [
         "一个漂亮的女人在弹吉他。视频质量高，画面清晰。高质量，杰作，最好的质量，高分辨率，超仔细。"

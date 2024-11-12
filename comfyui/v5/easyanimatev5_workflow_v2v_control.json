@@ -79,7 +79,7 @@
     },
     {
       "id": 73,
-      "type": "TextBox",
+      "type": "EasyAnimate_TextBox",
       "pos": {
         "0": 250,
         "1": 160
@@ -105,7 +105,7 @@
       ],
       "title": "Negtive Prompt（反向提示词）",
       "properties": {
-        "Node name for S&R": "TextBox"
+        "Node name for S&R": "EasyAnimate_TextBox"
       },
       "widgets_values": [
         "扭曲的身体，肢体残缺，文本字幕，漫画，静止，丑陋，错误，乱码。"
@@ -315,7 +315,7 @@
     },
     {
       "id": 75,
-      "type": "TextBox",
+      "type": "EasyAnimate_TextBox",
       "pos": {
         "0": 250,
         "1": -50
@@ -341,7 +341,7 @@
       ],
       "title": "Positive Prompt（正向提示词）",
       "properties": {
-        "Node name for S&R": "TextBox"
+        "Node name for S&R": "EasyAnimate_TextBox"
       },
       "widgets_values": [
         "一个穿着及膝白色无袖连衣裙和白色高跟凉鞋的美女在一个光线充足、木地板的房间里跳舞。房间的背景是一扇紧闭的门、一个展示透明玻璃瓶酒精饮料的架子和一个部分可见的深色沙发。"
