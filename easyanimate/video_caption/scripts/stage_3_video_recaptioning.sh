@@ -32,7 +32,7 @@ python3 internvl2_video_recaptioning.py \
     --saved_freq 1 \
     --num_workers 4 \
     --batch_size 128 \
-    --semantic_consistency_metadata_path $SEMANTIC_CONSISTENCY_SAVED_PATH \
+    --semantic_consistency_score_metadata_path $SEMANTIC_CONSISTENCY_SAVED_PATH \
     --min_semantic_consistency_score $MIN_SEMANTIC_CONSISTENCY_SCORE \
     --aesthetic_score_siglip_metadata_path $QUALITY_SAVED_PATH \
     --min_aesthetic_score_siglip $MIN_AESTHETIC_SCORE_SIGLIP \

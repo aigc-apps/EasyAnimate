@@ -23,7 +23,7 @@ accelerate launch compute_semantic_consistency.py \
     --batch_size 16 \
     --num_workers 4 \
     --saved_freq 10 \
-    --saved_path $VIDEO_CONSISTENCY_SAVED_PATH
+    --saved_path $SEMANTIC_CONSISTENCY_SAVED_PATH
 
 # Get the aesthetic score (SigLIP) of all videos filtered by the semantic consistency score.
 # Adjust the num_workers and batch size parameter based on the machine's computing resources to achieve maximum GPU utilization.
@@ -37,7 +37,7 @@ accelerate launch compute_video_quality.py \
     --num_workers 4 \
     --saved_freq 10 \
     --saved_path $QUALITY_SAVED_PATH \
-    --semantic_consistency_metadata_path $SEMANTIC_CONSISTENCY_SAVED_PATH \
+    --semantic_consistency_score_metadata_path $SEMANTIC_CONSISTENCY_SAVED_PATH \
     --min_semantic_consistency_score $MIN_SEMANTIC_CONSISTENCY_SCORE
 
 # Get the text score of all videos filtered by the semantic consistency score and video quality score.
@@ -46,7 +46,7 @@ accelerate launch compute_text_score.py \
     --video_folder $VIDEO_FOLDER  \
     --saved_freq 10 \
     --saved_path $TEXT_SAVED_PATH \
-    --semantic_consistency_metadata_path $SEMANTIC_CONSISTENCY_SAVED_PATH \
+    --semantic_consistency_score_metadata_path $SEMANTIC_CONSISTENCY_SAVED_PATH \
     --min_semantic_consistency_score $MIN_SEMANTIC_CONSISTENCY_SCORE \
     --aesthetic_score_siglip_metadata_path $QUALITY_SAVED_PATH \
     --min_aesthetic_score_siglip $MIN_AESTHETIC_SCORE_SIGLIP
@@ -59,7 +59,7 @@ python compute_motion_score.py \
     --saved_freq 10 \
     --saved_path $MOTION_SAVED_PATH \
     --n_jobs 8 \
-    --semantic_consistency_metadata_path $SEMANTIC_CONSISTENCY_SAVED_PATH \
+    --semantic_consistency_score_metadata_path $SEMANTIC_CONSISTENCY_SAVED_PATH \
     --min_semantic_consistency_score $MIN_SEMANTIC_CONSISTENCY_SCORE \
     --aesthetic_score_siglip_metadata_path $QUALITY_SAVED_PATH \
     --min_aesthetic_score_siglip $MIN_AESTHETIC_SCORE_SIGLIP \

@@ -120,6 +120,7 @@ def parse_args():
     parser.add_argument("--min_text_score", type=float, default=0.02, help="The text threshold.")
     parser.add_argument(
         "--semantic_consistency_score_metadata_path",
+        nargs="+",
         type=str,
         default=None,
         help="The path to the semantic consistency metadata (csv/jsonl)."

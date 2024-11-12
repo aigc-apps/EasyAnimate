@@ -117,6 +117,17 @@ def parse_args():
         "--motion_score_metadata_path", type=str, default=None, help="The path to the video motion score metadata (csv/jsonl)."
     )
     parser.add_argument("--min_motion_score", type=float, default=2, help="The motion threshold.")
+    parser.add_argument("--max_motion_score", type=float, default=999999, help="The maximum motion threshold.")
+    parser.add_argument(
+        "--semantic_consistency_score_metadata_path",
+        nargs="+",
+        type=str,
+        default=None,
+        help="The path to the semantic consistency metadata (csv/jsonl)."
+    )
+    parser.add_argument(
+        "--min_semantic_consistency_score", type=float, default=0.80, help="The semantic consistency score threshold."
+    )
     
     args = parser.parse_args()
     return args
@@ -219,7 +230,7 @@ def main():
             result_dict[args.video_path_column].extend(saved_video_path_list)
             result_dict["caption"].extend(batch_caption)
         
-        if idx != 0 and (idx % args.saved_freq == 0 or idx == len(video_loader) - 1):
+        if idx % args.saved_freq == 0 or idx == len(video_loader) - 1:
             result_df = pd.DataFrame(result_dict)
 
             # Append is not supported (oss).

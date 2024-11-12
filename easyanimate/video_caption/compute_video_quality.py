@@ -56,6 +56,7 @@ def parse_args():
     parser.add_argument("--max_motion_score", type=float, default=999999, help="The maximum motion threshold.")
     parser.add_argument(
         "--semantic_consistency_score_metadata_path",
+        nargs="+",
         type=str,
         default=None,
         help="The path to the semantic consistency metadata (csv/jsonl)."
@@ -99,6 +100,7 @@ def main():
             video_metadata_df.rename(columns={args.caption_column + "_x": args.caption_column}, inplace=True)
         logger.info(f"Resume from {args.saved_path}: {len(saved_metadata_df)} processed and {len(video_metadata_df)} to be processed.")
     
+    video_path_list = video_metadata_df[args.video_path_column].tolist()
     video_path_list = filter(
         video_path_list,
         basic_metadata_path=args.basic_metadata_path,
@@ -114,6 +116,7 @@ def main():
         min_semantic_consistency_score=args.min_semantic_consistency_score,
         video_path_column=args.video_path_column
     )
+    video_metadata_df = video_metadata_df[video_metadata_df[args.video_path_column].isin(video_path_list)]
 
     state = PartialState()
     metric_fns = []
@@ -191,7 +194,7 @@ def main():
                 result_dict[args.video_path_column].extend(saved_video_path_list)
 
             # Save the metadata in the main process every saved_freq.
-            if (idx != 0) and (idx % args.saved_freq == 0 or idx == len(video_loader)-1):
+            if (idx % args.saved_freq) == 0 or idx == len(video_loader) - 1:
                 state.wait_for_everyone()
                 gathered_result_dict = {k: gather_object(v) for k, v in result_dict.items()}
                 if state.is_main_process and len(gathered_result_dict[args.video_path_column]) != 0:

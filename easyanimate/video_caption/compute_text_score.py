@@ -120,6 +120,7 @@ def parse_args():
     parser.add_argument("--max_motion_score", type=float, default=999999, help="The maximum motion threshold.")
     parser.add_argument(
         "--semantic_consistency_score_metadata_path",
+        nargs="+",
         type=str,
         default=None,
         help="The path to the semantic consistency metadata (csv/jsonl)."
@@ -200,7 +201,7 @@ def main():
                 result_list.append(video_meta_info)
             except Exception as e:
                 logger.warning(f"Compute text score for video {video_path} with error: {e}.")
-            if i != 0 and (i % args.saved_freq == 0 or i == len(splitted_video_path_list) - 1):
+            if i % args.saved_freq == 0 or i == len(splitted_video_path_list) - 1:
                 state.wait_for_everyone()
                 gathered_result_list = gather_object(result_list)
                 if state.is_main_process and len(gathered_result_list) != 0:
