@@ -339,6 +339,23 @@ class TextBox:
     def process(self, prompt):
         return (prompt, )
 
+class EasyAnimate_TextBox:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "prompt": ("STRING", {"multiline": True, "default": "",}),
+            }
+        }
+    
+    RETURN_TYPES = ("STRING_PROMPT",)
+    RETURN_NAMES =("prompt",)
+    FUNCTION = "process"
+    CATEGORY = "EasyAnimateWrapper"
+
+    def process(self, prompt):
+        return (prompt, )
+
 class EasyAnimateI2VSampler:
     @classmethod
     def INPUT_TYPES(s):
@@ -916,6 +933,7 @@ class EasyAnimateV5_V2VSampler(EasyAnimateV2VSampler):
 
 NODE_CLASS_MAPPINGS = {
     "TextBox": TextBox,
+    "EasyAnimate_TextBox": EasyAnimate_TextBox,
     "LoadEasyAnimateModel": LoadEasyAnimateModel,
     "LoadEasyAnimateLora": LoadEasyAnimateLora,
     "EasyAnimateI2VSampler": EasyAnimateI2VSampler,
@@ -929,6 +947,7 @@ NODE_CLASS_MAPPINGS = {
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "TextBox": "TextBox",
+    "EasyAnimate_TextBox": "EasyAnimate_TextBox",
     "LoadEasyAnimateModel": "Load EasyAnimate Model",
     "LoadEasyAnimateLora": "Load EasyAnimate Lora",
     "EasyAnimateI2VSampler": "EasyAnimate Sampler for Image to Video",
