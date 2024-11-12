@@ -630,7 +630,6 @@ class EasyAnimateT2VSampler:
                     clip_image   = clip_image, 
                     comfyui_progressbar = True,
                 ).videos
-                videos = rearrange(sample, "b c t h w -> (b t) h w c")
             else:
                 sample = pipeline(
                     prompt, 
@@ -642,6 +641,7 @@ class EasyAnimateT2VSampler:
                     guidance_scale = cfg,
                     num_inference_steps = steps,
                 ).videos
+            videos = rearrange(sample, "b c t h w -> (b t) h w c")
 
             for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
                 pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
