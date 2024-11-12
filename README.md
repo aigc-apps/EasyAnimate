@@ -427,6 +427,8 @@ EasyAnimateV5:
 
 
 # Reference
+- CogVideo: https://github.com/THUDM/CogVideo/
+- Flux: https://github.com/black-forest-labs/flux
 - magvit: https://github.com/google-research/magvit
 - PixArt: https://github.com/PixArt-alpha/PixArt-alpha
 - Open-Sora-Plan: https://github.com/PKU-YuanGroup/Open-Sora-Plan
