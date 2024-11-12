@@ -1,13 +1,13 @@
 {
-  "last_node_id": 85,
-  "last_link_id": 48,
+  "last_node_id": 87,
+  "last_link_id": 49,
   "nodes": [
     {
       "id": 80,
       "type": "Note",
       "pos": [
-        20,
-        -300
+        18.171542358398433,
+        -312.8636376953127
       ],
       "size": {
         "0": 210,
@@ -50,7 +50,7 @@
     },
     {
       "id": 73,
-      "type": "TextBox",
+      "type": "EasyAnimate_TextBox",
       "pos": [
         250,
         160
@@ -75,7 +75,7 @@
       ],
       "title": "Negtive Prompt（反向提示词）",
       "properties": {
-        "Node name for S&R": "TextBox"
+        "Node name for S&R": "EasyAnimate_TextBox"
       },
       "widgets_values": [
         "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion."
@@ -148,7 +148,7 @@
           "hidden": false,
           "paused": false,
           "params": {
-            "filename": "EasyAnimate_00025.mp4",
+            "filename": "EasyAnimate_00052.mp4",
             "subfolder": "",
             "type": "output",
             "format": "video/h264-mp4",
@@ -159,7 +159,7 @@
     },
     {
       "id": 75,
-      "type": "TextBox",
+      "type": "EasyAnimate_TextBox",
       "pos": [
         250,
         -50
@@ -184,7 +184,7 @@
       ],
       "title": "Positive Prompt（正向提示词）",
       "properties": {
-        "Node name for S&R": "TextBox"
+        "Node name for S&R": "EasyAnimate_TextBox"
       },
       "widgets_values": [
         "A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
@@ -208,7 +208,7 @@
         {
           "name": "easyanimate_model",
           "type": "EASYANIMATESMODEL",
-          "link": 47,
+          "link": 49,
           "slot_index": 0
         },
         {
@@ -249,16 +249,16 @@
       ]
     },
     {
-      "id": 31,
+      "id": 87,
       "type": "LoadEasyAnimateModel",
       "pos": [
-        240,
-        -300
+        252,
+        -308
       ],
-      "size": {
-        "0": 422.3550720214844,
-        "1": 131.07559204101562
-      },
+      "size": [
+        441.4525528088707,
+        154
+      ],
       "flags": {},
       "order": 4,
       "mode": 0,
@@ -267,7 +267,7 @@
           "name": "easyanimate_model",
           "type": "EASYANIMATESMODEL",
           "links": [
-            47
+            49
           ],
           "shape": 3,
           "slot_index": 0
@@ -278,8 +278,9 @@
       },
       "widgets_values": [
         "EasyAnimateV4-XL-2-InP",
-        false,
-        "easyanimate_video_slicevae_multi_text_encoder_v4.yaml",
+        "model_cpu_offload",
+        "Inpaint",
+        "easyanimate_video_v4_slicevae_multi_text_encoder.yaml",
         "bf16"
       ]
     }
@@ -302,20 +303,20 @@
       "STRING_PROMPT"
     ],
     [
-      47,
-      31,
-      0,
-      85,
-      0,
-      "EASYANIMATESMODEL"
-    ],
-    [
       48,
       85,
       0,
       17,
       0,
       "IMAGE"
+    ],
+    [
+      49,
+      87,
+      0,
+      85,
+      0,
+      "EASYANIMATESMODEL"
     ]
   ],
   "groups": [
@@ -333,10 +334,10 @@
     {
       "title": "Load EasyAnimate",
       "bounding": [
-        220,
-        -380,
-        472,
-        232
+        218,
+        -393,
+        503,
+        254
       ],
       "color": "#b06634",
       "font_size": 24
@@ -347,8 +348,8 @@
     "ds": {
       "scale": 0.8264462809917354,
       "offset": [
-        173.02561125362968,
-        545.1893536009072
+        159.35166594112934,
+        529.544431725907
       ]
     },
     "workspace_info": {

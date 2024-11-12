@@ -1,6 +1,7 @@
 #-*- encoding:utf-8 -*-
 from pytorch_lightning.callbacks import Callback
 
+
 class DatasetCallback(Callback):
     def __init__(self):
         self.sampler_pos_start = 0

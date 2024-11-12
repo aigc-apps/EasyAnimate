@@ -1,15 +1,14 @@
 #!/usr/bin/env python
-import os
 import logging
+import os
 from collections import OrderedDict
 
 import torch
-from torch import nn
+import torch.utils.checkpoint as checkpoint
 from einops import rearrange
 from timm.models.layers import DropPath
 from timm.models.registry import register_model
-
-import torch.utils.checkpoint as checkpoint
+from torch import nn
 
 # from models.utils import load_temp_embed_with_mismatch
 
@@ -340,9 +339,9 @@ def interpolate_pos_embed_vit(state_dict, new_model):
 
 if __name__ == '__main__':
     import time
-    from fvcore.nn import FlopCountAnalysis
-    from fvcore.nn import flop_count_table
+
     import numpy as np
+    from fvcore.nn import FlopCountAnalysis, flop_count_table
 
     seed = 4217
     np.random.seed(seed)

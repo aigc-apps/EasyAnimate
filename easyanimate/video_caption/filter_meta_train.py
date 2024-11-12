@@ -3,9 +3,8 @@ import os
 
 import pandas as pd
 from natsort import natsorted
-
-from utils.logger import logger
 from utils.filter import filter
+from utils.logger import logger
 
 
 def parse_args():

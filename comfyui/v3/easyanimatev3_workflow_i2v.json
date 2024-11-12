@@ -4,7 +4,7 @@
   "nodes": [
     {
       "id": 73,
-      "type": "TextBox",
+      "type": "EasyAnimate_TextBox",
       "pos": [
         250,
         160
@@ -29,7 +29,7 @@
       ],
       "title": "Negtive Prompt（反向提示词）",
       "properties": {
-        "Node name for S&R": "TextBox"
+        "Node name for S&R": "EasyAnimate_TextBox"
       },
       "widgets_values": [
         "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion."
@@ -42,10 +42,10 @@
         258.76883544921907,
         468.15773315429715
       ],
-      "size": {
-        "0": 378.07147216796875,
-        "1": 314
-      },
+      "size": [
+        378.07147216796875,
+        314.0000114440918
+      ],
       "flags": {},
       "order": 1,
       "mode": 0,
@@ -78,39 +78,6 @@
       ]
     },
     {
-      "id": 75,
-      "type": "TextBox",
-      "pos": [
-        250,
-        -50
-      ],
-      "size": {
-        "0": 383.54010009765625,
-        "1": 156.71620178222656
-      },
-      "flags": {},
-      "order": 2,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "prompt",
-          "type": "STRING_PROMPT",
-          "links": [
-            37
-          ],
-          "shape": 3,
-          "slot_index": 0
-        }
-      ],
-      "title": "Positive Prompt（正向提示词）",
-      "properties": {
-        "Node name for S&R": "TextBox"
-      },
-      "widgets_values": [
-        "fireworks display over night city. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
-      ]
-    },
-    {
       "id": 79,
       "type": "Note",
       "pos": [
@@ -122,7 +89,7 @@
         "1": 58
       },
       "flags": {},
-      "order": 3,
+      "order": 2,
       "mode": 0,
       "properties": {
         "text": ""
@@ -137,15 +104,15 @@
       "id": 80,
       "type": "Note",
       "pos": [
-        20,
-        -300
+        19.81457666015625,
+        -307.8177917480467
       ],
-      "size": [
-        210,
-        66.9820411046532
-      ],
+      "size": {
+        "0": 210,
+        "1": 66.98204040527344
+      },
       "flags": {},
-      "order": 4,
+      "order": 3,
       "mode": 0,
       "properties": {
         "text": ""
@@ -168,7 +135,7 @@
         "1": 58
       },
       "flags": {},
-      "order": 5,
+      "order": 4,
       "mode": 0,
       "properties": {
         "text": ""
@@ -186,12 +153,12 @@
         789,
         425
       ],
-      "size": [
-        248.3692843737556,
-        87.05973641715354
-      ],
+      "size": {
+        "0": 248.36927795410156,
+        "1": 87.05973815917969
+      },
       "flags": {},
-      "order": 6,
+      "order": 5,
       "mode": 0,
       "properties": {
         "text": ""
@@ -203,41 +170,6 @@
       "bgcolor": "#653"
     },
     {
-      "id": 31,
-      "type": "LoadEasyAnimateModel",
-      "pos": [
-        240,
-        -300
-      ],
-      "size": {
-        "0": 422.3550720214844,
-        "1": 131.07559204101562
-      },
-      "flags": {},
-      "order": 7,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "easyanimate_model",
-          "type": "EASYANIMATESMODEL",
-          "links": [
-            35
-          ],
-          "shape": 3,
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadEasyAnimateModel"
-      },
-      "widgets_values": [
-        "EasyAnimateV3-XL-2-InP-768x768",
-        false,
-        "easyanimate_video_slicevae_motion_module_v3.yaml",
-        "bf16"
-      ]
-    },
-    {
       "id": 72,
       "type": "EasyAnimateI2VSampler",
       "pos": [
@@ -245,7 +177,7 @@
         93
       ],
       "size": {
-        "0": 315,
+        "0": 319.20001220703125,
         "1": 282
       },
       "flags": {},
@@ -368,7 +300,7 @@
           "hidden": false,
           "paused": false,
           "params": {
-            "filename": "EasyAnimate_00006.mp4",
+            "filename": "EasyAnimate_00049.mp4",
             "subfolder": "",
             "type": "output",
             "format": "video/h264-mp4",
@@ -376,6 +308,75 @@
           }
         }
       }
+    },
+    {
+      "id": 75,
+      "type": "EasyAnimate_TextBox",
+      "pos": [
+        250,
+        -50
+      ],
+      "size": {
+        "0": 383.54010009765625,
+        "1": 156.71620178222656
+      },
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "prompt",
+          "type": "STRING_PROMPT",
+          "links": [
+            37
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "title": "Positive Prompt（正向提示词）",
+      "properties": {
+        "Node name for S&R": "EasyAnimate_TextBox"
+      },
+      "widgets_values": [
+        "fireworks display over night city. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic. "
+      ]
+    },
+    {
+      "id": 31,
+      "type": "LoadEasyAnimateModel",
+      "pos": [
+        239.81457666015626,
+        -307.8177917480467
+      ],
+      "size": {
+        "0": 422.3550720214844,
+        "1": 154
+      },
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "easyanimate_model",
+          "type": "EASYANIMATESMODEL",
+          "links": [
+            35
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadEasyAnimateModel"
+      },
+      "widgets_values": [
+        "EasyAnimateV3-XL-2-InP-768x768",
+        "model_cpu_offload",
+        "Inpaint",
+        "easyanimate_video_v3_slicevae_motion_module.yaml",
+        "bf16"
+      ]
     }
   ],
   "links": [
@@ -436,9 +437,9 @@
       "title": "Load EasyAnimate",
       "bounding": [
         220,
-        -380,
-        472,
-        232
+        -388,
+        474,
+        240
       ],
       "color": "#b06634",
       "font_size": 24
@@ -460,8 +461,8 @@
     "ds": {
       "scale": 0.7513148009015778,
       "offset": [
-        271.2395710949943,
-        427.25806436409613
+        270.9692117199942,
+        417.3951463953461
       ]
     },
     "workspace_info": {

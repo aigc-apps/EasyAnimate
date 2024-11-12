@@ -6,12 +6,8 @@ from typing import Final
 
 import torch
 import torch.nn as nn
-from transformers import (
-    SiglipImageProcessor,
-    SiglipVisionConfig,
-    SiglipVisionModel,
-    logging,
-)
+from transformers import (SiglipImageProcessor, SiglipVisionConfig,
+                          SiglipVisionModel, logging)
 from transformers.image_processing_utils import BatchFeature
 from transformers.modeling_outputs import ImageClassifierOutputWithNoAttention
 

@@ -1,10 +1,10 @@
 import os
-from typing import Optional
 from pathlib import Path
+from typing import Optional
 
-from func_timeout import func_timeout, FunctionTimedOut
+from func_timeout import FunctionTimedOut, func_timeout
 from PIL import Image
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from .logger import logger
 from .video_utils import extract_frames

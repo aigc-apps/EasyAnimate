@@ -6,8 +6,8 @@
       "id": 80,
       "type": "Note",
       "pos": [
-        20,
-        -300
+        18.27766899414062,
+        -307.4300560058589
       ],
       "size": {
         "0": 210,
@@ -50,7 +50,7 @@
     },
     {
       "id": 73,
-      "type": "TextBox",
+      "type": "EasyAnimate_TextBox",
       "pos": [
         250,
         160
@@ -75,7 +75,7 @@
       ],
       "title": "Negtive Prompt（反向提示词）",
       "properties": {
-        "Node name for S&R": "TextBox"
+        "Node name for S&R": "EasyAnimate_TextBox"
       },
       "widgets_values": [
         "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion."
@@ -105,126 +105,8 @@
       "bgcolor": "#653"
     },
     {
-      "id": 31,
-      "type": "LoadEasyAnimateModel",
-      "pos": [
-        240,
-        -300
-      ],
-      "size": {
-        "0": 422.3550720214844,
-        "1": 131.07559204101562
-      },
-      "flags": {},
-      "order": 4,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "easyanimate_model",
-          "type": "EASYANIMATESMODEL",
-          "links": [
-            43
-          ],
-          "shape": 3,
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadEasyAnimateModel"
-      },
-      "widgets_values": [
-        "EasyAnimateV4-XL-2-InP",
-        false,
-        "easyanimate_video_slicevae_multi_text_encoder_v4.yaml",
-        "bf16"
-      ]
-    },
-    {
-      "id": 85,
-      "type": "VHS_LoadVideo",
-      "pos": [
-        336,
-        470
-      ],
-      "size": [
-        235.1999969482422,
-        398.971426827567
-      ],
-      "flags": {},
-      "order": 5,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "meta_batch",
-          "type": "VHS_BatchManager",
-          "link": null
-        },
-        {
-          "name": "vae",
-          "type": "VAE",
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            46
-          ],
-          "shape": 3,
-          "slot_index": 0
-        },
-        {
-          "name": "frame_count",
-          "type": "INT",
-          "links": null,
-          "shape": 3
-        },
-        {
-          "name": "audio",
-          "type": "AUDIO",
-          "links": null,
-          "shape": 3
-        },
-        {
-          "name": "video_info",
-          "type": "VHS_VIDEOINFO",
-          "links": null,
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "VHS_LoadVideo"
-      },
-      "widgets_values": {
-        "video": "00000125.mp4",
-        "force_rate": 0,
-        "force_size": "Disabled",
-        "custom_width": 512,
-        "custom_height": 512,
-        "frame_load_cap": 0,
-        "skip_first_frames": 0,
-        "select_every_nth": 1,
-        "choose video to upload": "image",
-        "videopreview": {
-          "hidden": false,
-          "paused": false,
-          "params": {
-            "frame_load_cap": 0,
-            "skip_first_frames": 0,
-            "force_rate": 0,
-            "filename": "00000125.mp4",
-            "type": "input",
-            "format": "video/mp4",
-            "select_every_nth": 1
-          }
-        }
-      }
-    },
-    {
       "id": 75,
-      "type": "TextBox",
+      "type": "EasyAnimate_TextBox",
       "pos": [
         250,
         -50
@@ -234,7 +116,7 @@
         "1": 156.71620178222656
       },
       "flags": {},
-      "order": 6,
+      "order": 4,
       "mode": 0,
       "outputs": [
         {
@@ -249,7 +131,7 @@
       ],
       "title": "Positive Prompt（正向提示词）",
       "properties": {
-        "Node name for S&R": "TextBox"
+        "Node name for S&R": "EasyAnimate_TextBox"
       },
       "widgets_values": [
         "一个漂亮的女人在弹吉他。视频质量高，画面清晰。高质量，杰作，最好的质量，高分辨率，超仔细。"
@@ -322,7 +204,7 @@
           "hidden": false,
           "paused": false,
           "params": {
-            "filename": "EasyAnimate_00026.mp4",
+            "filename": "EasyAnimate_00053.mp4",
             "subfolder": "",
             "type": "output",
             "format": "video/h264-mp4",
@@ -330,6 +212,42 @@
           }
         }
       }
+    },
+    {
+      "id": 31,
+      "type": "LoadEasyAnimateModel",
+      "pos": [
+        238.27766899414075,
+        -307.4300560058589
+      ],
+      "size": [
+        482.82215786889094,
+        154
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "easyanimate_model",
+          "type": "EASYANIMATESMODEL",
+          "links": [
+            43
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadEasyAnimateModel"
+      },
+      "widgets_values": [
+        "EasyAnimateV4-XL-2-InP",
+        "model_cpu_offload",
+        "Inpaint",
+        "easyanimate_video_v4_slicevae_multi_text_encoder.yaml",
+        "bf16"
+      ]
     },
     {
       "id": 86,
@@ -340,7 +258,7 @@
       ],
       "size": {
         "0": 319.20001220703125,
-        "1": 286
+        "1": 306
       },
       "flags": {},
       "order": 7,
@@ -367,6 +285,11 @@
           "type": "IMAGE",
           "link": 46,
           "slot_index": 3
+        },
+        {
+          "name": "control_video",
+          "type": "IMAGE",
+          "link": null
         }
       ],
       "outputs": [
@@ -384,7 +307,7 @@
         "Node name for S&R": "EasyAnimateV2VSampler"
       },
       "widgets_values": [
-        72,
+        48,
         768,
         43,
         "fixed",
@@ -393,6 +316,89 @@
         0.7000000000000001,
         "Euler"
       ]
+    },
+    {
+      "id": 85,
+      "type": "VHS_LoadVideo",
+      "pos": [
+        336,
+        470
+      ],
+      "size": [
+        235.1999969482422,
+        398.971426827567
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            46
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "frame_count",
+          "type": "INT",
+          "links": null,
+          "shape": 3
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": null,
+          "shape": 3
+        },
+        {
+          "name": "video_info",
+          "type": "VHS_VIDEOINFO",
+          "links": null,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VHS_LoadVideo"
+      },
+      "widgets_values": {
+        "video": "1.mp4",
+        "force_rate": 0,
+        "force_size": "Disabled",
+        "custom_width": 512,
+        "custom_height": 512,
+        "frame_load_cap": 0,
+        "skip_first_frames": 0,
+        "select_every_nth": 1,
+        "choose video to upload": "image",
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "frame_load_cap": 0,
+            "skip_first_frames": 0,
+            "force_rate": 0,
+            "filename": "1.mp4",
+            "type": "input",
+            "format": "video/mp4",
+            "select_every_nth": 1
+          }
+        }
+      }
     }
   ],
   "links": [
@@ -452,10 +458,10 @@
     {
       "title": "Load EasyAnimate",
       "bounding": [
-        220,
-        -380,
-        472,
-        232
+        218,
+        -387,
+        542,
+        248
       ],
       "color": "#b06634",
       "font_size": 24
@@ -477,8 +483,8 @@
     "ds": {
       "scale": 0.683013455365071,
       "offset": [
-        308.139596574468,
-        433.1647465336458
+        284.93704305884313,
+        442.10948247114595
       ]
     },
     "workspace_info": {

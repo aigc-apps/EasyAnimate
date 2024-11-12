@@ -1,8 +1,8 @@
 import argparse
-import os
 import glob
 import json
-from multiprocessing import Pool, Manager
+import os
+from multiprocessing import Manager, Pool
 
 import pandas as pd
 from natsort import index_natsorted

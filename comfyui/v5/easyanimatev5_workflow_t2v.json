@@ -1,0 +1,400 @@
+{
+  "last_node_id": 89,
+  "last_link_id": 53,
+  "nodes": [
+    {
+      "id": 80,
+      "type": "Note",
+      "pos": {
+        "0": 18.17154312133789,
+        "1": -312.8636474609375
+      },
+      "size": {
+        "0": 210,
+        "1": 66.98204040527344
+      },
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": ""
+      },
+      "widgets_values": [
+        "Load model here\n（在此选择要使用的模型）"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 78,
+      "type": "Note",
+      "pos": {
+        "0": 18,
+        "1": -46
+      },
+      "size": {
+        "0": 210,
+        "1": 58
+      },
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": ""
+      },
+      "widgets_values": [
+        "You can write prompt here\n（你可以在此填写提示词）"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 87,
+      "type": "LoadEasyAnimateModel",
+      "pos": {
+        "0": 252,
+        "1": -308
+      },
+      "size": {
+        "0": 441.4525451660156,
+        "1": 154
+      },
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "easyanimate_model",
+          "type": "EASYANIMATESMODEL",
+          "links": [
+            51
+          ],
+          "slot_index": 0,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadEasyAnimateModel"
+      },
+      "widgets_values": [
+        "EasyAnimateV5-12b-zh-InP",
+        "model_cpu_offload",
+        "Inpaint",
+        "easyanimate_video_v5_magvit_multi_text_encoder.yaml",
+        "bf16"
+      ]
+    },
+    {
+      "id": 88,
+      "type": "EasyAnimateV5_T2VSampler",
+      "pos": {
+        "0": 786,
+        "1": 15
+      },
+      "size": {
+        "0": 327.6000061035156,
+        "1": 290
+      },
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "easyanimate_model",
+          "type": "EASYANIMATESMODEL",
+          "link": 51,
+          "slot_index": 0
+        },
+        {
+          "name": "prompt",
+          "type": "STRING_PROMPT",
+          "link": 52,
+          "slot_index": 1
+        },
+        {
+          "name": "negative_prompt",
+          "type": "STRING_PROMPT",
+          "link": 53,
+          "slot_index": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            50
+          ],
+          "slot_index": 0,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EasyAnimateV5_T2VSampler"
+      },
+      "widgets_values": [
+        49,
+        672,
+        384,
+        false,
+        43,
+        "fixed",
+        50,
+        6,
+        "DDIM"
+      ]
+    },
+    {
+      "id": 75,
+      "type": "EasyAnimate_TextBox",
+      "pos": {
+        "0": 250,
+        "1": -50
+      },
+      "size": {
+        "0": 383.54010009765625,
+        "1": 156.71620178222656
+      },
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "prompt",
+          "type": "STRING_PROMPT",
+          "links": [
+            52
+          ],
+          "slot_index": 0,
+          "shape": 3
+        }
+      ],
+      "title": "Positive Prompt（正向提示词）",
+      "properties": {
+        "Node name for S&R": "EasyAnimate_TextBox"
+      },
+      "widgets_values": [
+        "一位年轻女子，有着美丽清澈的眼睛和金发，站在森林里，穿着白色的衣服，戴着皇冠。她似乎陷入了沉思，相机聚焦在她的脸上。质量高、杰作、最佳品质、高分辨率、超精细、梦幻般。"
+      ]
+    },
+    {
+      "id": 73,
+      "type": "EasyAnimate_TextBox",
+      "pos": {
+        "0": 250,
+        "1": 160
+      },
+      "size": {
+        "0": 383.7149963378906,
+        "1": 183.83506774902344
+      },
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "prompt",
+          "type": "STRING_PROMPT",
+          "links": [
+            53
+          ],
+          "slot_index": 0,
+          "shape": 3
+        }
+      ],
+      "title": "Negtive Prompt（反向提示词）",
+      "properties": {
+        "Node name for S&R": "EasyAnimate_TextBox"
+      },
+      "widgets_values": [
+        "扭曲的身体，肢体残缺，文本字幕，漫画，静止，丑陋，错误，乱码。"
+      ]
+    },
+    {
+      "id": 17,
+      "type": "VHS_VideoCombine",
+      "pos": {
+        "0": 1148,
+        "1": 15
+      },
+      "size": [
+        390.9534912109375,
+        310
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 50,
+          "slot_index": 0,
+          "label": "图像",
+          "shape": 7
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": null,
+          "label": "音频",
+          "shape": 7
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "label": "批次管理",
+          "shape": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null,
+          "slot_index": 0,
+          "shape": 3,
+          "label": "文件名"
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 8,
+        "loop_count": 0,
+        "filename_prefix": "EasyAnimate",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 22,
+        "save_metadata": true,
+        "pingpong": false,
+        "save_output": true,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "filename": "EasyAnimate_00003.mp4",
+            "subfolder": "",
+            "type": "output",
+            "format": "video/h264-mp4",
+            "frame_rate": 8
+          }
+        }
+      }
+    },
+    {
+      "id": 89,
+      "type": "Note",
+      "pos": {
+        "0": -97,
+        "1": 193
+      },
+      "size": [
+        326.1556114026207,
+        145.20905264909447
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": ""
+      },
+      "widgets_values": [
+        "Using longer neg prompt such as \"Blurring, mutation, deformation, distortion, dark and solid, comics.\" can increase stability. Adding words such as \"quiet, solid\" to the neg prompt can increase dynamism.\n(使用更长的neg prompt如\"模糊，突变，变形，失真，画面暗，画面固定，连环画，漫画，线稿，没有主体。\"，可以增加稳定性。在neg prompt中添加\"安静，固定\"等词语可以增加动态性。)"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    }
+  ],
+  "links": [
+    [
+      50,
+      88,
+      0,
+      17,
+      0,
+      "IMAGE"
+    ],
+    [
+      51,
+      87,
+      0,
+      88,
+      0,
+      "EASYANIMATESMODEL"
+    ],
+    [
+      52,
+      75,
+      0,
+      88,
+      1,
+      "STRING_PROMPT"
+    ],
+    [
+      53,
+      73,
+      0,
+      88,
+      2,
+      "STRING_PROMPT"
+    ]
+  ],
+  "groups": [
+    {
+      "title": "Load EasyAnimate",
+      "bounding": [
+        218,
+        -393,
+        503,
+        254
+      ],
+      "color": "#b06634",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "title": "Prompts",
+      "bounding": [
+        218,
+        -127,
+        450,
+        483
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.7513148009015777,
+      "offset": [
+        206.91128312862938,
+        440.0942364134056
+      ]
+    },
+    "workspace_info": {
+      "id": "776b62b4-bd17-4ed3-9923-b7aad000b1ea"
+    }
+  },
+  "version": 0.4
+}

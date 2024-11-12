@@ -1,0 +1,20 @@
+transformer_additional_kwargs:
+  transformer_type:                           "HunyuanTransformer3DModel"
+  basic_block_type:                           "basic"
+  after_norm:                                 false
+  time_position_encoding_type:                "2d_rope"
+  time_position_encoding:                     true
+  resize_inpaint_mask_directly:               false
+  enable_clip_in_inpaint:                     true
+
+vae_kwargs:
+  vae_type: "AutoencoderKLMagvit"
+  mini_batch_encoder: 8
+  mini_batch_decoder: 2
+  slice_mag_vae: false
+  slice_compression_vae: false
+  cache_compression_vae: true
+  cache_mag_vae: false
+
+text_encoder_kwargs:
+  enable_multi_text_encoder: true

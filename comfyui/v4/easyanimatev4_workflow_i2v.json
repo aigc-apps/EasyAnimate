@@ -4,7 +4,7 @@
   "nodes": [
     {
       "id": 73,
-      "type": "TextBox",
+      "type": "EasyAnimate_TextBox",
       "pos": [
         250,
         160
@@ -29,7 +29,7 @@
       ],
       "title": "Negtive Prompt（反向提示词）",
       "properties": {
-        "Node name for S&R": "TextBox"
+        "Node name for S&R": "EasyAnimate_TextBox"
       },
       "widgets_values": [
         "The video is not of a high quality, it has a low resolution, and the audio quality is not clear. Strange motion trajectory, a poor composition and deformed video, low resolution, duplicate and ugly, strange body structure, long and strange neck, bad teeth, bad eyes, bad limbs, bad hands, rotating camera, blurry camera, shaking camera. Deformation, low-resolution, blurry, ugly, distortion."
@@ -79,7 +79,7 @@
     },
     {
       "id": 75,
-      "type": "TextBox",
+      "type": "EasyAnimate_TextBox",
       "pos": [
         250,
         -50
@@ -104,7 +104,7 @@
       ],
       "title": "Positive Prompt（正向提示词）",
       "properties": {
-        "Node name for S&R": "TextBox"
+        "Node name for S&R": "EasyAnimate_TextBox"
       },
       "widgets_values": [
         "fireworks display over night city. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic."
@@ -137,8 +137,8 @@
       "id": 80,
       "type": "Note",
       "pos": [
-        20,
-        -300
+        19.024218139648436,
+        -329.9677812499998
       ],
       "size": {
         "0": 210,
@@ -178,6 +178,106 @@
       ],
       "color": "#432",
       "bgcolor": "#653"
+    },
+    {
+      "id": 72,
+      "type": "EasyAnimateI2VSampler",
+      "pos": [
+        761,
+        93
+      ],
+      "size": {
+        "0": 319.20001220703125,
+        "1": 282
+      },
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "easyanimate_model",
+          "type": "EASYANIMATESMODEL",
+          "link": 35
+        },
+        {
+          "name": "prompt",
+          "type": "STRING_PROMPT",
+          "link": 37
+        },
+        {
+          "name": "negative_prompt",
+          "type": "STRING_PROMPT",
+          "link": 38
+        },
+        {
+          "name": "start_img",
+          "type": "IMAGE",
+          "link": 39
+        },
+        {
+          "name": "end_img",
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            40
+          ],
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EasyAnimateI2VSampler"
+      },
+      "widgets_values": [
+        72,
+        768,
+        43,
+        "fixed",
+        25,
+        7,
+        "Euler"
+      ]
+    },
+    {
+      "id": 31,
+      "type": "LoadEasyAnimateModel",
+      "pos": [
+        244.9895975341797,
+        -333.2615217285155
+      ],
+      "size": [
+        440.2642531237557,
+        166.77216219840386
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "outputs": [
+        {
+          "name": "easyanimate_model",
+          "type": "EASYANIMATESMODEL",
+          "links": [
+            35
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadEasyAnimateModel"
+      },
+      "widgets_values": [
+        "EasyAnimateV4-XL-2-InP",
+        "model_cpu_offload",
+        "Inpaint",
+        "easyanimate_video_v4_slicevae_multi_text_encoder.yaml",
+        "bf16"
+      ]
     },
     {
       "id": 17,
@@ -246,7 +346,7 @@
           "hidden": false,
           "paused": false,
           "params": {
-            "filename": "EasyAnimate_00024.mp4",
+            "filename": "EasyAnimate_00055.mp4",
             "subfolder": "",
             "type": "output",
             "format": "video/h264-mp4",
@@ -254,105 +354,6 @@
           }
         }
       }
-    },
-    {
-      "id": 31,
-      "type": "LoadEasyAnimateModel",
-      "pos": [
-        240,
-        -300
-      ],
-      "size": {
-        "0": 422.3550720214844,
-        "1": 131.07559204101562
-      },
-      "flags": {},
-      "order": 6,
-      "mode": 0,
-      "outputs": [
-        {
-          "name": "easyanimate_model",
-          "type": "EASYANIMATESMODEL",
-          "links": [
-            35
-          ],
-          "shape": 3,
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadEasyAnimateModel"
-      },
-      "widgets_values": [
-        "EasyAnimateV4-XL-2-InP",
-        false,
-        "easyanimate_video_slicevae_multi_text_encoder_v4.yaml",
-        "bf16"
-      ]
-    },
-    {
-      "id": 72,
-      "type": "EasyAnimateI2VSampler",
-      "pos": [
-        761,
-        93
-      ],
-      "size": {
-        "0": 319.20001220703125,
-        "1": 282
-      },
-      "flags": {},
-      "order": 7,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "easyanimate_model",
-          "type": "EASYANIMATESMODEL",
-          "link": 35
-        },
-        {
-          "name": "prompt",
-          "type": "STRING_PROMPT",
-          "link": 37
-        },
-        {
-          "name": "negative_prompt",
-          "type": "STRING_PROMPT",
-          "link": 38
-        },
-        {
-          "name": "start_img",
-          "type": "IMAGE",
-          "link": 39
-        },
-        {
-          "name": "end_img",
-          "type": "IMAGE",
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "links": [
-            40
-          ],
-          "shape": 3
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "EasyAnimateI2VSampler"
-      },
-      "widgets_values": [
-        72,
-        768,
-        43,
-        "fixed",
-        25,
-        7,
-        "Euler"
-      ]
     }
   ],
   "links": [
@@ -412,10 +413,10 @@
     {
       "title": "Load EasyAnimate",
       "bounding": [
-        220,
-        -380,
-        472,
-        232
+        219,
+        -410,
+        492,
+        259
       ],
       "color": "#b06634",
       "font_size": 24
@@ -437,8 +438,8 @@
     "ds": {
       "scale": 0.7513148009015778,
       "offset": [
-        271.4007468762443,
-        427.5804159265961
+        237.60582500124437,
+        450.34259561409607
       ]
     },
     "workspace_info": {

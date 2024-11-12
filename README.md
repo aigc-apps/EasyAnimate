@@ -1,7 +1,7 @@
 # 📷 EasyAnimate | An End-to-End Solution for High-Resolution and Long Video Generation
 😊 EasyAnimate is an end-to-end solution for generating high-resolution and long videos. We can train transformer based diffusion generators, train VAEs for processing long videos, and preprocess metadata. 
 
-😊 Based on Sora like structure and DIT, we use transformer as a diffuser for video generation. We built easyanimate based on motion module, u-vit and slice-vae. In the future, we will try more training programs to improve the effect.
+😊 We use DIT and transformer as a diffuser for video and image generation.
 
 😊 Welcome!
 
@@ -11,44 +11,38 @@
 [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-yellow)](https://huggingface.co/spaces/alibaba-pai/EasyAnimate)
 [![Discord Page](https://img.shields.io/badge/Discord-Page-blue)](https://discord.gg/UzkpB4Bn)
 
-English | [简体中文](./README_zh-CN.md)
+English | [简体中文](./README_zh-CN.md) | [日本語](./README_ja-JP.md)
 
 # Table of Contents
 - [Table of Contents](#table-of-contents)
 - [Introduction](#introduction)
 - [Quick Start](#quick-start)
+- [Video Result](#video-result)
 - [How to use](#how-to-use)
 - [Model zoo](#model-zoo)
-- [Algorithm Detailed](#algorithm-detailed)
 - [TODO List](#todo-list)
 - [Contact Us](#contact-us)
 - [Reference](#reference)
 - [License](#license)
 
 # Introduction
-EasyAnimate is a pipeline based on the transformer architecture that can be used to generate AI photos and videos, train baseline models and Lora models for the Diffusion Transformer. We support making predictions directly from the pre-trained EasyAnimate model to generate videos of about different resolutions, 6 seconds with 24 fps (1 ~ 144 frames, in the future, we will support longer videos). Users are also supported to train their own baseline models and Lora models to perform certain style transformations. 
+EasyAnimate is a pipeline based on the transformer architecture, designed for generating AI images and videos, and for training baseline models and Lora models for Diffusion Transformer. We support direct prediction from pre-trained EasyAnimate models, allowing for the generation of videos with various resolutions, approximately 6 seconds in length, at 8fps (EasyAnimateV5, 1 to 49 frames). Additionally, users can train their own baseline and Lora models for specific style transformations.
 
 We will support quick pull-ups from different platforms, refer to [Quick Start](#quick-start).
 
-What's New:
-- Updated to version 4, supporting a maximum resolution of 1024x1024, 144 frames, 6 seconds, and 24fps video generation. It also supports larger resolutions of 1280x1280 with video generation at 96 frames. Supports the generation of videos from text, images, and videos. A single model can support arbitrary resolutions from 512 to 1280 and supports bilingual predictions in Chinese and English. [ 2024.08.15 ]
-- Support ComfyUI, please refer to [ComfyUI README](comfyui/README.md) for details. [ 2024.07.12 ]
-- Updated to v3, supports up to 720p 144 frames (960x960, 6s, 24fps) video generation, and supports text and image generated video models. [ 2024.07.01 ]
-- ModelScope-Sora "Data Directors" creative sprint has been annouced using EasyAnimate as the training backbone to investigate the influence of data preprocessing. Please visit the competition's [official website](https://tianchi.aliyun.com/competition/entrance/532219) for more information. [ 2024.06.17 ]
-- Updated to v2, supports a maximum of 144 frames (768x768, 6s, 24fps) for generation. [ 2024.05.26 ]
-- Create Code! Support for Windows and Linux Now. [ 2024.04.12 ]
+**New Features:**
+- **Updated to v5**, supporting video generation up to 1024x1024, 49 frames, 6s, 8fps, with expanded model scale to 12B, incorporating the MMDIT structure, and enabling control models with diverse inputs; supports bilingual predictions in Chinese and English. [2024.11.08]
+- **Updated to v4**, allowing for video generation up to 1024x1024, 144 frames, 6s, 24fps; supports video generation from text, image, and video, with a single model handling resolutions from 512 to 1280; bilingual predictions in Chinese and English enabled. [2024.08.15]
+- **Updated to v3**, supporting video generation up to 960x960, 144 frames, 6s, 24fps, from text and image. [2024.07.01]
+- **ModelScope-Sora “Data Director” Creative Race** — The third Data-Juicer Big Model Data Challenge is now officially launched! Utilizing EasyAnimate as the base model, it explores the impact of data processing on model training. Visit the [competition website](https://tianchi.aliyun.com/competition/entrance/532219) for details. [2024.06.17]
+- **Updated to v2**, supporting video generation up to 768x768, 144 frames, 6s, 24fps. [2024.05.26]
+- **Code Created!** Now supporting Windows and Linux. [2024.04.12]
 
 Function：
 - [Data Preprocessing](#data-preprocess)
 - [Train VAE](#vae-train)
 - [Train DiT](#dit-train)
 - [Video Generation](#video-gen)
-
-These are our generated results [GALLERY](scripts/Result_Gallery.md) (Click the image below to see the video):
-
-
-[![Watch the video](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/i2v_result.jpg)](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v3/EasyAnimate-v3-DemoShow.mp4)
-
 
 Our UI interface is as follows:
 ![ui](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/ui_v3.jpg)
@@ -70,8 +64,6 @@ Our ComfyUI is as follows, please refer to [ComfyUI README](comfyui/README.md) f
 If you are using docker, please make sure that the graphics card driver and CUDA environment have been installed correctly in your machine.
 
 Then execute the following commands in this way:
-
-EasyAnimateV4:
 ```
 # pull image
 docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
@@ -90,103 +82,14 @@ mkdir models/Diffusion_Transformer
 mkdir models/Motion_Module
 mkdir models/Personalized_Model
 
-wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar.gz -O models/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar.gz
-
-cd models/Diffusion_Transformer/
-tar -zxvf EasyAnimateV4-XL-2-InP.tar.gz
-cd ../../
+# Please use the hugginface link or modelscope link to download the EasyAnimateV5 model.
+# I2V models
+# https://huggingface.co/alibaba-pai/EasyAnimateV5-12b-zh-InP
+# https://modelscope.cn/models/PAI/EasyAnimateV5-12b-zh-InP
+# T2V models
+# https://huggingface.co/alibaba-pai/EasyAnimateV5-12b-zh
+# https://modelscope.cn/models/PAI/EasyAnimateV5-12b-zh
 ```
-
-<details>
-  <summary>(Obsolete) EasyAnimateV3:</summary>
-
-```
-# pull image
-docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
-
-# enter image
-docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
-
-# clone code
-git clone https://github.com/aigc-apps/EasyAnimate.git
-
-# enter EasyAnimate's dir
-cd EasyAnimate
-
-# download weights
-mkdir models/Diffusion_Transformer
-mkdir models/Motion_Module
-mkdir models/Personalized_Model
-
-wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar
-
-cd models/Diffusion_Transformer/
-tar -xvf EasyAnimateV3-XL-2-InP-512x512.tar
-cd ../../
-```
-</details>
-
-<details>
-  <summary>(Obsolete) EasyAnimateV2:</summary>
-
-```
-# pull image
-docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
-
-# enter image
-docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
-
-# clone code
-git clone https://github.com/aigc-apps/EasyAnimate.git
-
-# enter EasyAnimate's dir
-cd EasyAnimate
-
-# download weights
-mkdir models/Diffusion_Transformer
-mkdir models/Motion_Module
-mkdir models/Personalized_Model
-
-wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512.tar -O models/Diffusion_Transformer/EasyAnimateV2-XL-2-512x512.tar
-
-cd models/Diffusion_Transformer/
-tar -xvf EasyAnimateV2-XL-2-512x512.tar
-cd ../../
-```
-</details>
-
-<details>
-  <summary>(Obsolete) EasyAnimateV1:</summary>
-  
-```
-# pull image
-docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
-
-# enter image
-docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
-
-# clone code
-git clone https://github.com/aigc-apps/EasyAnimate.git
-
-# enter EasyAnimate's dir
-cd EasyAnimate
-
-# download weights
-mkdir models/Diffusion_Transformer
-mkdir models/Motion_Module
-mkdir models/Personalized_Model
-
-wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar
-wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-768x768.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-768x768.tar
-wget https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960.tar -O models/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960.tar
-
-cd models/Diffusion_Transformer/
-tar -xvf EasyAnimateV3-XL-2-InP-512x512.tar
-tar -xvf EasyAnimateV3-XL-2-InP-768x768.tar
-tar -xvf EasyAnimateV3-XL-2-InP-960x960.tar
-cd ../../
-```
-</details>
 
 ### 2. Local install: Environment Check/Downloading/Installation
 #### a. Environment Check
@@ -210,90 +113,138 @@ The detailed of Linux:
 
 We need about 60GB available on disk (for saving weights), please check!
 
-The video sizes of EasyAnimateV4 that can be generated by different graphics memory include:
-| GPU memory | 384x672x72 | 384x672x144 | 576x1008x72 | 576x1008x144 | 768x1344x72 | 768x1344x144 | 960x1680x96 |
-|----------|----------|----------|----------|----------|----------|----------|----------|
-| 12GB | ⭕️ | ⭕️ | ⭕️ | ⭕️ | ❌ | ❌ | ❌ |
-| 16GB | ✅ | ✅ | ⭕️ | ⭕️ | ⭕️ | ❌ | ❌ |
-| 24GB | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| 40GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 80GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-
-✅ indicates it can run with low_gpu_memory_mode=False, ⭕️ indicates it can run with low_gpu_memory_mode=True, ❌ indicates it cannot run. Note that running with low_gpu_memory_mode=True will be slower.
-
-Some graphics cards, like the 2080ti and V100, do not support torch.bfloat16. If you are using one of these cards, you will need to modify the weight_dtype to torch.float16 in both the app.py and predict files to run the program.
-
-The generation time of different GPUs at 25 steps is as follows:
-| GPU | 384x672x72 | 384x672x144 | 576x1008x72 | 576x1008x144 | 768x1344x72 | 768x1344x144 | 960x1680x96 |
-|----------|----------|----------|----------|----------|----------|----------|----------|
-| A10 24GB | ~180s | ~370s | ~480s | ~1800s(⭕️) | ~1000s | ❌ | ❌ |
-| A100 80GB | ~60s | ~180s | ~200s | ~600s | ~500s | ~1800s | ~1800s |
-
-(⭕️) indicates that it can run with low_gpu_memory_mode=True, but at a slower speed, while ❌ indicates that it cannot run.
-
-<details>
-  <summary>(Obsolete) EasyAnimateV3:</summary>
-
-The video sizes of EasyAnimateV3 that can be generated by different graphics memory include:
-| GPU memory | 384x672x72 | 384x672x144 | 576x1008x72 | 576x1008x144 | 720x1280x72 | 720x1280x144 |
-|----------|----------|----------|----------|----------|----------|----------|
-| 12GB | ⭕️ | ⭕️ | ⭕️ | ⭕️ | ❌ | ❌ |
-| 16GB | ✅ | ✅ | ⭕️ | ⭕️ | ⭕️ | ❌ |
-| 24GB | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| 40GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 80GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-</details>
-
 #### b. Weights
 We'd better place the [weights](#model-zoo) along the specified path:
 
-EasyAnimateV4:
+EasyAnimateV5:
 ```
 📦 models/
 ├── 📂 Diffusion_Transformer/
-│   └── 📂 EasyAnimateV4-XL-2-InP/
+│   ├── 📂 EasyAnimateV5-12b-zh-InP/
+│   └── 📂 EasyAnimateV5-12b-zh/
 ├── 📂 Personalized_Model/
 │   └── your trained trainformer model / your trained lora model (for UI load)
 ```
 
-<details>
-  <summary>(Obsolete) EasyAnimateV3:</summary>:
+# 视频作品
+The results displayed are all based on image. 
 
-```
-📦 models/
-├── 📂 Diffusion_Transformer/
-│   └── 📂 EasyAnimateV3-XL-2-InP-512x512/
-├── 📂 Personalized_Model/
-│   └── your trained trainformer model / your trained lora model (for UI load)
-```
-</details>
+### EasyAnimateV5-12b-zh-InP
 
-<details>
-  <summary>(Obsolete) EasyAnimateV2:</summary>
+#### I2V
+<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
+  <tr>
+      <td>
+          <video src="https://github.com/user-attachments/assets/bb393b7c-ba33-494c-ab06-b314adea9fc1" width="100%" controls autoplay loop></video>
+      </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/cb0d0253-919d-4dd6-9dc1-5cd94443c7f1" width="100%" controls autoplay loop></video>
+      </td>
+       <td>
+          <video src="https://github.com/user-attachments/assets/09ed361f-c0c5-4025-aad7-71fe1a1a52b1" width="100%" controls autoplay loop></video>
+     </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/9f42848d-34eb-473f-97ea-a5ebd0268106" width="100%" controls autoplay loop></video>
+     </td>
+  </tr>
+</table>
 
-```
-📦 models/
-├── 📂 Diffusion_Transformer/
-│   └── 📂 EasyAnimateV2-XL-2-512x512/
-├── 📂 Personalized_Model/
-│   └── your trained trainformer model / your trained lora model (for UI load)
-```
-</details>
 
-<details>
-  <summary>(Obsolete) EasyAnimateV1:</summary>
+<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
+  <tr>
+      <td>
+          <video src="https://github.com/user-attachments/assets/903fda91-a0bd-48ee-bf64-fff4e4d96f17" width="100%" controls autoplay loop></video>
+      </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/407c6628-9688-44b6-b12d-77de10fbbe95" width="100%" controls autoplay loop></video>
+      </td>
+       <td>
+          <video src="https://github.com/user-attachments/assets/ccf30ec1-91d2-4d82-9ce0-fcc585fc2f21" width="100%" controls autoplay loop></video>
+     </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/5dfe0f92-7d0d-43e0-b7df-0ff7b325663c" width="100%" controls autoplay loop></video>
+     </td>
+  </tr>
+</table>
 
-  ```
-  📦 models/
-  ├── 📂 Diffusion_Transformer/
-  │   └── 📂 PixArt-XL-2-512x512/
-  ├── 📂 Motion_Module/
-  │   └── 📄 easyanimate_v1_mm.safetensors
-  ├── 📂 Personalized_Model/
-  │   ├── 📄 easyanimate_portrait.safetensors
-  │   └── 📄 easyanimate_portrait_lora.safetensors
-  ```
-</details>
+<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
+  <tr>
+      <td>
+          <video src="https://github.com/user-attachments/assets/2b542b85-be19-4537-9607-9d28ea7e932e" width="100%" controls autoplay loop></video>
+      </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/c1662745-752d-4ad2-92bc-fe53734347b2" width="100%" controls autoplay loop></video>
+      </td>
+       <td>
+          <video src="https://github.com/user-attachments/assets/8bec3d66-50a3-4af5-a381-be2c865825a0" width="100%" controls autoplay loop></video>
+     </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/bcec22f4-732c-446f-958c-2ebbfd8f94be" width="100%" controls autoplay loop></video>
+     </td>
+  </tr>
+</table>
+
+#### T2V
+<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
+  <tr>
+      <td>
+          <video src="https://github.com/user-attachments/assets/eccb0797-4feb-48e9-91d3-5769ce30142b" width="100%" controls autoplay loop></video>
+      </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/76b3db64-9c7a-4d38-8854-dba940240ceb" width="100%" controls autoplay loop></video>
+      </td>
+       <td>
+          <video src="https://github.com/user-attachments/assets/0b8fab66-8de7-44ff-bd43-8f701bad6bb7" width="100%" controls autoplay loop></video>
+     </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/9fbddf5f-7fcd-4cc6-9d7c-3bdf1d4ce59e" width="100%" controls autoplay loop></video>
+     </td>
+  </tr>
+</table>
+
+<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
+  <tr>
+      <td>
+          <video src="https://github.com/user-attachments/assets/19c1742b-e417-45ac-97d6-8bf3a80d8e13" width="100%" controls autoplay loop></video>
+      </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/641e56c8-a3d9-489d-a3a6-42c50a9aeca1" width="100%" controls autoplay loop></video>
+      </td>
+       <td>
+          <video src="https://github.com/user-attachments/assets/2b16be76-518b-44c6-a69b-5c49d76df365" width="100%" controls autoplay loop></video>
+     </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/e7d9c0fc-136f-405c-9fab-629389e196be" width="100%" controls autoplay loop></video>
+     </td>
+  </tr>
+</table>
+
+### EasyAnimateV5-12b-zh-Control
+
+<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
+  <tr>
+      <td>
+          <video src="https://github.com/user-attachments/assets/53002ce2-dd18-4d4f-8135-b6f68364cabd" width="100%" controls autoplay loop></video>
+      </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/fce43c0b-81fa-4ab2-9ca7-78d786f520e6" width="100%" controls autoplay loop></video>
+      </td>
+       <td>
+          <video src="https://github.com/user-attachments/assets/b208b92c-5add-4ece-a200-3dbbe47b93c3" width="100%" controls autoplay loop></video>
+     </td>
+  <tr>
+      <td>
+          <video src="https://github.com/user-attachments/assets/3aec95d5-d240-49fb-a9e9-914446c7a4cf" width="100%" controls autoplay loop></video>
+      </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/60fa063b-5c1f-485f-b663-09bd6669de3f" width="100%" controls autoplay loop></video>
+      </td>
+       <td>
+          <video src="https://github.com/user-attachments/assets/4adde728-8397-42f3-8a2a-23f7b39e9a1e" width="100%" controls autoplay loop></video>
+     </td>
+  </tr>
+</table>
+
 
 # How to use
 
@@ -312,6 +263,15 @@ EasyAnimateV4:
 
 #### c. From ComfyUI
 Please refer to [ComfyUI README](comfyui/README.md) for details.
+
+#### d. GPU Memory Saving Schemes
+
+Due to the large parameters of EasyAnimateV5, we need to consider GPU memory saving schemes to conserve memory. We provide a `GPU_memory_mode` option for each prediction file, which can be selected from `model_cpu_offload`, `model_cpu_offload_and_qfloat8`, and `sequential_cpu_offload`.
+
+- `model_cpu_offload` indicates that the entire model will be offloaded to the CPU after use, saving some GPU memory.
+- `model_cpu_offload_and_qfloat8` indicates that the entire model will be offloaded to the CPU after use, and the transformer model is quantized to float8, saving even more GPU memory.
+- `sequential_cpu_offload` means that each layer of the model will be offloaded to the CPU after use, which is slower but saves a substantial amount of GPU memory.
+
 
 ### 2. Model Training
 A complete EasyAnimate training pipeline should include data preprocessing, Video VAE training, and Video DiT training. Among these, Video VAE training is optional because we have already provided a pre-trained Video VAE.
@@ -402,21 +362,32 @@ For details on setting some parameters, please refer to [Readme Train](scripts/R
 
 
 # Model zoo
-EasyAnimateV4:
 
-We attempted to implement EasyAnimate using 3D full attention, but this structure performed moderately on slice VAE and incurred considerable training costs. As a result, the performance of version V4 did not significantly surpass that of version V3. Due to limited resources, we are migrating EasyAnimate to a retrained 16-channel MagVit to pursue better model performance.
+EasyAnimateV5:
+
+| Name | Type | Storage Space | Hugging Face | Model Scope | Description |
+|--|--|--|--|--|--|
+| EasyAnimateV5-12b-zh-InP | EasyAnimateV5 | 34 GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV5-12b-zh-InP) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV5-12b-zh-InP) | Official image-to-video weights. Supports video prediction at multiple resolutions (512, 768, 1024), trained with 49 frames at 8 frames per second, and supports bilingual prediction in Chinese and English. |
+| EasyAnimateV5-12b-zh-Control | EasyAnimateV5 | 34 GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV5-12b-zh-Control) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV5-12b-zh-Control) | Official video control weights, supporting various control conditions such as Canny, Depth, Pose, MLSD, etc. Supports video prediction at multiple resolutions (512, 768, 1024) and is trained with 49 frames at 8 frames per second. Bilingual prediction in Chinese and English is supported. |
+| EasyAnimateV5-12b-zh | EasyAnimateV5 | 34 GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV5-12b-zh) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV5-12b-zh) | Official text-to-video weights. Supports video prediction at multiple resolutions (512, 768, 1024), trained with 49 frames at 8 frames per second, and supports bilingual prediction in Chinese and English. |
+
+<details>
+  <summary>(Obsolete) EasyAnimateV4:</summary>
 
 | Name | Type | Storage Space | Url | Hugging Face | Description |
 |--|--|--|--|--|--|
 | EasyAnimateV4-XL-2-InP.tar.gz | EasyAnimateV4 | Before extraction: 8.9 GB \/ After extraction: 14.0 GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV4-XL-2-InP.tar.gz) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV4-XL-2-InP)| Our official graph-generated video model is capable of predicting videos at multiple resolutions (512, 768, 1024, 1280) and has been trained on 144 frames at a rate of 24 frames per second. |
+</details>
 
-EasyAnimateV3:
+<details>
+  <summary>(Obsolete) EasyAnimateV3:</summary>
 
 | Name | Type | Storage Space | Url | Hugging Face | Description |
 |--|--|--|--|--|--|
 | EasyAnimateV3-XL-2-InP-512x512.tar | EasyAnimateV3 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-512x512.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-512x512) | EasyAnimateV3 official weights for 512x512 text and image to video resolution. Training with 144 frames and fps 24 |
 | EasyAnimateV3-XL-2-InP-768x768.tar | EasyAnimateV3 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-768x768.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-768x768) | EasyAnimateV3 official weights for 768x768 text and image to video resolution. Training with 144 frames and fps 24 |
 | EasyAnimateV3-XL-2-InP-960x960.tar | EasyAnimateV3 | 18.2GB | [Download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/EasyAnimateV3-XL-2-InP-960x960.tar) | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-960x960) | EasyAnimateV3 official weights for 960x960 text and  image to video resolution. Training with 144 frames and fps 24 |
+</details>
 
 <details>
   <summary>(Obsolete) EasyAnimateV2:</summary>
@@ -441,64 +412,6 @@ EasyAnimateV3:
 | PixArt-XL-2-512x512.tar | Pixart | 11.4GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Diffusion_Transformer/PixArt-XL-2-512x512.tar)| Pixart-Alpha official weights |
 | easyanimate_portrait.safetensors | Checkpoint of Pixart | 2.3GB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait.safetensors) | Training with internal portrait datasets |
 | easyanimate_portrait_lora.safetensors | Lora of Pixart | 654.0MB | [download](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimate_portrait_lora.safetensors)| Training with internal portrait datasets |
-</details>
-
-
-
-# Algorithm Detailed
-### 1. Data Preprocessing
-**Video Cut**
-
-For long video cut, EasyAnimate utilizes PySceneDetect to identify scene changes within the video and performs scene cutting based on certain threshold values to ensure consistency in the themes of the video segments. After cutting, we only keep segments with lengths ranging from 3 to 10 seconds for model training.
-
-**Video Cleaning and Description**
-
-Following SVD's data preparation process, EasyAnimate provides a simple yet effective data processing pipeline for high-quality data filtering and labeling. It also supports distributed processing to accelerate the speed of data preprocessing. The overall process is as follows:
-
-- Duration filtering: Analyze the basic information of the video to filter out low-quality videos that are short in duration or low in resolution.
-- Aesthetic filtering: Filter out videos with poor content (blurry, dim, etc.) by calculating the average aesthetic score of uniformly distributed 4 frames.
-- Text filtering: Use easyocr to calculate the text proportion of middle frames to filter out videos with a large proportion of text.
-- Motion filtering: Calculate interframe optical flow differences to filter out videos that move too slowly or too quickly.
-- Text description: Recaption video frames using videochat2 and vila. PAI is also developing a higher quality video recaption model, which will be released for use as soon as possible.
-
-### 2. Model Architecture
-EasyAnimateV4:
-
-We used [Hunyuan-DiT](https://github.com/Tencent/HunyuanDiT) as the underlying framework, and modified the VAE and DiT model structures on this basis to better support video generation. Please refer to the original resource page and follow the corresponding license.
-
-The overall structure of EasyAnimateV4 is as follows:
-
-EasyAnimateV4 includes two text encoders, Video VAE (video encoder and decoder), and Diffusion Transformer (DiT). The MT5 Encoder and multi-modal CLIP are used as text encoders. EasyAnimateV4 employs 3D global attention for video reconstruction, eliminating the separation of motion modules and base models as seen in V3. This ensures coherent frame generation and seamless motion transitions through global attention.
-
-The pipeline structure of EasyAnimateV4 is as follows:
-
-<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/framework_v4.jpg" alt="ui" style="zoom:50%;" />
-
-The foundational model structure of EasyAnimateV4 is as follows:
-
-<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/pipeline_v4.jpg" alt="ui" style="zoom:50%;" />
-
-The Slice VAE exhibits some stuttering during scene changes because the later latents cannot fully access information from the preceding blocks during decoding. 
-
-Referring to MagVit, we stored the results after convolution of the previous blocks. Except for the initial video block, each subsequent video block during convolution only accessed the features of the preceding video blocks, not the following ones. After this modification, the decoder's reconstruction results are smoother compared to the original Slice VAE.
-
-<details>
-  <summary>(Obsolete) EasyAnimateV3:</summary>
-We have adopted [PixArt-alpha](https://github.com/PixArt-alpha/PixArt-alpha) as the base model and modified the VAE and DiT model structures on this basis to better support video generation. The overall structure of EasyAnimate is as follows:
-
-The diagram below outlines the pipeline of EasyAnimate. It includes the Text Encoder, Video VAE (video encoder and decoder), and Diffusion Transformer (DiT). The T5 Encoder is used as the text encoder. Other components are detailed in the sections below.
-
-<img src="https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/pipeline_v3.jpg" alt="ui" style="zoom:50%;" />
-
-We have expanded the DiT framework originally designed for 2D image synthesis to accommodate the complexities of 3D video generation by incorporating a special motion module block named Hybrid Motion Module. 
-
-In the motion module, we employ a combination of temporal attention and global attention to ensure the generation of coherent frames and seamless motion transitions.
-
-Additionally, referencing U-ViT, it introduces a skip connection structure into EasyAnimate to further optimize deeper features by incorporating shallow features. A fully connected layer is also zero-initialized for each skip connection structure, allowing it to be applied as a plug-in module to previously trained and well-performing DiTs.
-
-Moreover, it proposes Slice VAE, which addresses the memory difficulties encountered by MagViT when dealing with long and large videos, while also achieving greater compression in the temporal dimension during video encoding and decoding stages compared to MagViT.
-
-For more details, please refer to [arxiv](https://arxiv.org/abs/2405.18991).
 </details>
 
 # TODO List

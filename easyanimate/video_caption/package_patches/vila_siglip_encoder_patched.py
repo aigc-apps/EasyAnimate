@@ -2,15 +2,17 @@
 # 1. Support transformers >= 4.36.2.
 import torch
 import transformers
+from llava.model.multimodal_encoder.vision_encoder import (VisionTower,
+                                                           VisionTowerS2)
 from packaging import version
 from transformers import AutoConfig, AutoModel, PretrainedConfig
 
-from llava.model.multimodal_encoder.vision_encoder import VisionTower, VisionTowerS2
-
 if version.parse(transformers.__version__) > version.parse("4.36.2"):
-    from transformers import SiglipImageProcessor, SiglipVisionConfig, SiglipVisionModel
+    from transformers import (SiglipImageProcessor, SiglipVisionConfig,
+                              SiglipVisionModel)
 else:
-    from .siglip import SiglipImageProcessor, SiglipVisionConfig, SiglipVisionModel
+    from .siglip import (SiglipImageProcessor, SiglipVisionConfig,
+                         SiglipVisionModel)
 
 
 class SiglipVisionTower(VisionTower):

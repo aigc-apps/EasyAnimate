@@ -223,6 +223,7 @@ class CLIPScore:
 if __name__ == "__main__":
     from torch.utils.data import DataLoader
     from tqdm import tqdm
+
     from .video_dataset import VideoDataset, collate_fn
 
     aesthetic_score = AestheticScore(device="cuda")
