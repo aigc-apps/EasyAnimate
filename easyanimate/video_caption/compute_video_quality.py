@@ -2,13 +2,15 @@ import argparse
 import os
 
 import pandas as pd
-import utils.image_evaluator as image_evaluator
-import utils.video_evaluator as video_evaluator
 from accelerate import PartialState
 from accelerate.utils import gather_object
 from natsort import index_natsorted
-from torch.utils.data import DataLoader
 from tqdm import tqdm
+from torch.utils.data import DataLoader
+
+import utils.image_evaluator as image_evaluator
+import utils.video_evaluator as video_evaluator
+from utils.filter import filter
 from utils.logger import logger
 from utils.video_dataset import VideoDataset, collate_fn
 
@@ -25,41 +27,43 @@ def parse_args():
         help="The column contains the video path (an absolute path or a relative path w.r.t the video_folder).",
     )
     parser.add_argument("--video_folder", type=str, default="", help="The video folder.")
-    parser.add_argument(
-        "--caption_column",
-        type=str,
-        default=None,
-        help="The column contains the caption.",
-    )
+    parser.add_argument("--caption_column", type=str, default=None, help="The column contains the caption.")
     parser.add_argument(
         "--frame_sample_method",
         type=str,
         choices=["mid", "uniform", "image"],
         default="uniform",
     )
-    parser.add_argument(
-        "--num_sampled_frames",
-        type=int,
-        default=8,
-        help="num_sampled_frames",
-    )
+    parser.add_argument("--num_sampled_frames", type=int, default=8, help="The number of sampled frames.")
     parser.add_argument("--metrics", nargs="+", type=str, required=True, help="The evaluation metric(s) for generated images.")
-    parser.add_argument(
-        "--batch_size",
-        type=int,
-        default=10,
-        required=False,
-        help="The batch size for the video dataset.",
-    )
-    parser.add_argument(
-        "--num_workers",
-        type=int,
-        default=4,
-        required=False,
-        help="The number of workers for the video dataset.",
-    )
+    parser.add_argument("--batch_size", type=int, default=1, help="The batch size for the video dataset.")
+    parser.add_argument("--num_workers", type=int, default=1, help="The number of workers for the video dataset.")
     parser.add_argument("--saved_path", type=str, required=True, help="The save path to the output results (csv/jsonl).")
-    parser.add_argument("--saved_freq", type=int, default=1000, help="The frequency to save the output results.")
+    parser.add_argument("--saved_freq", type=int, default=1, help="The frequency to save the output results.")
+
+    parser.add_argument("--basic_metadata_path", type=str, default=None, help="The path to the basic metadata (csv/jsonl).")
+    parser.add_argument("--min_resolution", type=float, default=0, help="The resolution threshold.")
+    parser.add_argument("--min_duration", type=float, default=-1, help="The minimum duration.")
+    parser.add_argument("--max_duration", type=float, default=-1, help="The maximum duration.")
+    parser.add_argument(
+        "--text_score_metadata_path", type=str, default=None, help="The path to the video text score metadata (csv/jsonl)."
+    )
+    parser.add_argument("--min_text_score", type=float, default=0.02, help="The text threshold.")
+    parser.add_argument(
+        "--motion_score_metadata_path", type=str, default=None, help="The path to the video motion score metadata (csv/jsonl)."
+    )
+    parser.add_argument("--min_motion_score", type=float, default=2, help="The minimum motion threshold.")
+    parser.add_argument("--max_motion_score", type=float, default=999999, help="The maximum motion threshold.")
+    parser.add_argument(
+        "--semantic_consistency_score_metadata_path",
+        nargs="+",
+        type=str,
+        default=None,
+        help="The path to the semantic consistency metadata (csv/jsonl)."
+    )
+    parser.add_argument(
+        "--min_semantic_consistency_score", type=float, default=0.80, help="The semantic consistency score threshold."
+    )
 
     args = parser.parse_args()
     return args
@@ -95,6 +99,24 @@ def main():
             video_metadata_df = video_metadata_df[[args.video_path_column, args.caption_column + "_x"]]
             video_metadata_df.rename(columns={args.caption_column + "_x": args.caption_column}, inplace=True)
         logger.info(f"Resume from {args.saved_path}: {len(saved_metadata_df)} processed and {len(video_metadata_df)} to be processed.")
+    
+    video_path_list = video_metadata_df[args.video_path_column].tolist()
+    video_path_list = filter(
+        video_path_list,
+        basic_metadata_path=args.basic_metadata_path,
+        min_resolution=args.min_resolution,
+        min_duration=args.min_duration,
+        max_duration=args.max_duration,
+        text_score_metadata_path=args.text_score_metadata_path,
+        min_text_score=args.min_text_score,
+        motion_score_metadata_path=args.motion_score_metadata_path,
+        min_motion_score=args.min_motion_score,
+        max_motion_score=args.max_motion_score,
+        semantic_consistency_score_metadata_path=args.semantic_consistency_score_metadata_path,
+        min_semantic_consistency_score=args.min_semantic_consistency_score,
+        video_path_column=args.video_path_column
+    )
+    video_metadata_df = video_metadata_df[video_metadata_df[args.video_path_column].isin(video_path_list)]
 
     state = PartialState()
     metric_fns = []
@@ -126,7 +148,10 @@ def main():
     
     index = len(video_metadata_df) - len(video_metadata_df) % state.num_processes
     # Avoid the NCCL timeout in the final gather operation.
-    logger.info(f"Drop {len(video_metadata_df) % state.num_processes} videos to ensure each process handles the same number of videos.")
+    logger.info(
+        f"Drop the last {len(video_metadata_df) % state.num_processes} videos "
+        "to ensure each process handles the same number of videos."
+    )
     video_metadata_df = video_metadata_df.iloc[:index]
     logger.info(f"{len(video_metadata_df)} videos are to be processed.")
 
@@ -169,32 +194,25 @@ def main():
                 result_dict[args.video_path_column].extend(saved_video_path_list)
 
             # Save the metadata in the main process every saved_freq.
-            if (idx != 0) and (idx % args.saved_freq == 0):
+            if (idx % args.saved_freq) == 0 or idx == len(video_loader) - 1:
                 state.wait_for_everyone()
                 gathered_result_dict = {k: gather_object(v) for k, v in result_dict.items()}
                 if state.is_main_process and len(gathered_result_dict[args.video_path_column]) != 0:
                     result_df = pd.DataFrame(gathered_result_dict)
+                    # Append is not supported (oss).
                     if args.saved_path.endswith(".csv"):
-                        header = False if os.path.exists(args.saved_path) else True
-                        result_df.to_csv(args.saved_path, header=header, index=False, mode="a")
+                        if os.path.exists(args.saved_path):
+                            saved_df = pd.read_csv(args.saved_path)
+                            result_df = pd.concat([saved_df, result_df], ignore_index=True)
+                        result_df.to_csv(args.saved_path, index=False)
                     elif args.saved_path.endswith(".jsonl"):
-                        result_df.to_json(args.saved_path, orient="records", lines=True, mode="a", force_ascii=False)
+                        if os.path.exists(args.saved_path):
+                            saved_df = pd.read_json(args.saved_path, orient="records", lines=True)
+                            result_df = pd.concat([saved_df, result_df], ignore_index=True)
+                        result_df.to_json(args.saved_path, orient="records", lines=True, force_ascii=False)
                     logger.info(f"Save result to {args.saved_path}.")
                 for k in result_dict.keys():
                     result_dict[k] = []
-    
-    # Wait for all processes to finish and gather the final result.
-    state.wait_for_everyone()
-    gathered_result_dict = {k: gather_object(v) for k, v in result_dict.items()}
-    # Save the metadata in the main process.
-    if state.is_main_process and len(gathered_result_dict[args.video_path_column]) != 0:
-        result_df = pd.DataFrame(gathered_result_dict)
-        if args.saved_path.endswith(".csv"):
-            header = False if os.path.exists(args.saved_path) else True
-            result_df.to_csv(args.saved_path, header=header, index=False, mode="a")
-        elif args.saved_path.endswith(".jsonl"):
-            result_df.to_json(args.saved_path, orient="records", lines=True, mode="a", force_ascii=False)
-        logger.info(f"Save the final result to {args.saved_path}.")
 
 if __name__ == "__main__":
     main()

@@ -24,15 +24,12 @@
 ### 安装
 推荐使用阿里云 DSW 和 Docker 来安装环境，请参考 [快速开始](../../README_zh-CN.md#1-云使用-aliyundswdocker). 你也可以参考 [Dockerfile](../../Dockerfile.ds) 中的镜像构建流程在本地安装对应的 conda 环境和其余依赖。
 
-为了提高推理速度和节省推理的显存，生成视频描述依赖于 [llm-awq](https://github.com/mit-han-lab/llm-awq)。因此，需要 RTX 3060 或者 A2 及以上的显卡 (CUDA Compute Capability >= 8.0)。
-
 ```shell
 # pull image
-docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:
-asyanimate
+docker pull mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
 
 # enter image
-docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:asyanimate
+docker run -it -p 7860:7860 --network host --gpus all --security-opt seccomp:unconfined --shm-size 200g mybigpai-public-registry.cn-beijing.cr.aliyuncs.com/easycv/torch_cuda:easyanimate
 
 # clone code
 git clone https://github.com/aigc-apps/EasyAnimate.git
@@ -67,6 +64,7 @@ sh scripts/stage_1_video_splitting.sh
 #### 视频过滤
 基于上一步获得的视频，EasyAnimate 提供了一个简单而有效的流程来过滤出高质量的视频。总体流程如下：
 
+- 场景跳变过滤：通过 [CLIP](https://github.com/openai/CLIP) 或者 [DINOv2](https://github.com/facebookresearch/dinov2) 来计算关键帧和首尾帧的语义相似度，从而过滤掉由于 PySceneDetect 缺失或多余分割引入的场景跳变的视频。
 - 美学过滤：通过 [aesthetic-predictor-v2-5](https://github.com/discus0434/aesthetic-predictor-v2-5) 计算均匀采样的 4 帧视频的平均美学分数，从而筛选出内容不佳（模糊、昏暗等）的视频。
 - 文本过滤：使用 [EasyOCR](https://github.com/JaidedAI/EasyOCR) 计算中间帧的文本区域比例，过滤掉含有大面积文本的视频。
 - 运动过滤：计算帧间光流差，过滤掉移动太慢或太快的视频。
@@ -82,12 +80,12 @@ sh scripts/stage_2_video_filtering.sh
 请执行 `HF_ENDPOINT=https://hf-mirror.com sh scripts/stage_2_video_filtering.sh` 如果你无法访问 huggingface.com.
 
 #### 视频描述
-在获得上述高质量的过滤视频后，EasyAnimate 利用 [VILA1.5](https://github.com/NVlabs/VILA) 来生成视频描述。随后，使用 LLMs 对生成的视频描述进行重写，以更好地满足视频生成任务的要求。最后，使用自研的 VideoCLIPXL 模型来过滤掉描述和视频内容不一致的数据，从而得到最终的训练数据集。
+在获得上述高质量的过滤视频后，EasyAnimate 利用 [InternVL2](https://internvl.readthedocs.io/en/latest/internvl2.0/introduction.html) 来生成视频描述。随后，使用 LLMs 对生成的视频描述进行重写，以更好地满足视频生成任务的要求。最后，使用自研的 [VideoCLIP-XL](https://arxiv.org/abs/2410.00741) 模型来过滤掉描述和视频内容不一致的数据，从而得到最终的训练数据集。
 
-请根据机器的显存从 [VILA1.5](https://huggingface.co/collections/Efficient-Large-Model/vila-on-pre-training-for-visual-language-models-65d8022a3a52cd9bcd62698e) 下载合适大小的模型。对于 A100 40G，你可以执行下面的命令来下载 [VILA1.5-40b-AWQ](https://huggingface.co/Efficient-Large-Model/VILA1.5-40b-AWQ)
+请根据机器的显存从 [InternVL2](https://huggingface.co/collections/OpenGVLab/internvl-20-667d3961ab5eb12c7ed1463e) 下载合适大小的模型。对于 A100 40G，你可以执行下面的命令来下载 [InternVL2-40B-AWQ](https://huggingface.co/OpenGVLab/InternVL2-40B-AWQ)
 ```shell
 # Add HF_ENDPOINT=https://hf-mirror.com before the command if you cannot access to huggingface.com
-huggingface-cli download Efficient-Large-Model/VILA1.5-40b-AWQ --local-dir-use-symlinks False --local-dir /PATH/TO/VILA_MODEL
+huggingface-cli download OpenGVLab/InternVL2-40B-AWQ --local-dir-use-symlinks False --local-dir /PATH/TO/INTERNVL2_MODEL
 ```
 
 你可以选择性地准备 LLMs 来改写上述视频描述的结果。例如，你执行下面的命令来下载 [Meta-Llama-3-8B-Instruct](https://huggingface.co/NousResearch/Meta-Llama-3-8B-Instruct)
@@ -99,7 +97,7 @@ huggingface-cli download NousResearch/Meta-Llama-3-8B-Instruct --local-dir-use-s
 视频描述的完整流程在 [stage_3_video_recaptioning.sh](./scripts/stage_3_video_recaptioning.sh).
 执行
 ```shell
-VILA_MODEL_PATH=/PATH/TO/VILA_MODEL REWRITE_MODEL_PATH=/PATH/TO/REWRITE_MODEL sh scripts/stage_3_video_recaptioning.sh
+CAPTION_MODEL_PATH=/PATH/TO/INTERNVL2_MODEL REWRITE_MODEL_PATH=/PATH/TO/REWRITE_MODEL sh scripts/stage_3_video_recaptioning.sh
 ```
 后，最后的训练文件会保存在 `easyanimate/video_caption/datasets/panda_70m/videos_clips/meta_train_info.json`。
 

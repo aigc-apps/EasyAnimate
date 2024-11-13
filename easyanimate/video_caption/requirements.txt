@@ -5,5 +5,3 @@ natsort
 joblib
 scenedetect
 av
-# https://github.com/NVlabs/VILA/issues/78#issuecomment-2195568292
-numpy<2.0.0

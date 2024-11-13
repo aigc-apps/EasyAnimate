@@ -9,7 +9,8 @@ from torch.utils.data import DataLoader, Dataset
 from .logger import logger
 from .video_utils import extract_frames
 
-ALL_VIDEO_EXT = set(["mp4", "webm", "mkv", "avi", "flv", "mov"])
+
+ALL_VIDEO_EXT = set([".mp4", ".webm", ".mkv", ".avi", ".flv", ".mov", ".ts"])
 VIDEO_READER_TIMEOUT = 300
 
 
@@ -29,7 +30,7 @@ class VideoDataset(Dataset):
         text_column: Optional[str] = None,
         sample_method: str = "mid",
         num_sampled_frames: int = 1,
-        num_sample_stride: Optional[int] = None
+        sample_stride: Optional[int] = None
     ):
         length = len(dataset_inputs[list(dataset_inputs.keys())[0]])
         if not all(len(v) == length for v in dataset_inputs.values()):
@@ -45,7 +46,7 @@ class VideoDataset(Dataset):
 
         self.sample_method = sample_method
         self.num_sampled_frames = num_sampled_frames
-        self.num_sample_stride = num_sample_stride
+        self.sample_stride = sample_stride
 
     def __getitem__(self, index):
         video_path = self.video_path_list[index]
@@ -60,7 +61,7 @@ class VideoDataset(Dataset):
         else:
             # It is a trick to deal with decord hanging when reading some abnormal videos.
             try:
-                sample_args = (video_path, self.sample_method, self.num_sampled_frames, self.num_sample_stride)
+                sample_args = (video_path, self.sample_method, self.num_sampled_frames, self.sample_stride)
                 sampled_frame_idx_list, sampled_frame_list = func_timeout(
                     VIDEO_READER_TIMEOUT, extract_frames, args=sample_args
                 )

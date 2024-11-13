@@ -7,8 +7,9 @@ import torch
 from natsort import index_natsorted
 from tqdm import tqdm
 from transformers import AutoTokenizer
-from utils.logger import logger
 from vllm import LLM, SamplingParams
+
+from utils.logger import logger
 
 
 def extract_output(s, prefix='"rewritten description": '):
@@ -40,7 +41,7 @@ def parse_args():
     parser.add_argument(
         "--video_path_column",
         type=str,
-        default=None,
+        default=None,  # In the beautiful prompt case, it is not necessary.
         help="The column contains the video path (an absolute path or a relative path w.r.t the video_folder).",
     )
     parser.add_argument(
@@ -175,6 +176,7 @@ def main():
             batch_video_path, batch_output = zip(*batch_result)
 
             result_dict[args.video_path_column].extend(batch_video_path)
+            result_dict[args.caption_column].extend(batch_output)
         else:
             for output in batch_output:
                 if output is not None:
@@ -183,41 +185,25 @@ def main():
             result_dict[args.caption_column].extend(batch_result)
 
         # Save the metadata every args.saved_freq.
-        if i != 0 and ((i // args.batch_size) % args.saved_freq) == 0:
+        if (i // args.batch_size) % args.saved_freq == 0 or (i + 1) * args.batch_size >= len(sampled_frame_caption_list):
             if len(result_dict[args.caption_column]) > 0:
                 result_df = pd.DataFrame(result_dict)
+                # Append is not supported (oss).
                 if args.saved_path.endswith(".csv"):
-                    header = True if not os.path.exists(args.saved_path) else False
-                    result_df.to_csv(args.saved_path, header=header, index=False, mode="a")
-                elif args.saved_path.endswith(".jsonl"):
-                    result_df.to_json(args.saved_path, orient="records", lines=True, mode="a", force_ascii=False)
-                elif args.saved_path.endswith(".json"):
-                    # Append is not supported.
                     if os.path.exists(args.saved_path):
-                        saved_df = pd.read_json(args.saved_path, orient="records")
+                        saved_df = pd.read_csv(args.saved_path)
                         result_df = pd.concat([saved_df, result_df], ignore_index=True)
-                    result_df.to_json(args.saved_path, orient="records", indent=4, force_ascii=False)
+                    result_df.to_csv(args.saved_path, index=False)
+                elif args.saved_path.endswith(".jsonl"):
+                    if os.path.exists(args.saved_path):
+                        saved_df = pd.read_json(args.saved_path, orient="records", lines=True)
+                        result_df = pd.concat([saved_df, result_df], ignore_index=True)
+                    result_df.to_json(args.saved_path, orient="records", lines=True, force_ascii=False)
                 logger.info(f"Save result to {args.saved_path}.")
 
             result_dict = {args.caption_column: []}
             if args.video_path_column is not None:
                 result_dict = {args.video_path_column: [], args.caption_column: []}
-
-    if len(result_dict[args.caption_column]) > 0:
-        result_df = pd.DataFrame(result_dict)
-        if args.saved_path.endswith(".csv"):
-            header = True if not os.path.exists(args.saved_path) else False
-            result_df.to_csv(args.saved_path, header=header, index=False, mode="a")
-        elif args.saved_path.endswith(".jsonl"):
-            result_df.to_json(args.saved_path, orient="records", lines=True, mode="a")
-        elif args.saved_path.endswith(".json"):
-            # Append is not supported.
-            if os.path.exists(args.saved_path):
-                saved_df = pd.read_json(args.saved_path, orient="records")
-                result_df = pd.concat([saved_df, result_df], ignore_index=True)
-            result_df.to_json(args.saved_path, orient="records", indent=4, force_ascii=False)
-        logger.info(f"Save the final result to {args.saved_path}.")
-
 
 if __name__ == "__main__":
     main()
