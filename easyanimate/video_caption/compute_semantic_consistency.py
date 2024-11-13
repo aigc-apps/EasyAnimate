@@ -58,7 +58,7 @@ def parse_args():
     )
     parser.add_argument("--frame_sample_method", type=str, choices=ALL_FRAME_SAMPLE_METHODS, default="keyframe+first")
     parser.add_argument("--num_sampled_frames", type=int, default=1, help="The number of sampled frames.")
-    parser.add_argument("--num_sample_stride", type=int, default=1, help="The stride between two sampled frames.")
+    parser.add_argument("--sample_stride", type=int, default=None, help="The stride between two sampled frames.")
     parser.add_argument("--batch_size", type=int, default=1, help="The batch size for the video dataset.")
     parser.add_argument("--num_workers", type=int, default=1, help="The number of workers for the video dataset.")
     parser.add_argument("--saved_path", type=str, required=True, help="The save path to the output results (csv/jsonl).")
@@ -165,7 +165,7 @@ def main():
             video_folder=args.video_folder,
             sample_method=args.frame_sample_method,
             num_sampled_frames=args.num_sampled_frames,
-            num_sample_stride=args.num_sample_stride if args.frame_sample_method == "stride" else 1,
+            sample_stride=args.sample_stride,
         )
         video_loader = DataLoader(video_dataset, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=collate_fn)
 

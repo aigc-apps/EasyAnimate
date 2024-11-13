@@ -56,13 +56,15 @@ def extract_frames(
     video_path: str,
     sample_method: str = "mid",
     num_sampled_frames: int = 1,
-    sample_stride: int = 1,
+    sample_stride: Optional[int] = None,
     **kwargs
 ) -> Optional[Tuple[List[int], List[Image.Image]]]:
-    if num_sampled_frames < 1 or sample_stride < 1:
-        raise ValueError(
-            f"Both num_sampled_frames {num_sampled_frames} and sample_stride {sample_stride} must be greater than 1."
-        )
+    if num_sampled_frames < 1:
+        raise ValueError(f"The num_sampled_frames must be greater than 1.")
+    if sample_stride is not None and sample_stride < 1:
+        raise ValueError(f"The sample_stride must be greater than 1.")
+    if sample_stride is not None and sample_method not in ["random", "stride"]:
+        raise ValueError(f"The sample_method must be random or stride when sample_stride is specified.")
     with video_reader(video_path, num_threads=2, **kwargs) as vr:
         if sample_method == "mid":
             sampled_frame_idx_list = [len(vr) // 2]
