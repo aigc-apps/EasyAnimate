@@ -30,7 +30,7 @@ git clone https://github.com/aigc-apps/EasyAnimate.git
 git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git
 
 cd EasyAnimate/
-python install.py
+pip install -r comfyui/requirements.txt
 ```
 
 ### 2. Download models into `ComfyUI/models/EasyAnimate/`
