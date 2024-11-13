@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.8.0-devel-ubuntu22.04
+FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
 ENV DEBIAN_FRONTEND noninteractive
 
 RUN rm -r /etc/apt/sources.list.d/
@@ -23,7 +23,7 @@ RUN pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url h
 RUN pip install xformers==0.0.27.post2 --index-url https://download.pytorch.org/whl/cu118
 
 # install vllm (video-caption)
-RUN pip install vllm==0.6.3 --extra-index-url https://download.pytorch.org/whl/cu118
+RUN pip install vllm==0.6.3
 
 # install requirements (video-caption)
 WORKDIR /root/
