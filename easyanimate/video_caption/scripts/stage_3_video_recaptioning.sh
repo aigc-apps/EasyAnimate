@@ -14,10 +14,10 @@ REWRITTEN_VIDEO_CAPTION_SAVED_PATH="datasets/panda_70m/meta_caption_info_rewritt
 VIDEOCLIPXL_SCORE_SAVED_PATH="datasets/panda_70m/meta_caption_info_rewritten_videoclipxl.jsonl"
 MIN_VIDEOCLIPXL_SCORE=0.20
 TRAIN_SAVED_PATH="datasets/panda_70m/train_panda_70m.json"
-# Manually download OpenGVLab/InternVL2-40B-AWQ to INTERNVL2_MODEL_PATH.
+# Manually download OpenGVLab/InternVL2-40B-AWQ to CAPTION_MODEL_PATH.
 # You can also download OpenGVLab/InternVL2-2B-AWQ InternVL2-8B-AWQ InternVL2-26B-AWQ or InternVL2-Llama3-76B-AWQ 
 # This a trade-off between recaption quality and speed.
-INTERNVL2_MODEL_PATH="OpenGVLab/InternVL2-40B-AWQ"
+CAPTION_MODEL_PATH="OpenGVLab/InternVL2-40B-AWQ"
 # Manually download meta-llama/Meta-Llama-3.1-70B-Instruct to REWRITE_MODEL_PATH.
 # You can also download meta-llama/Meta-Llama-3.1-8B-Instruct Meta-Llama-3-8B-Instruct Meta-Llama-3-70B-Instruct.
 REWRITE_MODEL_PATH="meta-llama/Meta-Llama-3.1-70B-Instruct"
@@ -27,7 +27,7 @@ REWRITE_MODEL_PATH="meta-llama/Meta-Llama-3.1-70B-Instruct"
 python3 internvl2_video_recaptioning.py \
     --video_metadata_path ${META_FILE_PATH} \
     --video_folder ${VIDEO_FOLDER} \
-    --model_path ${INTERNVL2_MODEL_PATH} \
+    --model_path ${CAPTION_MODEL_PATH} \
     --saved_path $VIDEO_CAPTION_SAVED_PATH \
     --saved_freq 1 \
     --num_workers 4 \

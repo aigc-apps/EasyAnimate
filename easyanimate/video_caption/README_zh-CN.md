@@ -97,7 +97,7 @@ huggingface-cli download NousResearch/Meta-Llama-3-8B-Instruct --local-dir-use-s
 视频描述的完整流程在 [stage_3_video_recaptioning.sh](./scripts/stage_3_video_recaptioning.sh).
 执行
 ```shell
-INTERNVL2_MODEL_PATH=/PATH/TO/INTERNVL2_MODEL REWRITE_MODEL_PATH=/PATH/TO/REWRITE_MODEL sh scripts/stage_3_video_recaptioning.sh
+CAPTION_MODEL_PATH=/PATH/TO/INTERNVL2_MODEL REWRITE_MODEL_PATH=/PATH/TO/REWRITE_MODEL sh scripts/stage_3_video_recaptioning.sh
 ```
 后，最后的训练文件会保存在 `easyanimate/video_caption/datasets/panda_70m/videos_clips/meta_train_info.json`。
 
