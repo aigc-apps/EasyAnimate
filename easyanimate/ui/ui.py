@@ -172,8 +172,10 @@ class EasyAnimateController:
         self.transformer = Choosen_Transformer3DModel.from_pretrained_2d(
             diffusion_transformer_dropdown, 
             subfolder="transformer", 
-            transformer_additional_kwargs=transformer_additional_kwargs
-        ).to(self.weight_dtype)
+            transformer_additional_kwargs=transformer_additional_kwargs,
+            torch_dtype=torch.float8_e4m3fn if self.GPU_memory_mode == "model_cpu_offload_and_qfloat8" else self.weight_dtype,
+            low_cpu_mem_usage=True,
+        )
         
         if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
             tokenizer = BertTokenizer.from_pretrained(
@@ -295,7 +297,6 @@ class EasyAnimateController:
             self.pipeline.enable_sequential_cpu_offload()
         elif self.GPU_memory_mode == "model_cpu_offload_and_qfloat8":
             self.pipeline.enable_model_cpu_offload()
-            self.pipeline.enable_autocast_float8_transformer()
             convert_weight_dtype_wrapper(self.pipeline.transformer, self.weight_dtype)
         else:
             self.pipeline.enable_model_cpu_offload()
@@ -773,7 +774,7 @@ def ui(GPU_memory_mode, weight_dtype):
                 使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性。在neg prompt中添加"安静，固定"等词语可以增加动态性。
                 """
             )
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code.. " )
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code." )
                 
             with gr.Row():
                 with gr.Column():
@@ -1024,8 +1025,10 @@ class EasyAnimateController_Modelscope:
         self.transformer = Choosen_Transformer3DModel.from_pretrained_2d(
             model_name, 
             subfolder="transformer", 
-            transformer_additional_kwargs=transformer_additional_kwargs
-        ).to(self.weight_dtype)
+            transformer_additional_kwargs=transformer_additional_kwargs,
+            torch_dtype=torch.float8_e4m3fn if GPU_memory_mode == "model_cpu_offload_and_qfloat8" else weight_dtype,
+            low_cpu_mem_usage=True,
+        )
         
         if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
             tokenizer = BertTokenizer.from_pretrained(
@@ -1147,7 +1150,6 @@ class EasyAnimateController_Modelscope:
             self.pipeline.enable_sequential_cpu_offload()
         elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
             self.pipeline.enable_model_cpu_offload()
-            self.pipeline.enable_autocast_float8_transformer()
             convert_weight_dtype_wrapper(self.pipeline.transformer, weight_dtype)
         else:
             GPU_memory_mode.enable_model_cpu_offload()
@@ -1447,7 +1449,7 @@ def ui_modelscope(model_type, edition, config_path, model_name, savedir_sample, 
                 使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性。在neg prompt中添加"安静，固定"等词语可以增加动态性。
                 """
             )
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code.. " )
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code." )
                 
             with gr.Row():
                 with gr.Column():
@@ -1867,7 +1869,7 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                 使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性。在neg prompt中添加"安静，固定"等词语可以增加动态性。
                 """
             )
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code.. " )
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code." )
                 
             with gr.Row():
                 with gr.Column():

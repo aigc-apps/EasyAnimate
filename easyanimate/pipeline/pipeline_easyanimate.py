@@ -154,7 +154,6 @@ class EasyAnimatePipeline(DiffusionPipeline):
 
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
-        self.enable_autocast_float8_transformer_flag = False
         
     # Adapted from https://github.com/PixArt-alpha/PixArt-alpha/blob/master/diffusion/model/utils.py
     def mask_text_embeddings(self, emb, mask):
@@ -580,9 +579,6 @@ class EasyAnimatePipeline(DiffusionPipeline):
         video = video.cpu().float().numpy()
         return video
 
-    def enable_autocast_float8_transformer(self):
-        self.enable_autocast_float8_transformer_flag = True
-
     @torch.no_grad()
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
@@ -694,6 +690,12 @@ class EasyAnimatePipeline(DiffusionPipeline):
             batch_size = prompt_embeds.shape[0]
 
         device = self._execution_device
+        if self.text_encoder is not None:
+            dtype = self.text_encoder.dtype
+        elif self.text_encoder_2 is not None:
+            dtype = self.text_encoder_2.dtype
+        else:
+            dtype = self.transformer.dtype
 
         # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
         # of the Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`
@@ -734,7 +736,7 @@ class EasyAnimatePipeline(DiffusionPipeline):
             video_length,
             height,
             width,
-            prompt_embeds.dtype,
+            dtype,
             device,
             generator,
             latents,
@@ -748,19 +750,14 @@ class EasyAnimatePipeline(DiffusionPipeline):
         if self.transformer.config.sample_size == 128:
             resolution = torch.tensor([height, width]).repeat(batch_size * num_images_per_prompt, 1)
             aspect_ratio = torch.tensor([float(height / width)]).repeat(batch_size * num_images_per_prompt, 1)
-            resolution = resolution.to(dtype=prompt_embeds.dtype, device=device)
-            aspect_ratio = aspect_ratio.to(dtype=prompt_embeds.dtype, device=device)
+            resolution = resolution.to(dtype=dtype, device=device)
+            aspect_ratio = aspect_ratio.to(dtype=dtype, device=device)
 
             if do_classifier_free_guidance:
                 resolution = torch.cat([resolution, resolution], dim=0)
                 aspect_ratio = torch.cat([aspect_ratio, aspect_ratio], dim=0)
 
             added_cond_kwargs = {"resolution": resolution, "aspect_ratio": aspect_ratio}
-
-        torch.cuda.empty_cache()
-        if self.enable_autocast_float8_transformer_flag:
-            origin_weight_dtype = self.transformer.dtype
-            self.transformer = self.transformer.to(torch.float8_e4m3fn)
 
         # 7. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
@@ -820,9 +817,6 @@ class EasyAnimatePipeline(DiffusionPipeline):
 
                 if comfyui_progressbar:
                     pbar.update(1)
-
-        if self.enable_autocast_float8_transformer_flag:
-            self.transformer = self.transformer.to("cpu", origin_weight_dtype)
 
         # Post-processing
         video = self.decode_latents(latents)
