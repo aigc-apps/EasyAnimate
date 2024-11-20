@@ -774,7 +774,7 @@ def ui(GPU_memory_mode, weight_dtype):
                 使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性。在neg prompt中添加"安静，固定"等词语可以增加动态性。
                 """
             )
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code.. " )
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code." )
                 
             with gr.Row():
                 with gr.Column():
@@ -1449,7 +1449,7 @@ def ui_modelscope(model_type, edition, config_path, model_name, savedir_sample, 
                 使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性。在neg prompt中添加"安静，固定"等词语可以增加动态性。
                 """
             )
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code.. " )
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt (负向提示词)", lines=2, value="Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code." )
                 
             with gr.Row():
                 with gr.Column():
@@ -1869,7 +1869,7 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                 使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性。在neg prompt中添加"安静，固定"等词语可以增加动态性。
                 """
             )
-            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code.. " )
+            negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code." )
                 
             with gr.Row():
                 with gr.Column():

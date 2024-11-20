@@ -75,7 +75,7 @@ negative_prompt         = "扭曲的身体，肢体残缺，文本字幕，漫�
 # Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics, text subtitles, line art." can increase stability
 # Adding words such as "quiet, solid" to the neg prompt can increase dynamism.
 # prompt                  = "A cute cat is playing the guitar. "
-# negative_prompt         = "Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code.. "
+# negative_prompt         = "Twisted body, limb deformities, text captions, comic, static, ugly, error, messy code."
 guidance_scale          = 6.0
 seed                    = 43
 num_inference_steps     = 50
