@@ -8,6 +8,17 @@ from einops import rearrange, repeat
 from .activations import get_activation
 
 
+try:
+    current_version = torch.__version__
+    version_numbers = [int(x) for x in current_version.split('.')[:2]]
+    if version_numbers[0] < 2 or (version_numbers[0] == 2 and version_numbers[1] < 2):
+        need_to_float = True
+    else:
+        need_to_float = False
+except Exception as e:
+    print("Encountered an error with Torch version. Set the data type to float in the VAE. ")
+    need_to_float = False
+
 def cast_tuple(t, length = 1):
     return t if isinstance(t, tuple) else ((t,) * length)
 
@@ -69,7 +80,8 @@ class CausalConv3d(nn.Conv3d):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, C, T, H, W)
         dtype = x.dtype
-        x = x.float()
+        if need_to_float:
+            x = x.float()
         if self.padding_flag == 0:
             x = F.pad(
                 x,

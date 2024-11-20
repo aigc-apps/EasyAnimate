@@ -179,7 +179,6 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
 
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
-        self.enable_autocast_float8_transformer_flag = False
         self.register_to_config(requires_safety_checker=requires_safety_checker)
 
     def enable_sequential_cpu_offload(self, *args, **kwargs):
@@ -577,9 +576,6 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
     def interrupt(self):
         return self._interrupt
 
-    def enable_autocast_float8_transformer(self):
-        self.enable_autocast_float8_transformer_flag = True
-
     @torch.no_grad()
     @replace_example_docstring(EXAMPLE_DOC_STRING)
     def __call__(
@@ -718,6 +714,12 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
             batch_size = prompt_embeds.shape[0]
 
         device = self._execution_device
+        if self.text_encoder is not None:
+            dtype = self.text_encoder.dtype
+        elif self.text_encoder_2 is not None:
+            dtype = self.text_encoder_2.dtype
+        else:
+            dtype = self.transformer.dtype
 
         # 3. Encode input prompt
         (
@@ -728,7 +730,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         ) = self.encode_prompt(
             prompt=prompt,
             device=device,
-            dtype=self.transformer.dtype,
+            dtype=dtype,
             num_images_per_prompt=num_images_per_prompt,
             do_classifier_free_guidance=self.do_classifier_free_guidance,
             negative_prompt=negative_prompt,
@@ -746,7 +748,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         ) = self.encode_prompt(
             prompt=prompt,
             device=device,
-            dtype=self.transformer.dtype,
+            dtype=dtype,
             num_images_per_prompt=num_images_per_prompt,
             do_classifier_free_guidance=self.do_classifier_free_guidance,
             negative_prompt=negative_prompt,
@@ -756,7 +758,6 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
             negative_prompt_attention_mask=negative_prompt_attention_mask_2,
             text_encoder_index=1,
         )
-        torch.cuda.empty_cache()
 
         # 4. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)
@@ -773,7 +774,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
             video_length,
             height,
             width,
-            prompt_embeds.dtype,
+            dtype,
             device,
             generator,
             latents,
@@ -812,7 +813,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
 
         target_size = target_size or (height, width)
         add_time_ids = list(original_size + target_size + crops_coords_top_left)
-        add_time_ids = torch.tensor([add_time_ids], dtype=prompt_embeds.dtype)
+        add_time_ids = torch.tensor([add_time_ids], dtype=dtype)
 
         if self.do_classifier_free_guidance:
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
@@ -827,15 +828,11 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         prompt_attention_mask = prompt_attention_mask.to(device=device)
         prompt_embeds_2 = prompt_embeds_2.to(device=device)
         prompt_attention_mask_2 = prompt_attention_mask_2.to(device=device)
-        add_time_ids = add_time_ids.to(dtype=prompt_embeds.dtype, device=device).repeat(
+        add_time_ids = add_time_ids.to(dtype=dtype, device=device).repeat(
             batch_size * num_images_per_prompt, 1
         )
         style = style.to(device=device).repeat(batch_size * num_images_per_prompt)
 
-        torch.cuda.empty_cache()
-        if self.enable_autocast_float8_transformer_flag:
-            origin_weight_dtype = self.transformer.dtype
-            self.transformer = self.transformer.to(torch.float8_e4m3fn)
         # 8. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         self._num_timesteps = len(timesteps)
@@ -905,10 +902,6 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
                 if comfyui_progressbar:
                     pbar.update(1)
 
-        if self.enable_autocast_float8_transformer_flag:
-            self.transformer = self.transformer.to("cpu", origin_weight_dtype)
-
-        torch.cuda.empty_cache()
         # Post-processing
         video = self.decode_latents(latents)
 

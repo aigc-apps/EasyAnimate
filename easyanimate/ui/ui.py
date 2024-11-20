@@ -172,7 +172,9 @@ class EasyAnimateController:
         self.transformer = Choosen_Transformer3DModel.from_pretrained_2d(
             diffusion_transformer_dropdown, 
             subfolder="transformer", 
-            transformer_additional_kwargs=transformer_additional_kwargs
+            transformer_additional_kwargs=transformer_additional_kwargs,
+            torch_dtype=torch.float8_e4m3fn if self.GPU_memory_mode == "model_cpu_offload_and_qfloat8" else self.weight_dtype,
+            low_cpu_mem_usage=True,
         ).to(self.weight_dtype)
         
         if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
@@ -1024,7 +1026,9 @@ class EasyAnimateController_Modelscope:
         self.transformer = Choosen_Transformer3DModel.from_pretrained_2d(
             model_name, 
             subfolder="transformer", 
-            transformer_additional_kwargs=transformer_additional_kwargs
+            transformer_additional_kwargs=transformer_additional_kwargs,
+            torch_dtype=torch.float8_e4m3fn if GPU_memory_mode == "model_cpu_offload_and_qfloat8" else weight_dtype,
+            low_cpu_mem_usage=True,
         ).to(self.weight_dtype)
         
         if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):

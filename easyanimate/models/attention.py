@@ -1042,7 +1042,8 @@ class EasyAnimateDiTBlock(nn.Module):
         ff_bias: bool = True,
         qk_norm: bool = True,
         after_norm: bool = False,
-        norm_type: str="fp32_layer_norm"
+        norm_type: str="fp32_layer_norm",
+        is_mmdit_block: bool = True,
     ):
         super().__init__()
 
@@ -1060,15 +1061,18 @@ class EasyAnimateDiTBlock(nn.Module):
             bias=True,
             processor=EasyAnimateAttnProcessor2_0(),
         )
-        self.attn2 = Attention(
-            query_dim=dim,
-            dim_head=attention_head_dim,
-            heads=num_attention_heads,
-            qk_norm="layer_norm" if qk_norm else None,
-            eps=1e-6,
-            bias=True,
-            processor=EasyAnimateAttnProcessor2_0(),
-        )
+        if is_mmdit_block:
+            self.attn2 = Attention(
+                query_dim=dim,
+                dim_head=attention_head_dim,
+                heads=num_attention_heads,
+                qk_norm="layer_norm" if qk_norm else None,
+                eps=1e-6,
+                bias=True,
+                processor=EasyAnimateAttnProcessor2_0(),
+            )
+        else:
+            self.attn2 = None
         
         # FFN Part
         self.norm2 = EasyAnimateLayerNormZero(
@@ -1082,14 +1086,18 @@ class EasyAnimateDiTBlock(nn.Module):
             inner_dim=ff_inner_dim,
             bias=ff_bias,
         )
-        self.txt_ff = FeedForward(
-            dim,
-            dropout=dropout,
-            activation_fn=activation_fn,
-            final_dropout=final_dropout,
-            inner_dim=ff_inner_dim,
-            bias=ff_bias,
-        )
+        if is_mmdit_block:
+            self.txt_ff = FeedForward(
+                dim,
+                dropout=dropout,
+                activation_fn=activation_fn,
+                final_dropout=final_dropout,
+                inner_dim=ff_inner_dim,
+                bias=ff_bias,
+            )
+        else:
+            self.txt_ff = None
+            
         if after_norm:
             self.norm3 = FP32LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
         else:
@@ -1125,10 +1133,16 @@ class EasyAnimateDiTBlock(nn.Module):
         # FFN
         if self.norm3 is not None:
             norm_hidden_states = self.norm3(self.ff(norm_hidden_states))
-            norm_encoder_hidden_states = self.norm3(self.txt_ff(norm_encoder_hidden_states))
+            if self.txt_ff is not None:
+                norm_encoder_hidden_states = self.norm3(self.txt_ff(norm_encoder_hidden_states))
+            else:
+                norm_encoder_hidden_states = self.norm3(self.ff(norm_encoder_hidden_states))
         else:
             norm_hidden_states = self.ff(norm_hidden_states)
-            norm_encoder_hidden_states = self.txt_ff(norm_encoder_hidden_states)
+            if self.txt_ff is not None:
+                norm_encoder_hidden_states = self.txt_ff(norm_encoder_hidden_states)
+            else:
+                norm_encoder_hidden_states = self.ff(norm_encoder_hidden_states)
         hidden_states = hidden_states + gate_ff * norm_hidden_states
         encoder_hidden_states = encoder_hidden_states + enc_gate_ff * norm_encoder_hidden_states
         return hidden_states, encoder_hidden_states

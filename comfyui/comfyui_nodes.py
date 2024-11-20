@@ -161,8 +161,10 @@ class LoadEasyAnimateModel:
         transformer = Choosen_Transformer3DModel.from_pretrained_2d(
             model_name, 
             subfolder="transformer",
-            transformer_additional_kwargs=transformer_additional_kwargs
-        ).to(weight_dtype)
+            transformer_additional_kwargs=transformer_additional_kwargs,
+            torch_dtype=torch.float8_e4m3fn if GPU_memory_mode == "model_cpu_offload_and_qfloat8" else weight_dtype,
+            low_cpu_mem_usage=True,
+        )
         # Update pbar
         pbar.update(1) 
 
