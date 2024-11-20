@@ -281,7 +281,6 @@ class LoadEasyAnimateModel:
             pipeline.enable_sequential_cpu_offload()
         elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
             pipeline.enable_model_cpu_offload()
-            pipeline.enable_autocast_float8_transformer()
             convert_weight_dtype_wrapper(transformer, weight_dtype)
         else:
             pipeline.enable_model_cpu_offload()

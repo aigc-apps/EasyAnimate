@@ -297,7 +297,6 @@ class EasyAnimateController:
             self.pipeline.enable_sequential_cpu_offload()
         elif self.GPU_memory_mode == "model_cpu_offload_and_qfloat8":
             self.pipeline.enable_model_cpu_offload()
-            self.pipeline.enable_autocast_float8_transformer()
             convert_weight_dtype_wrapper(self.pipeline.transformer, self.weight_dtype)
         else:
             self.pipeline.enable_model_cpu_offload()
@@ -1029,7 +1028,7 @@ class EasyAnimateController_Modelscope:
             transformer_additional_kwargs=transformer_additional_kwargs,
             torch_dtype=torch.float8_e4m3fn if GPU_memory_mode == "model_cpu_offload_and_qfloat8" else weight_dtype,
             low_cpu_mem_usage=True,
-        ).to(self.weight_dtype)
+        )
         
         if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
             tokenizer = BertTokenizer.from_pretrained(
@@ -1151,7 +1150,6 @@ class EasyAnimateController_Modelscope:
             self.pipeline.enable_sequential_cpu_offload()
         elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
             self.pipeline.enable_model_cpu_offload()
-            self.pipeline.enable_autocast_float8_transformer()
             convert_weight_dtype_wrapper(self.pipeline.transformer, weight_dtype)
         else:
             GPU_memory_mode.enable_model_cpu_offload()
