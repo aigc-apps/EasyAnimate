@@ -6,7 +6,6 @@ tomesd
 torch>=2.1.2
 torchdiffeq
 torchsde
-xformers
 decord
 datasets
 numpy
@@ -21,7 +20,6 @@ tensorboard
 beautifulsoup4
 ftfy
 func_timeout
-deepspeed
 accelerate>=0.25.0
 gradio>=3.41.2,<=3.48.0
 diffusers>=0.30.1
