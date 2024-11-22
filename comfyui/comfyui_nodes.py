@@ -69,12 +69,14 @@ class LoadEasyAnimateModel:
                         'EasyAnimateV3-XL-2-InP-768x768',
                         'EasyAnimateV3-XL-2-InP-960x960',
                         'EasyAnimateV4-XL-2-InP',
+                        'EasyAnimateV5-7b-zh-InP',
+                        'EasyAnimateV5-7b-zh',
                         'EasyAnimateV5-12b-zh-InP',
                         'EasyAnimateV5-12b-zh-Control',
                         'EasyAnimateV5-12b-zh',
                     ],
                     {
-                        "default": 'EasyAnimateV5-12b-zh-InP',
+                        "default": 'EasyAnimateV5-7b-zh-InP',
                     }
                 ),
                 "GPU_memory_mode":(
