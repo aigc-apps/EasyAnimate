@@ -44,6 +44,7 @@ from ..vae.ldm.models.cogvideox_enc_dec import (CogVideoXCausalConv3d,
                                                 CogVideoXDecoder3D,
                                                 CogVideoXEncoder3D,
                                                 CogVideoXSafeConv3d)
+from ..vae.ldm.models.omnigen_enc_dec import CausalConv3d
 from ..vae.ldm.models.omnigen_enc_dec import Decoder as omnigen_Mag_Decoder
 from ..vae.ldm.models.omnigen_enc_dec import Encoder as omnigen_Mag_Encoder
 
@@ -96,6 +97,7 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         out_channels: int = 3,
         ch =  128,
         ch_mult = [ 1,2,4,4 ],
+        block_out_channels = [128, 256, 512, 512],
         use_gc_blocks = None,
         down_block_types: tuple = None,
         up_block_types: tuple = None,
@@ -109,6 +111,7 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         latent_channels: int = 4,
         norm_num_groups: int = 32,
         scaling_factor: float = 0.1825,
+        force_upcast: float = True,
         slice_mag_vae=True,
         slice_compression_vae=False,
         cache_compression_vae=False,
@@ -130,8 +133,9 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
             in_channels=in_channels,
             out_channels=latent_channels,
             down_block_types=down_block_types,
-            ch = ch,
-            ch_mult = ch_mult,
+            ch=ch,
+            ch_mult=ch_mult,
+            block_out_channels=block_out_channels,
             use_gc_blocks=use_gc_blocks,
             mid_block_type=mid_block_type,
             mid_block_use_attention=mid_block_use_attention,
@@ -154,8 +158,9 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
             in_channels=latent_channels,
             out_channels=out_channels,
             up_block_types=up_block_types,
-            ch = ch,
-            ch_mult = ch_mult,
+            ch=ch,
+            ch_mult=ch_mult,
+            block_out_channels=block_out_channels,
             use_gc_blocks=use_gc_blocks,
             mid_block_type=mid_block_type,
             mid_block_use_attention=mid_block_use_attention,
@@ -272,6 +277,11 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
 
         self.set_attn_processor(processor)
 
+    def _clear_conv_cache(self):
+        for name, module in self.named_modules():
+            if isinstance(module, CausalConv3d):
+                module._clear_conv_cache()
+
     @apply_forward_hook
     def encode(
         self, x: torch.FloatTensor, return_dict: bool = True
@@ -308,6 +318,7 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         moments = self.quant_conv(h)
         posterior = DiagonalGaussianDistribution(moments)
 
+        self._clear_conv_cache()
         if not return_dict:
             return (posterior,)
 
@@ -355,6 +366,7 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         else:
             decoded = self._decode(z).sample
 
+        self._clear_conv_cache()
         if not return_dict:
             return (decoded,)
 

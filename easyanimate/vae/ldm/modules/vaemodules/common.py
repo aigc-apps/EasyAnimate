@@ -77,6 +77,10 @@ class CausalConv3d(nn.Conv3d):
             **kwargs,
         )
 
+    def _clear_conv_cache(self):
+        del self.prev_features
+        self.prev_features = None
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, C, T, H, W)
         dtype = x.dtype
@@ -97,7 +101,11 @@ class CausalConv3d(nn.Conv3d):
                 mode="replicate",     # TODO: check if this is necessary
             )
             x = x.to(dtype=dtype)
-            self.prev_features = x[:, :, -self.temporal_padding:]
+
+            # Clear cache before
+            self._clear_conv_cache()
+            # We could move these to the cpu for a lower VRAM
+            self.prev_features = x[:, :, -self.temporal_padding:].clone()
 
             b, c, f, h, w = x.size()
             outputs = []
@@ -117,7 +125,11 @@ class CausalConv3d(nn.Conv3d):
                     [self.prev_features, x], dim = 2
                 )
             x = x.to(dtype=dtype)
-            self.prev_features = x[:, :, -self.temporal_padding:]
+
+            # Clear cache before
+            self._clear_conv_cache()
+            # We could move these to the cpu for a lower VRAM
+            self.prev_features = x[:, :, -self.temporal_padding:].clone()
 
             b, c, f, h, w = x.size()
             outputs = []
@@ -134,7 +146,12 @@ class CausalConv3d(nn.Conv3d):
                 mode="replicate",     # TODO: check if this is necessary
             )
             x = x.to(dtype=dtype)
-            self.prev_features = x[:, :, -self.temporal_padding:]
+
+            # Clear cache before
+            self._clear_conv_cache()
+            # We could move these to the cpu for a lower VRAM
+            self.prev_features = x[:, :, -self.temporal_padding:].clone()
+            
             return super().forward(x)
         elif self.padding_flag == 6:
             if self.t_stride == 2:
@@ -145,7 +162,12 @@ class CausalConv3d(nn.Conv3d):
                 x = torch.concat(
                     [self.prev_features, x], dim = 2
                 )
-            self.prev_features = x[:, :, -self.temporal_padding:]
+
+            # Clear cache before
+            self._clear_conv_cache()
+            # We could move these to the cpu for a lower VRAM
+            self.prev_features = x[:, :, -self.temporal_padding:].clone()
+            
             x = x.to(dtype=dtype)
             return super().forward(x)
         else:

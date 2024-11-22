@@ -58,6 +58,7 @@ class Encoder(nn.Module):
         down_block_types = ("SpatialDownBlock3D",),
         ch = 128,
         ch_mult = [1,2,4,4,],
+        block_out_channels = [128, 256, 512, 512],
         use_gc_blocks = None,
         mid_block_type: str = "MidBlock3D",
         mid_block_use_attention: bool = True,
@@ -77,7 +78,8 @@ class Encoder(nn.Module):
         verbose = False,
     ):
         super().__init__()
-        block_out_channels = [ch * i for i in ch_mult]
+        if block_out_channels is None:
+            block_out_channels = [ch * i for i in ch_mult]
         assert len(down_block_types) == len(block_out_channels), (
             "Number of down block types must match number of block output channels."
         )
@@ -364,6 +366,7 @@ class Decoder(nn.Module):
         up_block_types  = ("SpatialUpBlock3D",),
         ch = 128,
         ch_mult = [1,2,4,4,],
+        block_out_channels = [128, 256, 512, 512],
         use_gc_blocks = None,
         mid_block_type: str = "MidBlock3D",
         mid_block_use_attention: bool = True,
@@ -382,7 +385,8 @@ class Decoder(nn.Module):
         verbose = False,
     ):
         super().__init__()
-        block_out_channels = [ch * i for i in ch_mult]
+        if block_out_channels is None:
+            block_out_channels = [ch * i for i in ch_mult]
         assert len(up_block_types) == len(block_out_channels), (
             "Number of up block types must match number of block output channels."
         )
