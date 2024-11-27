@@ -31,6 +31,7 @@ EasyAnimate是一个基于transformer结构的pipeline，可用于生成AI图片
 我们会逐渐支持从不同平台快速启动，请参阅 [快速启动](#快速启动)。
 
 新特性：
+- 使用奖励反向传播来训练Lora并优化视频，使其更好地符合人类偏好，详细信息请参见[此处](scripts/README_train_REVARD.md)。EasyAnimateV5-7b现已发布。[ 2024.11.27 ]
 - 更新到v5版本，最大支持1024x1024，49帧, 6s, 8fps视频生成，拓展模型规模到12B，应用MMDIT结构，支持不同输入的控制模型，支持中文与英文双语预测。[ 2024.11.08 ]
 - 更新到v4版本，最大支持1024x1024，144帧, 6s, 24fps视频生成，支持文、图、视频生视频，单个模型可支持512到1280任意分辨率，支持中文与英文双语预测。[ 2024.08.15 ]
 - 更新到v3版本，最大支持960x960，144帧，6s, 24fps视频生成，支持文与图生视频模型。[ 2024.07.01 ]
@@ -415,6 +416,7 @@ EasyAnimateV5:
 | EasyAnimateV5-12b-zh-InP | EasyAnimateV5 | 34 GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV5-12b-zh-InP) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV5-12b-zh-InP)| 官方的图生视频权重。支持多分辨率（512，768，1024）的视频预测，支持多分辨率（512，768，1024）的视频预测，以49帧、每秒8帧进行训练，支持中文与英文双语预测 |
 | EasyAnimateV5-12b-zh-Control | EasyAnimateV5 | 34 GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV5-12b-zh-Control) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV5-12b-zh-Control)| 官方的视频控制权重，支持不同的控制条件，如Canny、Depth、Pose、MLSD等。支持多分辨率（512，768，1024）的视频预测，支持多分辨率（512，768，1024）的视频预测，以49帧、每秒8帧进行训练，支持中文与英文双语预测 |
 | EasyAnimateV5-12b-zh | EasyAnimateV5 | 34 GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV5-12b-zh) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV5-12b-zh)| 官方的文生视频权重。可用于进行下游任务的fientune。支持多分辨率（512，768，1024）的视频预测，支持多分辨率（512，768，1024）的视频预测，以49帧、每秒8帧进行训练，支持中文与英文双语预测 |
+| EasyAnimateV5-Reward-LoRAs | - | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV5-Reward-LoRAs) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV5-Reward-LoRAs) | 通过奖励反向传播技术，优化了EasyAnimateV5-12b生成的视频，以更好地匹配人类偏好｜
 
 <details>
   <summary>(Obsolete) EasyAnimateV4:</summary>
