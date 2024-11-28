@@ -1,0 +1,1 @@
+This folder is modified from the official [MPS](https://github.com/Kwai-Kolors/MPS/tree/main) repository.
