@@ -1151,7 +1151,7 @@ def main():
                     if args.training_with_video_token_length:
                         local_min_size = np.min(np.array([np.mean(np.array([np.shape(example["pixel_values"])[1], np.shape(example["pixel_values"])[2]])) for example in examples]))
                         # The video will be resized to a lower resolution than its own.
-                        choice_list = [length for length in list(length_to_frame_num.keys()) if length < local_min_size]
+                        choice_list = [length for length in list(length_to_frame_num.keys()) if length < local_min_size * 1.25]
                         if len(choice_list) == 0:
                             choice_list = list(length_to_frame_num.keys())
                         if rng is None:
