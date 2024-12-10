@@ -144,6 +144,7 @@ We support batched inference with local LLMs or OpenAI compatible server based o
         --model_name /path/to/your_llm \
         --prompt prompt/beautiful_prompt.txt \
         --prefix '"detailed description": ' \
+        --max_retry_count 10 \
         --saved_path datasets/beautiful_prompt.jsonl \
         --saved_freq 1
     ```
