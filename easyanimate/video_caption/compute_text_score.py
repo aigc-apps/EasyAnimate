@@ -1,6 +1,5 @@
 import argparse
 import os
-from pathlib import Path
 
 import easyocr
 import numpy as np
@@ -78,12 +77,9 @@ def compute_text_score(video_path, ocr_reader, sample_method="mid", num_sampled_
 
         frame_ocr_area_ratios.append(text_area / total_area)
 
-    video_meta_info = {
-        "video_path": Path(video_path).name,
-        "text_score": round(np.mean(frame_ocr_area_ratios), 5),
-    }
+    text_score = round(np.mean(frame_ocr_area_ratios), 5)
 
-    return video_meta_info
+    return text_score
 
 
 def parse_args():
@@ -208,12 +204,18 @@ def main():
     with state.split_between_processes(video_path_list) as splitted_video_path_list:
         for i, video_path in enumerate(tqdm(splitted_video_path_list)):
             try:
-                video_meta_info = compute_text_score(
+                text_score = compute_text_score(
                     video_path,
                     ocr_reader,
                     sample_method=args.frame_sample_method,
                     num_sampled_frames=args.num_sampled_frames,
                 )
+                video_meta_info = {}
+                if args.video_folder == "":
+                    video_meta_info[args.video_path_column] = video_path
+                else:
+                    video_meta_info[args.video_path_column] = os.path.relpath(video_path, args.video_folder)
+                video_meta_info["text_score"] = text_score
                 result_list.append(video_meta_info)
             except Exception as e:
                 logger.warning(f"Compute text score for video {video_path} with error: {e}.")

@@ -49,6 +49,7 @@ python caption_rewrite.py \
     --model_name $REWRITE_MODEL_PATH \
     --prompt prompt/rewrite.txt \
     --prefix '"rewritten description": ' \
+    --max_retry_count 10 \
     --saved_path $REWRITTEN_VIDEO_CAPTION_SAVED_PATH \
     --saved_freq 1
 
