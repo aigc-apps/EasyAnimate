@@ -129,6 +129,7 @@ CAPTION_MODEL_PATH=/PATH/TO/INTERNVL2_MODEL REWRITE_MODEL_PATH=/PATH/TO/REWRITE_
         --model_name /path/to/your_llm \
         --prompt prompt/beautiful_prompt.txt \
         --prefix '"detailed description": ' \
+        --max_retry_count 10 \
         --saved_path datasets/beautiful_prompt.jsonl \
         --saved_freq 1
     ```
