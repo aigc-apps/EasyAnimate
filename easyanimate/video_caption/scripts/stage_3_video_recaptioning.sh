@@ -45,10 +45,12 @@ python3 internvl2_video_recaptioning.py \
 # Rewrite video captions (optional).
 python caption_rewrite.py \
     --video_metadata_path $VIDEO_CAPTION_SAVED_PATH \
+    --video_path_column "video_path" \
     --batch_size 4096 \
     --model_name $REWRITE_MODEL_PATH \
     --prompt prompt/rewrite.txt \
     --prefix '"rewritten description": ' \
+    --answer_template 'your rewritten description here' \
     --max_retry_count 10 \
     --saved_path $REWRITTEN_VIDEO_CAPTION_SAVED_PATH \
     --saved_freq 1

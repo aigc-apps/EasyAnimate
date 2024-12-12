@@ -33,6 +33,26 @@ def extract_output(s, prefix='"rewritten description": '):
         logger.warning(f"{output} does not start with {prefix}. Return None.")
         return None
 
+"""The file unifies the following two tasks:
+1. Caption Rewrite: rewrite the video recaption results by LLMs.
+2. Beautiful Prompt: rewrite and beautify the user-uploaded prompt via LLMs.
+
+For the caption rewrite task, the input video_metadata_path should have the following format:
+```jsonl
+{"video_path_column": "1.mp4", "caption_column": "a man is running in the street."}
+...
+{"video_path_column": "100.mp4", "caption_column": "a dog is chasing a cat."}
+```
+The video_path_column in the argparse must be specified.
+
+For the beautiful prompt task, the input video_metadata_path should have the following format:
+```jsonl
+{"caption_column": "a man is running in the street."}
+...
+{"caption_column": "a dog is chasing a cat."}
+```
+The beautiful_prompt_column in the argparse must be specified for the saving purpose.
+"""
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Rewrite the video caption by LLMs.")
@@ -42,14 +62,23 @@ def parse_args():
     parser.add_argument(
         "--video_path_column",
         type=str,
-        default=None,  # In the beautiful prompt case, it is not necessary.
-        help="The column contains the video path (an absolute path or a relative path w.r.t the video_folder).",
+        default=None,
+        help=(
+            "The column contains the video path (an absolute path or a relative path w.r.t the video_folder)."
+            "It is conflicted with the beautiful_prompt_column."
+        ),
     )
     parser.add_argument(
         "--caption_column",
         type=str,
         default="caption",
         help="The column contains the video caption.",
+    )
+    parser.add_argument(
+        "--beautiful_prompt_column",
+        type=str,
+        default=None,
+        help="The column name for the beautiful prompt column. It is conflicted with the video_path_column.",
     )
     parser.add_argument(
         "--batch_size",
@@ -109,34 +138,34 @@ def main():
     saved_suffix = os.path.splitext(args.saved_path)[1]
     if saved_suffix not in set([".csv", ".jsonl", ".json"]):
         raise ValueError(f"The saved_path must end with .csv, .jsonl or .json.")
+    
+    if args.video_path_column is None and args.beautiful_prompt_column is None:
+        raise ValueError("Either video_path_column or beautiful_prompt_column should be specified in the arguments.")
+    if args.video_path_column is not None and args.beautiful_prompt_column is not None:
+        raise ValueError(
+            "Both video_path_column and beautiful_prompt_column can not be specified in the arguments at the same time."
+        )
 
-    if os.path.exists(args.saved_path) and args.video_path_column is not None:
+    if os.path.exists(args.saved_path):
         if args.saved_path.endswith(".csv"):
             saved_metadata_df = pd.read_csv(args.saved_path)
         elif args.saved_path.endswith(".jsonl"):
             saved_metadata_df = pd.read_json(args.saved_path, lines=True)
-        
-        # Remove previous rewritten results same as the answer template.
-        if args.answer_template != "":
-            prev_nums = len(saved_metadata_df)
-            saved_metadata_df = saved_metadata_df[
-                ~saved_metadata_df[args.caption_column].str.contains(args.answer_template, case=False, na=False)
-            ]
-            logger.info(
-                f"Remove {prev_nums - len(saved_metadata_df)} rewritten results same as the answer template "
-                f"from {args.saved_path}."
-            )
-            if args.saved_path.endswith(".csv"):
-                saved_metadata_df.to_csv(args.saved_path, index=False)
-            elif args.saved_path.endswith(".jsonl"):
-                saved_metadata_df.to_json(args.saved_path, orient="records", lines=True)
 
-        # Filter out the unprocessed video-caption pairs by setting the indicator=True.
-        merged_df = video_metadata_df.merge(saved_metadata_df, on=args.video_path_column, how="outer", indicator=True)
-        video_metadata_df = merged_df[merged_df["_merge"] == "left_only"]
-        # Sorting to guarantee the same result for each process.
-        video_metadata_df = video_metadata_df.iloc[index_natsorted(video_metadata_df[args.video_path_column])]
-        video_metadata_df = video_metadata_df.reset_index(drop=True)
+        if args.video_path_column is not None:
+            # Filter out the unprocessed video-caption pairs by setting the indicator=True.
+            merged_df = video_metadata_df.merge(saved_metadata_df, on=args.video_path_column, how="outer", indicator=True)
+            video_metadata_df = merged_df[merged_df["_merge"] == "left_only"]
+            # Sorting to guarantee the same result for each process.
+            video_metadata_df = video_metadata_df.iloc[index_natsorted(video_metadata_df[args.video_path_column])]
+            video_metadata_df = video_metadata_df.reset_index(drop=True)
+        if args.beautiful_prompt_column is not None:
+            # Filter out the unprocessed caption-beautifil_prompt pairs by setting the indicator=True.
+            merged_df = video_metadata_df.merge(saved_metadata_df, on=args.caption_column, how="outer", indicator=True)
+            video_metadata_df = merged_df[merged_df["_merge"] == "left_only"]
+            # Sorting to guarantee the same result for each process.
+            video_metadata_df = video_metadata_df.iloc[index_natsorted(video_metadata_df[args.caption_column])]
+            video_metadata_df = video_metadata_df.reset_index(drop=True)
         logger.info(
             f"Resume from {args.saved_path}: {len(saved_metadata_df)} processed and {len(video_metadata_df)} to be processed."
         )
@@ -175,9 +204,10 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(args.model_name)
         sampling_params = SamplingParams(temperature=0.7, top_p=1, max_tokens=1024)
 
-    result_dict = {args.caption_column: []}
     if args.video_path_column is not None:
         result_dict = {args.video_path_column: [], args.caption_column: []}
+    if args.beautiful_prompt_column is not None:
+        result_dict = {args.caption_column: [], args.beautiful_prompt_column: []}
 
     for i in tqdm(range(0, len(sampled_frame_caption_list), args.batch_size)):
         if args.video_path_column is not None:
@@ -204,21 +234,37 @@ def main():
             if args.prefix is not None:
                 batch_output = [extract_output(output, args.prefix) for output in batch_output]
 
-            # Filter out data that does not meet the output format to retry.
-            retry_batch_video_path, retry_batch_prompt = [], []
-            for (video_path, prompt, output) in zip(batch_video_path, batch_prompt, batch_output):
-                if output is not None:
-                    batch_result.append((video_path, output))
-                else:
-                    retry_batch_video_path.append(video_path)
-                    retry_batch_prompt.append(prompt)
+            if args.video_path_column is not None:
+                retry_batch_video_path, retry_batch_prompt = [], []
+                for (video_path, prompt, output) in zip(batch_video_path, batch_prompt, batch_output):
+                    # Filter out data that does not meet the output format to retry.
+                    if output is not None and output != args.answer_template:
+                        batch_result.append((video_path, output))
+                    else:
+                        retry_batch_video_path.append(video_path)
+                        retry_batch_prompt.append(prompt)
+                if len(batch_result) != 0:
+                    batch_video_path, batch_output = zip(*batch_result)
+                    result_dict[args.video_path_column].extend(deepcopy(batch_video_path))
+                    result_dict[args.caption_column].extend(deepcopy(batch_output))
+                
+                batch_video_path, batch_prompt = retry_batch_video_path, retry_batch_prompt
+            if args.beautiful_prompt_column is not None:
+                retry_batch_caption, retry_batch_prompt = [], []
+                for (caption, prompt, output) in zip(batch_caption, batch_prompt, batch_output):
+                    # Filter out data that does not meet the output format to retry.
+                    if output is not None and output != args.answer_template:
+                        batch_result.append((caption, output))
+                    else:
+                        retry_batch_caption.append(caption)
+                        retry_batch_prompt.append(prompt)
+                if len(batch_result) != 0:
+                    batch_caption, batch_output = zip(*batch_result)
+                    result_dict[args.caption_column].extend(deepcopy(batch_caption))
+                    result_dict[args.beautiful_prompt_column].extend(deepcopy(batch_output))
+                
+                batch_caption, batch_prompt = retry_batch_caption, retry_batch_prompt
             
-            if len(batch_result) != 0:
-                batch_video_path, batch_output = zip(*batch_result)
-                result_dict[args.video_path_column].extend(deepcopy(batch_video_path))
-                result_dict[args.caption_column].extend(deepcopy(batch_output))
-            
-            batch_video_path, batch_prompt = retry_batch_video_path, retry_batch_prompt
             cur_retry_count += 1
             logger.info(
                 f"Current retry count/Maximum retry count: {cur_retry_count}/{args.max_retry_count}.: "
@@ -245,6 +291,8 @@ def main():
             result_dict = {args.caption_column: []}
             if args.video_path_column is not None:
                 result_dict = {args.video_path_column: [], args.caption_column: []}
+            if args.beautiful_prompt_column is not None:
+                result_dict = {args.caption_column: [], args.beautiful_prompt_column: []}
 
 if __name__ == "__main__":
     main()
