@@ -458,6 +458,14 @@ class EasyAnimateI2VSampler:
                 video_length = int(video_length // pipeline.vae.mini_batch_encoder * pipeline.vae.mini_batch_encoder) if video_length != 1 else 1
             input_video, input_video_mask, clip_image = get_image_to_video_latent(start_img, end_img, video_length=video_length, sample_size=(height, width))
 
+            # save the original weights to cpu
+            transformer_state_dict = pipeline.transformer.state_dict()
+            transformer_state_dict_cpu = {}
+            for key in transformer_state_dict:
+                val = transformer_state_dict[key]
+                transformer_state_dict_cpu[key] = val.clone().cpu()
+
+            # apply lora
             for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
                 pipeline = merge_lora(pipeline, _lora_path, _lora_weight)
 
@@ -478,8 +486,9 @@ class EasyAnimateI2VSampler:
             ).videos
             videos = rearrange(sample, "b c t h w -> (b t) h w c")
 
-            for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
-                pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
+            # for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+            #     pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
+            pipeline.transformer.load_state_dict(transformer_state_dict_cpu)
         return (videos,)   
 
 class EasyAnimateV5_I2VSampler(EasyAnimateI2VSampler):
@@ -629,6 +638,15 @@ class EasyAnimateT2VSampler:
                 video_length = int((video_length - 1) // pipeline.vae.mini_batch_encoder * pipeline.vae.mini_batch_encoder) + 1 if video_length != 1 else 1
             else:
                 video_length = int(video_length // pipeline.vae.mini_batch_encoder * pipeline.vae.mini_batch_encoder) if video_length != 1 else 1
+
+            # save the original weights to cpu
+            transformer_state_dict = pipeline.transformer.state_dict()
+            transformer_state_dict_cpu = {}
+            for key in transformer_state_dict:
+                val = transformer_state_dict[key]
+                transformer_state_dict_cpu[key] = val.clone().cpu()
+
+            # apply lora
             for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
                 pipeline = merge_lora(pipeline, _lora_path, _lora_weight)
             
@@ -663,8 +681,9 @@ class EasyAnimateT2VSampler:
                 ).videos
             videos = rearrange(sample, "b c t h w -> (b t) h w c")
 
-            for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
-                pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
+            # for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+            #     pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
+            pipeline.transformer.load_state_dict(transformer_state_dict_cpu)
         return (videos,)   
 
 class EasyAnimateV5_T2VSampler(EasyAnimateT2VSampler):
@@ -838,6 +857,14 @@ class EasyAnimateV2VSampler:
             else:
                 input_video, input_video_mask, clip_image = get_video_to_video_latent(control_video, video_length=video_length, sample_size=(height, width), fps=8)
 
+            # save the original weights to cpu
+            transformer_state_dict = pipeline.transformer.state_dict()
+            transformer_state_dict_cpu = {}
+            for key in transformer_state_dict:
+                val = transformer_state_dict[key]
+                transformer_state_dict_cpu[key] = val.clone().cpu()
+
+            # apply lora
             for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
                 pipeline = merge_lora(pipeline, _lora_path, _lora_weight)
             
@@ -874,8 +901,9 @@ class EasyAnimateV2VSampler:
                 ).videos
             videos = rearrange(sample, "b c t h w -> (b t) h w c")
 
-            for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
-                pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
+            # for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+            #     pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
+            pipeline.transformer.load_state_dict(transformer_state_dict_cpu)
         return (videos,)   
 
 class EasyAnimateV5_V2VSampler(EasyAnimateV2VSampler):
