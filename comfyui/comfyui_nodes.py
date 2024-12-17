@@ -8,6 +8,7 @@ import cv2
 import folder_paths
 import numpy as np
 import torch
+import copy
 from comfy.utils import ProgressBar, load_torch_file
 from diffusers import (AutoencoderKL, DDIMScheduler,
                        DPMSolverMultistepScheduler,
@@ -39,9 +40,13 @@ from ..easyanimate.utils.utils import (get_image_to_video_latent,
 from ..easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
 
 # Compatible with Alibaba EAS for quick launch
-eas_cache_dir       = '/stable-diffusion-cache/models'
+eas_cache_dir           = '/stable-diffusion-cache/models'
 # The directory of the easyanimate
-script_directory    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+script_directory        = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Used in lora cache
+transformer_cpu_cache   = {}
+# lora path before
+lora_path_before        = ""
 
 def tensor2pil(image):
     return Image.fromarray(np.clip(255. * image.cpu().numpy(), 0, 255).astype(np.uint8))
@@ -304,6 +309,7 @@ class LoadEasyAnimateLora:
                 "easyanimate_model": ("EASYANIMATESMODEL",),
                 "lora_name": (folder_paths.get_filename_list("loras"), {"default": None,}),
                 "strength_model": ("FLOAT", {"default": 1.0, "min": -100.0, "max": 100.0, "step": 0.01}),
+                "lora_cache":([False, True],  {"default": False,}),
             }
         }
     RETURN_TYPES = ("EASYANIMATESMODEL",)
@@ -311,7 +317,7 @@ class LoadEasyAnimateLora:
     FUNCTION = "load_lora"
     CATEGORY = "EasyAnimateWrapper"
 
-    def load_lora(self, easyanimate_model, lora_name, strength_model):
+    def load_lora(self, easyanimate_model, lora_name, strength_model, lora_cache):
         if lora_name is not None:
             return (
                 {
@@ -320,6 +326,7 @@ class LoadEasyAnimateLora:
                     'model_name': easyanimate_model["model_name"],
                     'loras': easyanimate_model.get("loras", []) + [folder_paths.get_full_path("loras", lora_name)],
                     'strength_model': easyanimate_model.get("strength_model", []) + [strength_model],
+                    'lora_cache': lora_cache,
                 }, 
             )
         else:
@@ -418,6 +425,8 @@ class EasyAnimateI2VSampler:
     CATEGORY = "EasyAnimateWrapper"
 
     def process(self, easyanimate_model, prompt, negative_prompt, video_length, base_resolution, seed, steps, cfg, scheduler, start_img=None, end_img=None):
+        global transformer_cpu_cache
+        global lora_path_before
         device = mm.get_torch_device()
         offload_device = mm.unet_offload_device()
 
@@ -435,6 +444,7 @@ class EasyAnimateI2VSampler:
         # Get Pipeline
         pipeline = easyanimate_model['pipeline']
         model_name = easyanimate_model['model_name']
+        weight_dtype = easyanimate_model['dtype']
 
         # Load Sampler
         if scheduler == "DPM++":
@@ -458,21 +468,33 @@ class EasyAnimateI2VSampler:
                 video_length = int(video_length // pipeline.vae.mini_batch_encoder * pipeline.vae.mini_batch_encoder) if video_length != 1 else 1
             input_video, input_video_mask, clip_image = get_image_to_video_latent(start_img, end_img, video_length=video_length, sample_size=(height, width))
 
-            # save the original weights to cpu
-            if not hasattr(pipeline, 'transformer_state_dict_cpu'):
-                print('save transformer state_dict to cpu memory')
-                transformer_state_dict = pipeline.transformer.state_dict()
-                transformer_state_dict_cpu = {}
-                for key in transformer_state_dict:
-                    val = transformer_state_dict[key]
-                    transformer_state_dict_cpu[key] = val.clone().cpu()
+            # Apply lora
+            if easyanimate_model.get("lora_cache", False):
+                if len(easyanimate_model.get("loras", [])) != 0:
+                    # Save the original weights to cpu
+                    if len(transformer_cpu_cache) == 0:
+                        print('Save transformer state_dict to cpu memory')
+                        transformer_state_dict = pipeline.transformer.state_dict()
+                        for key in transformer_state_dict:
+                            transformer_cpu_cache[key] = transformer_state_dict[key].clone().cpu()
+                    
+                    lora_path_now = str(easyanimate_model.get("loras", []) + easyanimate_model.get("strength_model", []))
+                    if lora_path_now != lora_path_before:
+                        print('Merge Lora with Cache')
+                        lora_path_before = copy.deepcopy(lora_path_now)
+                        pipeline.transformer.load_state_dict(transformer_cpu_cache)
+                        for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                            pipeline = merge_lora(pipeline, _lora_path, _lora_weight, device="cuda", dtype=weight_dtype)
             else:
-                print('reload transformer state_dict from cpu memory')
-                pipeline.transformer.load_state_dict(pipeline.transformer_state_dict_cpu)
-
-            # apply lora
-            for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
-                pipeline = merge_lora(pipeline, _lora_path, _lora_weight)
+                # Clear lora when switch from lora_cache=True to lora_cache=False.
+                if len(transformer_cpu_cache) != 0:
+                    pipeline.transformer.load_state_dict(transformer_cpu_cache)
+                    transformer_cpu_cache = {}
+                    lora_path_before = ""
+                    gc.collect()
+                print('Merge Lora')
+                for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                    pipeline = merge_lora(pipeline, _lora_path, _lora_weight, device="cuda", dtype=weight_dtype)
 
             sample = pipeline(
                 prompt, 
@@ -491,8 +513,10 @@ class EasyAnimateI2VSampler:
             ).videos
             videos = rearrange(sample, "b c t h w -> (b t) h w c")
 
-            # for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
-            #     pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
+            if not easyanimate_model.get("lora_cache", False):
+                print('Unmerge Lora')
+                for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                    pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight, device="cuda", dtype=weight_dtype)
         return (videos,)   
 
 class EasyAnimateV5_I2VSampler(EasyAnimateI2VSampler):
@@ -611,6 +635,8 @@ class EasyAnimateT2VSampler:
     CATEGORY = "EasyAnimateWrapper"
 
     def process(self, easyanimate_model, prompt, negative_prompt, video_length, width, height, is_image, seed, steps, cfg, scheduler):
+        global transformer_cpu_cache
+        global lora_path_before
         device = mm.get_torch_device()
         offload_device = mm.unet_offload_device()
 
@@ -620,6 +646,7 @@ class EasyAnimateT2VSampler:
         # Get Pipeline
         pipeline = easyanimate_model['pipeline']
         model_name = easyanimate_model['model_name']
+        weight_dtype = easyanimate_model['dtype']
 
         # Load Sampler
         if scheduler == "DPM++":
@@ -643,22 +670,35 @@ class EasyAnimateT2VSampler:
             else:
                 video_length = int(video_length // pipeline.vae.mini_batch_encoder * pipeline.vae.mini_batch_encoder) if video_length != 1 else 1
 
-            # save the original weights to cpu
-            if not hasattr(pipeline, 'transformer_state_dict_cpu'):
-                print('save transformer state_dict to cpu memory')
-                transformer_state_dict = pipeline.transformer.state_dict()
-                transformer_state_dict_cpu = {}
-                for key in transformer_state_dict:
-                    val = transformer_state_dict[key]
-                    transformer_state_dict_cpu[key] = val.clone().cpu()
+            # Apply lora
+            if easyanimate_model.get("lora_cache", False):
+                if len(easyanimate_model.get("loras", [])) != 0:
+                    # Save the original weights to cpu
+                    if len(transformer_cpu_cache) == 0:
+                        print('Save transformer state_dict to cpu memory')
+                        transformer_state_dict = pipeline.transformer.state_dict()
+                        for key in transformer_state_dict:
+                            transformer_cpu_cache[key] = transformer_state_dict[key].clone().cpu()
+                    
+                    lora_path_now = str(easyanimate_model.get("loras", []) + easyanimate_model.get("strength_model", []))
+                    if lora_path_now != lora_path_before:
+                        print('Merge Lora with Cache')
+                        lora_path_before = copy.deepcopy(lora_path_now)
+                        pipeline.transformer.load_state_dict(transformer_cpu_cache)
+                        for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                            pipeline = merge_lora(pipeline, _lora_path, _lora_weight, device="cuda", dtype=weight_dtype)
             else:
-                print('reload transformer state_dict from cpu memory')
-                pipeline.transformer.load_state_dict(pipeline.transformer_state_dict_cpu)
+                # Clear lora when switch from lora_cache=True to lora_cache=False.
+                if len(transformer_cpu_cache) != 0:
+                    print('Delete cpu state_dict')
+                    pipeline.transformer.load_state_dict(transformer_cpu_cache)
+                    transformer_cpu_cache = {}
+                    lora_path_before = ""
+                    gc.collect()
+                print('Merge Lora')
+                for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                    pipeline = merge_lora(pipeline, _lora_path, _lora_weight, device="cuda", dtype=weight_dtype)
 
-            # apply lora
-            for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
-                pipeline = merge_lora(pipeline, _lora_path, _lora_weight)
-            
             if pipeline.transformer.config.in_channels != pipeline.vae.config.latent_channels:
                 input_video, input_video_mask, clip_image = get_image_to_video_latent(None, None, video_length=video_length, sample_size=(height, width))
 
@@ -690,8 +730,10 @@ class EasyAnimateT2VSampler:
                 ).videos
             videos = rearrange(sample, "b c t h w -> (b t) h w c")
 
-            # for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
-            #     pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
+            if not easyanimate_model.get("lora_cache", False):
+                print('Unmerge Lora')
+                for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                    pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight, device="cuda", dtype=weight_dtype)
         return (videos,)   
 
 class EasyAnimateV5_T2VSampler(EasyAnimateT2VSampler):
@@ -812,6 +854,8 @@ class EasyAnimateV2VSampler:
     CATEGORY = "EasyAnimateWrapper"
 
     def process(self, easyanimate_model, prompt, negative_prompt, video_length, base_resolution, seed, steps, cfg, denoise_strength, scheduler, validation_video=None, control_video=None):
+        global transformer_cpu_cache
+        global lora_path_before
         device = mm.get_torch_device()
         offload_device = mm.unet_offload_device()
 
@@ -821,6 +865,7 @@ class EasyAnimateV2VSampler:
         # Get Pipeline
         pipeline = easyanimate_model['pipeline']
         model_name = easyanimate_model['model_name']
+        weight_dtype = easyanimate_model['dtype']
         model_type = easyanimate_model['model_type']
 
         # Count most suitable height and width
@@ -865,22 +910,34 @@ class EasyAnimateV2VSampler:
             else:
                 input_video, input_video_mask, clip_image = get_video_to_video_latent(control_video, video_length=video_length, sample_size=(height, width), fps=8)
 
-            # save the original weights to cpu
-            if not hasattr(pipeline, 'transformer_state_dict_cpu'):
-                print('save transformer state_dict to cpu memory')
-                transformer_state_dict = pipeline.transformer.state_dict()
-                transformer_state_dict_cpu = {}
-                for key in transformer_state_dict:
-                    val = transformer_state_dict[key]
-                    transformer_state_dict_cpu[key] = val.clone().cpu()
+            # Apply lora
+            if easyanimate_model.get("lora_cache", False):
+                if len(easyanimate_model.get("loras", [])) != 0:
+                    # Save the original weights to cpu
+                    if len(transformer_cpu_cache) == 0:
+                        print('Save transformer state_dict to cpu memory')
+                        transformer_state_dict = pipeline.transformer.state_dict()
+                        for key in transformer_state_dict:
+                            transformer_cpu_cache[key] = transformer_state_dict[key].clone().cpu()
+                    
+                    lora_path_now = str(easyanimate_model.get("loras", []) + easyanimate_model.get("strength_model", []))
+                    if lora_path_now != lora_path_before:
+                        print('Merge Lora with Cache')
+                        lora_path_before = copy.deepcopy(lora_path_now)
+                        pipeline.transformer.load_state_dict(transformer_cpu_cache)
+                        for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                            pipeline = merge_lora(pipeline, _lora_path, _lora_weight, device="cuda", dtype=weight_dtype)
             else:
-                print('reload transformer state_dict from cpu memory')
-                pipeline.transformer.load_state_dict(pipeline.transformer_state_dict_cpu)
+                # Clear lora when switch from lora_cache=True to lora_cache=False.
+                if len(transformer_cpu_cache) != 0:
+                    pipeline.transformer.load_state_dict(transformer_cpu_cache)
+                    transformer_cpu_cache = {}
+                    lora_path_before = ""
+                    gc.collect()
+                print('Merge Lora')
+                for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                    pipeline = merge_lora(pipeline, _lora_path, _lora_weight, device="cuda", dtype=weight_dtype)
 
-            # apply lora
-            for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
-                pipeline = merge_lora(pipeline, _lora_path, _lora_weight)
-            
             if model_type == "Inpaint":
                 sample = pipeline(
                     prompt, 
@@ -914,8 +971,10 @@ class EasyAnimateV2VSampler:
                 ).videos
             videos = rearrange(sample, "b c t h w -> (b t) h w c")
 
-            # for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
-            #     pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
+            if not easyanimate_model.get("lora_cache", False):
+                print('Unmerge Lora')
+                for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                    pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight, device="cuda", dtype=weight_dtype)
         return (videos,)   
 
 class EasyAnimateV5_V2VSampler(EasyAnimateV2VSampler):
