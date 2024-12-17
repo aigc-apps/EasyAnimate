@@ -459,11 +459,16 @@ class EasyAnimateI2VSampler:
             input_video, input_video_mask, clip_image = get_image_to_video_latent(start_img, end_img, video_length=video_length, sample_size=(height, width))
 
             # save the original weights to cpu
-            transformer_state_dict = pipeline.transformer.state_dict()
-            transformer_state_dict_cpu = {}
-            for key in transformer_state_dict:
-                val = transformer_state_dict[key]
-                transformer_state_dict_cpu[key] = val.clone().cpu()
+            if not hasattr(pipeline, 'transformer_state_dict_cpu'):
+                print('save transformer state_dict to cpu memory')
+                transformer_state_dict = pipeline.transformer.state_dict()
+                transformer_state_dict_cpu = {}
+                for key in transformer_state_dict:
+                    val = transformer_state_dict[key]
+                    transformer_state_dict_cpu[key] = val.clone().cpu()
+            else:
+                print('reload transformer state_dict from cpu memory')
+                pipeline.transformer.load_state_dict(pipeline.transformer_state_dict_cpu)
 
             # apply lora
             for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
@@ -488,9 +493,6 @@ class EasyAnimateI2VSampler:
 
             # for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
             #     pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
-
-            # reload the original weights from cpu
-            pipeline.transformer.load_state_dict(transformer_state_dict_cpu)
         return (videos,)   
 
 class EasyAnimateV5_I2VSampler(EasyAnimateI2VSampler):
@@ -642,11 +644,16 @@ class EasyAnimateT2VSampler:
                 video_length = int(video_length // pipeline.vae.mini_batch_encoder * pipeline.vae.mini_batch_encoder) if video_length != 1 else 1
 
             # save the original weights to cpu
-            transformer_state_dict = pipeline.transformer.state_dict()
-            transformer_state_dict_cpu = {}
-            for key in transformer_state_dict:
-                val = transformer_state_dict[key]
-                transformer_state_dict_cpu[key] = val.clone().cpu()
+            if not hasattr(pipeline, 'transformer_state_dict_cpu'):
+                print('save transformer state_dict to cpu memory')
+                transformer_state_dict = pipeline.transformer.state_dict()
+                transformer_state_dict_cpu = {}
+                for key in transformer_state_dict:
+                    val = transformer_state_dict[key]
+                    transformer_state_dict_cpu[key] = val.clone().cpu()
+            else:
+                print('reload transformer state_dict from cpu memory')
+                pipeline.transformer.load_state_dict(pipeline.transformer_state_dict_cpu)
 
             # apply lora
             for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
@@ -685,9 +692,6 @@ class EasyAnimateT2VSampler:
 
             # for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
             #     pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
-
-            # reload the original weights from cpu
-            pipeline.transformer.load_state_dict(transformer_state_dict_cpu)
         return (videos,)   
 
 class EasyAnimateV5_T2VSampler(EasyAnimateT2VSampler):
@@ -862,11 +866,16 @@ class EasyAnimateV2VSampler:
                 input_video, input_video_mask, clip_image = get_video_to_video_latent(control_video, video_length=video_length, sample_size=(height, width), fps=8)
 
             # save the original weights to cpu
-            transformer_state_dict = pipeline.transformer.state_dict()
-            transformer_state_dict_cpu = {}
-            for key in transformer_state_dict:
-                val = transformer_state_dict[key]
-                transformer_state_dict_cpu[key] = val.clone().cpu()
+            if not hasattr(pipeline, 'transformer_state_dict_cpu'):
+                print('save transformer state_dict to cpu memory')
+                transformer_state_dict = pipeline.transformer.state_dict()
+                transformer_state_dict_cpu = {}
+                for key in transformer_state_dict:
+                    val = transformer_state_dict[key]
+                    transformer_state_dict_cpu[key] = val.clone().cpu()
+            else:
+                print('reload transformer state_dict from cpu memory')
+                pipeline.transformer.load_state_dict(pipeline.transformer_state_dict_cpu)
 
             # apply lora
             for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
@@ -907,9 +916,6 @@ class EasyAnimateV2VSampler:
 
             # for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
             #     pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
-
-            # reload the original weights from cpu
-            pipeline.transformer.load_state_dict(transformer_state_dict_cpu)
         return (videos,)   
 
 class EasyAnimateV5_V2VSampler(EasyAnimateV2VSampler):
