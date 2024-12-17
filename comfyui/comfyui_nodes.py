@@ -488,6 +488,8 @@ class EasyAnimateI2VSampler:
 
             # for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
             #     pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
+
+            # reload the original weights from cpu
             pipeline.transformer.load_state_dict(transformer_state_dict_cpu)
         return (videos,)   
 
@@ -683,6 +685,8 @@ class EasyAnimateT2VSampler:
 
             # for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
             #     pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
+
+            # reload the original weights from cpu
             pipeline.transformer.load_state_dict(transformer_state_dict_cpu)
         return (videos,)   
 
@@ -903,6 +907,8 @@ class EasyAnimateV2VSampler:
 
             # for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
             #     pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight)
+
+            # reload the original weights from cpu
             pipeline.transformer.load_state_dict(transformer_state_dict_cpu)
         return (videos,)   
 
