@@ -140,10 +140,13 @@ We support batched inference with local LLMs or OpenAI compatible server based o
     python caption_rewrite.py \
         --video_metadata_path datasets/original_prompt.jsonl \
         --caption_column "prompt" \
+        --beautiful_prompt_column "beautiful_prompt" \
         --batch_size 1 \
         --model_name /path/to/your_llm \
         --prompt prompt/beautiful_prompt.txt \
         --prefix '"detailed description": ' \
+        --answer_template "your detailed description here" \
+        --max_retry_count 10 \
         --saved_path datasets/beautiful_prompt.jsonl \
         --saved_freq 1
     ```

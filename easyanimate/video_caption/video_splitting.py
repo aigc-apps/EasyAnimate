@@ -41,7 +41,8 @@ def clip_video(video_path, timecode_list, output_folder, video_duration):
     according to the timecode obtained from easyanimate/video_caption/cutscene_detect.py.
     """
     try:
-        video_name = Path(video_path).stem
+        os.makedirs(output_folder, exist_ok=True)
+        video_stem = Path(video_path).stem
 
         if len(timecode_list) == 0:  # The video of a single scene.
             splitted_timecode_list = []
@@ -57,7 +58,7 @@ def clip_video(video_path, timecode_list, output_folder, video_duration):
                     splitted_index += 1
                     continue
                 splitted_timecode_list.append([cur_start.strftime("%H:%M:%S.%f")[:-3], cur_end.strftime("%H:%M:%S.%f")[:-3]])
-                output_path = os.path.join(output_folder, video_name + f"_{splitted_index}.mp4")
+                output_path = os.path.join(output_folder, video_stem + f"_{splitted_index}.mp4")
                 if os.path.exists(output_path):
                     logger.info(f"The clipped video {output_path} exists.")
                     cur_start = cur_end
@@ -77,7 +78,7 @@ def clip_video(video_path, timecode_list, output_folder, video_duration):
             start_time = datetime.strptime(timecode[0], "%H:%M:%S.%f")
             end_time = datetime.strptime(timecode[1], "%H:%M:%S.%f")
             video_duration = (end_time - start_time).total_seconds()
-            output_path = os.path.join(output_folder, video_name + f"_{i}.mp4")
+            output_path = os.path.join(output_folder, video_stem + f"_{i}.mp4")
             if os.path.exists(output_path):
                 logger.info(f"The clipped video {output_path} exists.")
                 continue
@@ -93,7 +94,7 @@ def clip_video(video_path, timecode_list, output_folder, video_duration):
                     if cur_video_duration < MIN_SECONDS:
                         break
                     splitted_timecode_list.append([cur_start.strftime("%H:%M:%S.%f")[:-3], cur_end.strftime("%H:%M:%S.%f")[:-3]])
-                    splitted_output_path = os.path.join(output_folder, video_name + f"_{i}_{splitted_index}.mp4")
+                    splitted_output_path = os.path.join(output_folder, video_stem + f"_{i}_{splitted_index}.mp4")
                     if os.path.exists(splitted_output_path):
                         logger.info(f"The clipped video {splitted_output_path} exists.")
                         cur_start = cur_end
@@ -145,19 +146,23 @@ if __name__ == "__main__":
     video_metadata_df = video_metadata_df[video_metadata_df["resolution"] >= args.resolution_threshold]
     logger.info(f"Filter {num_videos - len(video_metadata_df)} videos with resolution smaller than {args.resolution_threshold}.")
     video_path_list = video_metadata_df[args.video_path_column].to_list()
-    video_id_list = [Path(video_path).stem for video_path in video_path_list]
-    if len(video_id_list) != len(list(set(video_id_list))):
-        logger.warning("Duplicate file names exist in the input video path list.")
-    video_path_list = [os.path.join(args.video_folder, video_path) for video_path in video_path_list]
     video_timecode_list = video_metadata_df["timecode_list"].to_list()
     video_duration_list = video_metadata_df["duration"].to_list()
 
-    assert len(video_path_list) == len(video_timecode_list)
-    os.makedirs(args.output_folder, exist_ok=True)
+    if args.video_folder == "":
+        output_folder_list = [args.output_folder] * len(video_path_list)
+        video_name_list = [Path(video_path).name for video_path in video_path_list]
+        # We only check the unique video name with the absolute video path.
+        if len(video_name_list) != len(set(video_name_list)):
+            logger.error(f"The video path in {args.video_metadata_path} should has an unique video name.")
+    else:
+        output_folder_list = [os.path.join(args.output_folder, os.path.dirname(video_path)) for video_path in video_path_list]
+    video_path_list = [os.path.join(args.video_folder, video_path) for video_path in video_path_list]
+
     args_list = [
-        (video_path, timecode_list, args.output_folder, video_duration)
-        for video_path, timecode_list, video_duration in zip(
-            video_path_list, video_timecode_list, video_duration_list
+        (video_path, timecode_list, output_folder, video_duration)
+        for video_path, timecode_list, output_folder, video_duration in zip(
+            video_path_list, video_timecode_list, output_folder_list, video_duration_list
         )
     ]
     with Pool(args.n_jobs) as pool:

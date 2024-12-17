@@ -1177,13 +1177,12 @@ def main():
     )
 
     for epoch in range(first_epoch, args.num_train_epochs):
-        train_dataloader_iterations = 100
         train_loss = 0.0
         train_reward = 0.0
 
         # In the following training loop, randomly select training prompts and use the 
         # `EasyAnimatePipeline_Multi_Text_Encoder_Inpaint` to sample videos, calculate rewards, and update the network.
-        for _ in range(train_dataloader_iterations):
+        for _ in range(num_update_steps_per_epoch):
             # train_prompt = random.sample(prompt_list, args.train_batch_size)
             train_prompt = random.choices(prompt_list, k=args.train_batch_size)
             logger.info(f"train_prompt: {train_prompt}")

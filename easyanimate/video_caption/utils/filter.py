@@ -1,5 +1,4 @@
 import ast
-import os
 from typing import Optional
 
 import pandas as pd
@@ -7,6 +6,7 @@ import pandas as pd
 from .logger import logger
 
 
+# Ensure each item in the video_path_list matches the paths in the video_path column of the metadata.
 def filter(
     video_path_list: list[str],
     basic_metadata_path: Optional[str] = None,
@@ -28,8 +28,6 @@ def filter(
     min_semantic_consistency_score: float = 0.80,
     video_path_column: str = "video_path"
 ):
-    video_path_list = [os.path.basename(video_path) for video_path in video_path_list]
-
     if basic_metadata_path is not None:
         if basic_metadata_path.endswith(".csv"):
             basic_df = pd.read_csv(basic_metadata_path)
@@ -39,7 +37,6 @@ def filter(
         basic_df["resolution"] = basic_df["frame_size"].apply(lambda x: x[0] * x[1])
         filtered_basic_df = basic_df[basic_df["resolution"] < min_resolution]
         filtered_video_path_list = filtered_basic_df[video_path_column].tolist()
-        filtered_video_path_list = [os.path.basename(video_path) for video_path in filtered_video_path_list]
 
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
         logger.info(
@@ -50,7 +47,6 @@ def filter(
         if min_duration != -1:
             filtered_basic_df = basic_df[basic_df["duration"] < min_duration]
             filtered_video_path_list = filtered_basic_df[video_path_column].tolist()
-            filtered_video_path_list = [os.path.basename(video_path) for video_path in filtered_video_path_list]
 
             video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
             logger.info(
@@ -61,7 +57,6 @@ def filter(
         if max_duration != -1:
             filtered_basic_df = basic_df[basic_df["duration"] > max_duration]
             filtered_video_path_list = filtered_basic_df[video_path_column].tolist()
-            filtered_video_path_list = [os.path.basename(video_path) for video_path in filtered_video_path_list]
 
             video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
             logger.info(
@@ -82,7 +77,6 @@ def filter(
         aesthetic_score_df["aesthetic_score_mean"] = aesthetic_score_df["aesthetic_score"].apply(lambda x: sum(x) / len(x))
         filtered_aesthetic_score_df = aesthetic_score_df[aesthetic_score_df["aesthetic_score_mean"] < min_aesthetic_score]
         filtered_video_path_list = filtered_aesthetic_score_df[video_path_column].tolist()
-        filtered_video_path_list = [os.path.basename(video_path) for video_path in filtered_video_path_list]
 
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
         logger.info(
@@ -107,7 +101,6 @@ def filter(
             aesthetic_score_siglip_df["aesthetic_score_siglip_mean"] < min_aesthetic_score_siglip
         ]
         filtered_video_path_list = filtered_aesthetic_score_siglip_df[video_path_column].tolist()
-        filtered_video_path_list = [os.path.basename(video_path) for video_path in filtered_video_path_list]
 
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
         logger.info(
@@ -123,7 +116,6 @@ def filter(
 
         filtered_text_score_df = text_score_df[text_score_df["text_score"] > min_text_score]
         filtered_video_path_list = filtered_text_score_df[video_path_column].tolist()
-        filtered_video_path_list = [os.path.basename(video_path) for video_path in filtered_video_path_list]
 
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
         logger.info(
@@ -139,7 +131,6 @@ def filter(
         
         filtered_motion_score_df = motion_score_df[motion_score_df["motion_score"] < min_motion_score]
         filtered_video_path_list = filtered_motion_score_df[video_path_column].tolist()
-        filtered_video_path_list = [os.path.basename(video_path) for video_path in filtered_video_path_list]
 
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
         logger.info(
@@ -149,7 +140,6 @@ def filter(
 
         filtered_motion_score_df = motion_score_df[motion_score_df["motion_score"] > max_motion_score]
         filtered_video_path_list = filtered_motion_score_df[video_path_column].tolist()
-        filtered_video_path_list = [os.path.basename(video_path) for video_path in filtered_video_path_list]
 
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
         logger.info(
@@ -165,7 +155,6 @@ def filter(
         
         filtered_videoclipxl_score_df = videoclipxl_score_df[videoclipxl_score_df["videoclipxl_score"] < min_videoclipxl_score]
         filtered_video_path_list = filtered_videoclipxl_score_df[video_path_column].tolist()
-        filtered_video_path_list = [os.path.basename(video_path) for video_path in filtered_video_path_list]
 
         video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
         logger.info(
@@ -183,7 +172,6 @@ def filter(
                 semantic_consistency_score_df["similarity_cross_frame"].apply(lambda x: min(x) < min_semantic_consistency_score)
             ]
             filtered_video_path_list = filtered_semantic_consistency_score_df[video_path_column].tolist()
-            filtered_video_path_list = [os.path.basename(video_path) for video_path in filtered_video_path_list]
 
             video_path_list = list(set(video_path_list).difference(set(filtered_video_path_list)))
             logger.info(

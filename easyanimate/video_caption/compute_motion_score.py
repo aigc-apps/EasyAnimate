@@ -1,9 +1,7 @@
 import argparse
-import ast
 import gc
 import os
 from contextlib import contextmanager
-from pathlib import Path
 
 import cv2
 import numpy as np
@@ -76,11 +74,11 @@ def compute_motion_score(video_path):
                 video_motion_scores.append(frame_motion_score)
                 prev_frame = gray_frame
 
-            video_meta_info = {
-                "video_path": Path(video_path).name,
+            motion_score_result = {
+                "video_path": video_path,
                 "motion_score": round(float(np.mean(video_motion_scores)), 5),
             }
-            return video_meta_info
+            return motion_score_result
 
     except Exception as e:
         print(f"Compute motion score for video {video_path} with error: {e}.")
@@ -168,17 +166,27 @@ def main():
         min_aesthetic_score_siglip=args.min_aesthetic_score_siglip,
         text_score_metadata_path=args.text_score_metadata_path,
         min_text_score=args.min_text_score,
+        semantic_consistency_score_metadata_path=args.semantic_consistency_score_metadata_path,
+        min_semantic_consistency_score=args.min_semantic_consistency_score,
         video_path_column=args.video_path_column
     )
     video_path_list = [os.path.join(args.video_folder, video_path) for video_path in video_path_list]
     # Sorting to guarantee the same result for each process.
     video_path_list = natsorted(video_path_list)
+    logger.info(f"{len(video_path_list)} videos are to be processed.")
 
     for i in tqdm(range(0, len(video_path_list), args.saved_freq)):
-        result_list = Parallel(n_jobs=args.n_jobs)(
+        # Get motion score result for each video asynchronously.
+        motion_score_result_list = Parallel(n_jobs=args.n_jobs)(
             delayed(compute_motion_score)(video_path) for video_path in tqdm(video_path_list[i: i + args.saved_freq])
         )
-        result_list = [result for result in result_list if result is not None]
+        result_list = []
+        for motion_score_result in motion_score_result_list:
+            if motion_score_result is not None:
+                video_path = motion_score_result["video_path"]
+                if args.video_folder != "":
+                    video_path = os.path.relpath(video_path, args.video_folder)
+                result_list.append({args.video_path_column: video_path, "motion_score": motion_score_result["motion_score"]})
         if len(result_list) == 0:
             continue
 

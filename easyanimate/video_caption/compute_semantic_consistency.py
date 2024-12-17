@@ -130,7 +130,6 @@ def main():
         max_motion_score=args.max_motion_score,
         video_path_column=args.video_path_column
     )
-    video_path_list = [os.path.join(args.video_folder, video_path) for video_path in video_path_list]
     # Sorting to guarantee the same result for each process.
     video_path_list = natsorted(video_path_list)
 
@@ -201,7 +200,7 @@ def main():
                 result_dict["sample_frame_idx"].extend(batch["sampled_frame_idx"])
 
             # Save the metadata in the main process every saved_freq.
-            if (idx != 0) and (idx % args.saved_freq == 0 or idx == len(video_loader) - 1):
+            if (idx % args.saved_freq) == 0 or idx == len(video_loader) - 1:
                 state.wait_for_everyone()
                 gathered_result_dict = {k: gather_object(v) for k, v in result_dict.items()}
                 if state.is_main_process and len(gathered_result_dict[args.video_path_column]) != 0:

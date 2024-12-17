@@ -143,7 +143,6 @@ def main():
     else:
         raise ValueError("The video_metadata_path must end with .csv or .jsonl.")
     video_path_list = video_metadata_df[args.video_path_column].tolist()
-    video_path_list = [os.path.basename(video_path) for video_path in video_path_list]
 
     if not (args.saved_path.endswith(".csv") or args.saved_path.endswith(".jsonl")):
         raise ValueError("The saved_path must end with .csv or .jsonl.")
@@ -173,8 +172,10 @@ def main():
         min_text_score=args.min_text_score,
         motion_score_metadata_path=args.motion_score_metadata_path,
         min_motion_score=args.min_motion_score,
+        semantic_consistency_score_metadata_path=args.semantic_consistency_score_metadata_path,
+        min_semantic_consistency_score=args.min_semantic_consistency_score,
+        video_path_column=args.video_path_column
     )
-    video_path_list = [os.path.join(args.video_folder, video_path) for video_path in video_path_list]
     # Sorting to guarantee the same result for each process.
     video_path_list = natsorted(video_path_list)
 

@@ -15,14 +15,14 @@ def cutscene_detection_star(args):
     return cutscene_detection(*args)
 
 
-def cutscene_detection(video_path, saved_path, cutscene_threshold=27, min_scene_len=15):
+def cutscene_detection(video_path, video_folder, saved_path, cutscene_threshold=27, min_scene_len=15):
     try:
         if os.path.exists(saved_path):
             logger.info(f"{video_path} has been processed.")
             return
         # Use PyAV as the backend to avoid (to some exent) containing the last frame of the previous scene.
         # https://github.com/Breakthrough/PySceneDetect/issues/279#issuecomment-2152596761.
-        video = open_video(video_path, backend="pyav")
+        video = open_video(os.path.join(video_folder, video_path), backend="pyav")
         frame_rate, frame_size = video.frame_rate, video.frame_size
         duration = deepcopy(video.duration)
 
@@ -50,12 +50,14 @@ def cutscene_detection(video_path, saved_path, cutscene_threshold=27, min_scene_
         
         timecode_list = [(frame_timecode_tuple[0].get_timecode(), frame_timecode_tuple[1].get_timecode()) for frame_timecode_tuple in output_scene_list]
         meta_scene = [{
-            "video_path": Path(video_path).name,
+            "video_path": video_path,
             "timecode_list": timecode_list,
             "fram_rate": frame_rate,
             "frame_size": frame_size,
             "duration": str(duration)  # __repr__
         }]
+        if not os.path.exists(Path(saved_path).parent):
+            os.makedirs(Path(saved_path).parent, exist_ok=True)
         pd.DataFrame(meta_scene).to_json(saved_path, orient="records", lines=True)
     except Exception as e:
         logger.warning(f"Cutscene detection with {video_path} failed. Error is: {e}.")
@@ -74,20 +76,18 @@ if __name__ == "__main__":
     )
     parser.add_argument("--video_folder", type=str, default="", help="The video folder.")
     parser.add_argument("--saved_folder", type=str, required=True, help="The save path to the output results (csv/jsonl).")
+    parser.add_argument("--cutscene_threshold", type=int, default=27, help="The threshold of ContentDetector.")
     parser.add_argument("--n_jobs", type=int, default=1, help="The number of processes.")
 
     args = parser.parse_args()
 
     metadata_df = pd.read_json(args.video_metadata_path, lines=True)
     video_path_list = metadata_df[args.video_path_column].tolist()
-    video_path_list = [os.path.join(args.video_folder, video_path) for video_path in video_path_list]
 
-    if not os.path.exists(args.saved_folder):
-        os.makedirs(args.saved_folder, exist_ok=True)
     # The glob can be slow when there are many small jsonl files.
-    saved_path_list = [os.path.join(args.saved_folder, Path(video_path).stem + ".jsonl") for video_path in video_path_list]
+    saved_path_list = [os.path.join(args.saved_folder, Path(video_path).with_suffix(".jsonl")) for video_path in video_path_list]
     args_list = [
-        (video_path, saved_path)
+        (video_path, args.video_folder, saved_path, args.cutscene_threshold)
         for video_path, saved_path in zip(video_path_list, saved_path_list)
     ]
     # Since the length of the video is not uniform, the gather operation is not performed.

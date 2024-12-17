@@ -1,6 +1,5 @@
 import argparse
 import os
-from pathlib import Path
 
 import easyocr
 import numpy as np
@@ -47,8 +46,8 @@ def triangle_area(p1, p2, p3):
     return tri_area
 
 
-def compute_text_score(video_path, ocr_reader):
-    _, images = extract_frames(video_path, sample_method="mid")
+def compute_text_score(video_path, ocr_reader, sample_method="mid", num_sampled_frames=1):
+    _, images = extract_frames(video_path, sample_method=sample_method, num_sampled_frames=num_sampled_frames)
     images = [np.array(image) for image in images]
 
     frame_ocr_area_ratios = []
@@ -78,12 +77,9 @@ def compute_text_score(video_path, ocr_reader):
 
         frame_ocr_area_ratios.append(text_area / total_area)
 
-    video_meta_info = {
-        "video_path": Path(video_path).name,
-        "text_score": round(np.mean(frame_ocr_area_ratios), 5),
-    }
+    text_score = round(np.mean(frame_ocr_area_ratios), 5)
 
-    return video_meta_info
+    return text_score
 
 
 def parse_args():
@@ -97,6 +93,17 @@ def parse_args():
         type=str,
         default="video_path",
         help="The column contains the video path (an absolute path or a relative path w.r.t the video_folder).",
+    )
+    parser.add_argument(
+        "--frame_sample_method",
+        type=str,
+        default="mid",
+    )
+    parser.add_argument(
+        "--num_sampled_frames",
+        type=int,
+        default=1,
+        help="num_sampled_frames",
     )
     parser.add_argument("--saved_path", type=str, required=True, help="The save path to the output results (csv/jsonl).")
     parser.add_argument("--saved_freq", type=int, default=1, help="The frequency to save the output results.")
@@ -197,7 +204,18 @@ def main():
     with state.split_between_processes(video_path_list) as splitted_video_path_list:
         for i, video_path in enumerate(tqdm(splitted_video_path_list)):
             try:
-                video_meta_info = compute_text_score(video_path, ocr_reader)
+                text_score = compute_text_score(
+                    video_path,
+                    ocr_reader,
+                    sample_method=args.frame_sample_method,
+                    num_sampled_frames=args.num_sampled_frames,
+                )
+                video_meta_info = {}
+                if args.video_folder == "":
+                    video_meta_info[args.video_path_column] = video_path
+                else:
+                    video_meta_info[args.video_path_column] = os.path.relpath(video_path, args.video_folder)
+                video_meta_info["text_score"] = text_score
                 result_list.append(video_meta_info)
             except Exception as e:
                 logger.warning(f"Compute text score for video {video_path} with error: {e}.")

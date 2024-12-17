@@ -284,7 +284,6 @@ class Cross_model(nn.Module):
         context_tokens,
         mask
     ):
-        print(mask.dtype)
         for cross_attn, self_attn_ff in self.layers:
             query_tokens = cross_attn(query_tokens, context_tokens,mask)
             query_tokens = self_attn_ff(query_tokens)
