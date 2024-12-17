@@ -1649,9 +1649,9 @@ def main():
                     torch.cuda.empty_cache()
                     vae.to(accelerator.device)
                     if not args.enable_text_encoder_in_dataloader:
-                        text_encoder.to(accelerator.device)
+                        text_encoder.to('cpu')
                         if text_encoder_2 is not None:
-                            text_encoder_2.to(accelerator.device)
+                            text_encoder_2.to('cpu')
 
                 with torch.no_grad():
                     video_length = pixel_values.shape[1]

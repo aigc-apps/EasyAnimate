@@ -1042,9 +1042,9 @@ def main():
         def save_model_hook(models, weights, output_dir):
             if accelerator.is_main_process:
                 if args.use_ema:
-                    ema_transformer3d.save_pretrained(os.path.join(output_dir, "transformer_ema"))
+                    ema_transformer3d.save_pretrained(os.path.join(output_dir, "transformer_ema"), max_shard_size="30GB")
 
-                models[0].save_pretrained(os.path.join(output_dir, "transformer"))
+                models[0].save_pretrained(os.path.join(output_dir, "transformer"), max_shard_size="30GB")
                 if not args.use_deepspeed:
                     weights.pop()
 
@@ -1671,9 +1671,9 @@ def main():
                     torch.cuda.empty_cache()
                     vae.to(accelerator.device)
                     if not args.enable_text_encoder_in_dataloader:
-                        text_encoder.to(accelerator.device)
+                        text_encoder.to('cpu')
                         if text_encoder_2 is not None:
-                            text_encoder_2.to(accelerator.device)
+                            text_encoder_2.to('cpu')
 
                 with torch.no_grad():
                     video_length = pixel_values.shape[1]
