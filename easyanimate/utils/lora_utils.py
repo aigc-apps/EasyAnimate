@@ -410,9 +410,12 @@ def merge_lora(pipeline, lora_path, multiplier, device='cpu', dtype=torch.float3
                         temp_name = layer_infos.pop(0)
 
         origin_dtype = curr_layer.weight.data.dtype
-        weight_up = elems['lora_up.weight'].to(curr_layer.weight.data.device, dtype)
-        weight_down = elems['lora_down.weight'].to(curr_layer.weight.data.device, dtype)
-        curr_layer = curr_layer.to(dtype)
+        origin_device = curr_layer.weight.data.device
+
+        curr_layer = curr_layer.to(device, dtype)
+        weight_up = elems['lora_up.weight'].to(device, dtype)
+        weight_down = elems['lora_down.weight'].to(device, dtype)
+        
         if 'alpha' in elems.keys():
             alpha = elems['alpha'].item() / weight_up.shape[1]
         else:
@@ -424,7 +427,7 @@ def merge_lora(pipeline, lora_path, multiplier, device='cpu', dtype=torch.float3
             ).unsqueeze(2).unsqueeze(3)
         else:
             curr_layer.weight.data += multiplier * alpha * torch.mm(weight_up, weight_down)
-        curr_layer = curr_layer.to(origin_dtype)
+        curr_layer = curr_layer.to(origin_device, origin_dtype)
 
     return pipeline
 
@@ -469,21 +472,23 @@ def unmerge_lora(pipeline, lora_path, multiplier=1, device="cpu", dtype=torch.fl
                         temp_name = layer_infos.pop(0)
 
         origin_dtype = curr_layer.weight.data.dtype
-        weight_up = elems['lora_up.weight'].to(curr_layer.weight.data.device, dtype)
-        weight_down = elems['lora_down.weight'].to(curr_layer.weight.data.device, dtype)
-        curr_layer = curr_layer.to(dtype)
+        origin_device = curr_layer.weight.data.device
+
+        curr_layer = curr_layer.to(device, dtype)
+        weight_up = elems['lora_up.weight'].to(device, dtype)
+        weight_down = elems['lora_down.weight'].to(device, dtype)
+        
         if 'alpha' in elems.keys():
             alpha = elems['alpha'].item() / weight_up.shape[1]
         else:
             alpha = 1.0
 
-        curr_layer.weight.data = curr_layer.weight.data.to(device)
         if len(weight_up.shape) == 4:
             curr_layer.weight.data -= multiplier * alpha * torch.mm(
                 weight_up.squeeze(3).squeeze(2), weight_down.squeeze(3).squeeze(2)
             ).unsqueeze(2).unsqueeze(3)
         else:
             curr_layer.weight.data -= multiplier * alpha * torch.mm(weight_up, weight_down)
-        curr_layer = curr_layer.to(origin_dtype)
+        curr_layer = curr_layer.to(origin_device, origin_dtype)
 
     return pipeline
