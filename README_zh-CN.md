@@ -113,19 +113,19 @@ Linux 的详细信息：
 我们需要大约 60GB 的可用磁盘空间，请检查！
 
 EasyAnimateV5-12B的视频大小可以由不同的GPU Memory生成，包括：
-| GPU memory |384x672x72|384x672x49|576x1008x25|576x1008x49|768x1344x25|768x1344x49|
+| GPU memory |384x672x25|384x672x49|576x1008x25|576x1008x49|768x1344x25|768x1344x49|
 |----------|----------|----------|----------|----------|----------|----------|
 | 16GB | 🧡 | 🧡 | ❌ | ❌ | ❌ | ❌ | 
-| 24GB | 🧡 | 🧡 | 🧡 | 🧡 | ❌ | ❌ | 
-| 40GB | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | 
+| 24GB | 🧡 | 🧡 | 🧡 | 🧡 | 🧡 | ❌ | 
+| 40GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 
 | 80GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 
 
 EasyAnimateV5-7B的视频大小可以由不同的GPU Memory生成，包括：
-| GPU memory |384x672x72|384x672x49|576x1008x25|576x1008x49|768x1344x25|768x1344x49|
+| GPU memory |384x672x25|384x672x49|576x1008x25|576x1008x49|768x1344x25|768x1344x49|
 |----------|----------|----------|----------|----------|----------|----------|
 | 16GB | 🧡 | 🧡 | ❌ | ❌ | ❌ | ❌ | 
-| 24GB | ✅ | ✅ | 🧡 | 🧡 | ❌ | ❌ | 
-| 40GB | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | 
+| 24GB | ✅ | ✅ | ✅ | 🧡 | ✅ | ❌ | 
+| 40GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 
 | 80GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 
 
 ✅ 表示它可以在"model_cpu_offload"的情况下运行，🧡代表它可以在"model_cpu_offload_and_qfloat8"的情况下运行，⭕️ 表示它可以在"sequential_cpu_offload"的情况下运行，❌ 表示它无法运行。请注意，使用sequential_cpu_offload运行会更慢。
@@ -133,7 +133,7 @@ EasyAnimateV5-7B的视频大小可以由不同的GPU Memory生成，包括：
 有一些不支持torch.bfloat16的卡型，如2080ti、V100，需要将app.py、predict文件中的weight_dtype修改为torch.float16才可以运行。
 
 EasyAnimateV5-12B使用不同GPU在25个steps中的生成时间如下：
-| GPU |384x672x72|384x672x49|576x1008x25|576x1008x49|768x1344x25|768x1344x49|
+| GPU |384x672x25|384x672x49|576x1008x25|576x1008x49|768x1344x25|768x1344x49|
 |----------|----------|----------|----------|----------|----------|----------|
 | A10 24GB |约120秒 (4.8s/it)|约240秒 (9.6s/it)|约320秒 (12.7s/it)| 约750秒 (29.8s/it)| ❌ | ❌ |
 | A100 80GB |约45秒 (1.75s/it)|约90秒 (3.7s/it)|约120秒 (4.7s/it)|约300秒 (11.4s/it)|约265秒 (10.6s/it)| 约710秒 (28.3s/it)|
@@ -144,7 +144,7 @@ EasyAnimateV5-12B使用不同GPU在25个steps中的生成时间如下：
   <summary>(Obsolete) EasyAnimateV3:</summary>
 
 EasyAnimateV3的视频大小可以由不同的GPU Memory生成，包括：
-| GPU memory | 384x672x72 | 384x672x144 | 576x1008x72 | 576x1008x144 | 720x1280x72 | 720x1280x144 |
+| GPU memory | 384x672x25 | 384x672x144 | 576x1008x72 | 576x1008x144 | 720x1280x72 | 720x1280x144 |
 |----------|----------|----------|----------|----------|----------|----------|
 | 12GB | ⭕️ | ⭕️ | ⭕️ | ⭕️ | ❌ | ❌ |
 | 16GB | ✅ | ✅ | ⭕️ | ⭕️ | ⭕️ | ❌ |
@@ -317,7 +317,9 @@ qfloat8会降低模型的性能，但可以节省更多的显存。如果显存�
 
 <h4 id="data-preprocess">a.数据预处理</h4>
 
-我们给出了一个简单的demo通过图片数据训练lora模型，详情可以查看[wiki](https://github.com/aigc-apps/EasyAnimate/wiki/Training-Lora)。
+我们给出了两个简单的demo：
+- 通过图片数据训练lora模型，详情可以查看[wiki](https://github.com/aigc-apps/EasyAnimate/wiki/Training-Lora)。
+- 通过视频数据进行SFT模型，详情可以查看[wiki](https://github.com/aigc-apps/EasyAnimate/wiki/Training-SFT)。
 
 一个完整的长视频切分、清洗、描述的数据预处理链路可以参考video caption部分的[README](easyanimate/video_caption/README.md)进行。
 
