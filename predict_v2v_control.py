@@ -3,7 +3,7 @@ import os
 import numpy as np
 import torch
 from diffusers import (DDIMScheduler, DPMSolverMultistepScheduler,
-                       EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
+                       EulerAncestralDiscreteScheduler, EulerDiscreteScheduler, FlowMatchEulerDiscreteScheduler,
                        PNDMScheduler)
 from omegaconf import OmegaConf
 from PIL import Image
@@ -31,12 +31,13 @@ GPU_memory_mode     = "model_cpu_offload"
 
 # Config and model path
 config_path         = "config/easyanimate_video_v5_magvit_multi_text_encoder.yaml"
-model_name          = "models/Diffusion_Transformer/EasyAnimateV5-12b-zh-Control"
+model_name          = "models/Diffusion_Transformer/EasyAnimateV5.1-12b-zh-Control"
 
-# Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" and "DDIM"
+# Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" "DDIM" "Flow"
 # EasyAnimateV1, V2 and V3 cannot use DDIM.
 # EasyAnimateV4 and V5 support DDIM.
-sampler_name        = "DDIM"
+# EasyAnimateV5.1 is a flow model, needs to use Flow.
+sampler_name        = "Flow"
 
 # Load pretrained model if need
 transformer_path    = None
@@ -185,6 +186,7 @@ Choosen_Scheduler = scheduler_dict = {
     "DPM++": DPMSolverMultistepScheduler, 
     "PNDM": PNDMScheduler,
     "DDIM": DDIMScheduler,
+    "Flow": FlowMatchEulerDiscreteScheduler,
 }[sampler_name]
 
 scheduler = Choosen_Scheduler.from_pretrained(

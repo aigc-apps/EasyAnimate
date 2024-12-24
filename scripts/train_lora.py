@@ -52,8 +52,72 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import (BertModel, BertTokenizer, CLIPImageProcessor,
-                          CLIPVisionModelWithProjection,
-                          T5EncoderModel, T5Tokenizer)
+                          CLIPVisionModelWithProjection, T5EncoderModel,
+                          T5Tokenizer)
+from transformers.utils import ContextManagers
+
+"""Modified from https://github.com/huggingface/diffusers/blob/main/examples/text_to_image/train_text_to_image.py
+"""
+#!/usr/bin/env python
+# coding=utf-8
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+
+import argparse
+import gc
+import logging
+import math
+import os
+import pickle
+import shutil
+import sys
+
+import accelerate
+import diffusers
+import numpy as np
+import torch
+import torch.nn.functional as F
+import torch.utils.checkpoint
+import transformers
+from accelerate import Accelerator
+from accelerate.logging import get_logger
+from accelerate.state import AcceleratorState
+from accelerate.utils import ProjectConfiguration, set_seed
+from diffusers import (AutoencoderKL, DDIMScheduler, DDPMScheduler,
+                       DPMSolverMultistepScheduler,
+                       EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
+                       FlowMatchEulerDiscreteScheduler, PNDMScheduler)
+from diffusers.optimization import get_scheduler
+from diffusers.training_utils import (EMAModel,
+                                      _set_state_dict_into_text_encoder,
+                                      cast_training_params,
+                                      compute_density_for_timestep_sampling,
+                                      compute_loss_weighting_for_sd3)
+from diffusers.utils import check_min_version, deprecate, is_wandb_available
+from diffusers.utils.import_utils import is_xformers_available
+from diffusers.utils.torch_utils import is_compiled_module
+from einops import rearrange
+from huggingface_hub import create_repo, upload_folder
+from omegaconf import OmegaConf
+from packaging import version
+from PIL import Image
+from torch.utils.data import RandomSampler
+from torch.utils.tensorboard import SummaryWriter
+from torchvision import transforms
+from tqdm.auto import tqdm
+from transformers import (BertModel, BertTokenizer, CLIPImageProcessor,
+                          CLIPVisionModelWithProjection, T5EncoderModel,
+                          T5Tokenizer)
 from transformers.utils import ContextManagers
 
 import datasets
@@ -236,6 +300,17 @@ def log_validation(
             transformer_additional_kwargs=OmegaConf.to_container(config['transformer_additional_kwargs'])
         ).to(weight_dtype)
         transformer3d_val.load_state_dict(accelerator.unwrap_model(transformer3d).state_dict())
+        
+        if args.loss_type == "flow":
+            scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(
+                args.pretrained_model_name_or_path, 
+                subfolder="scheduler"
+            )
+        else:
+            scheduler = DDIMScheduler.from_pretrained(
+                args.pretrained_model_name_or_path, 
+                subfolder="scheduler"
+            )
 
         if config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
             if args.train_mode != "normal":
@@ -247,6 +322,7 @@ def log_validation(
                     tokenizer=tokenizer,
                     tokenizer_2=tokenizer_2,
                     transformer=transformer3d_val,
+                    scheduler=scheduler,
                     torch_dtype=weight_dtype,
                     clip_image_encoder=image_encoder,
                     clip_image_processor=image_processor,
@@ -260,6 +336,7 @@ def log_validation(
                     tokenizer=tokenizer,
                     tokenizer_2=tokenizer_2,
                     transformer=transformer3d_val,
+                    scheduler=scheduler,
                     torch_dtype=weight_dtype
                 )
         else:
@@ -270,6 +347,7 @@ def log_validation(
                     text_encoder=accelerator.unwrap_model(text_encoder),
                     tokenizer=tokenizer,
                     transformer=transformer3d_val,
+                    scheduler=scheduler,
                     torch_dtype=weight_dtype,
                     clip_image_encoder=image_encoder,
                     clip_image_processor=image_processor,
@@ -281,6 +359,7 @@ def log_validation(
                     text_encoder=accelerator.unwrap_model(text_encoder),
                     tokenizer=tokenizer,
                     transformer=transformer3d_val,
+                    scheduler=scheduler,
                     torch_dtype=weight_dtype
                 )
         pipeline = pipeline.to(accelerator.device)
@@ -678,9 +757,6 @@ def parse_args():
         "--uniform_sampling", action="store_true", help="Whether or not to use uniform_sampling."
     )
     parser.add_argument(
-        "--not_sigma_loss", action="store_true", help="Whether or not to not use sigma_loss."
-    )
-    parser.add_argument(
         "--enable_text_encoder_in_dataloader", action="store_true", help="Whether or not to use text encoder in dataloader."
     )
     parser.add_argument(
@@ -823,6 +899,26 @@ def parse_args():
         ),
     )
 
+    parser.add_argument(
+        "--weighting_scheme",
+        type=str,
+        default="none",
+        choices=["sigma_sqrt", "logit_normal", "mode", "cosmap", "none"],
+        help=('We default to the "none" weighting scheme for uniform sampling and uniform loss'),
+    )
+    parser.add_argument(
+        "--logit_mean", type=float, default=0.0, help="mean to use when using the `'logit_normal'` weighting scheme."
+    )
+    parser.add_argument(
+        "--logit_std", type=float, default=1.0, help="std to use when using the `'logit_normal'` weighting scheme."
+    )
+    parser.add_argument(
+        "--mode_scale",
+        type=float,
+        default=1.29,
+        help="Scale of mode weighting scheme. Only effective when using the `'mode'` as the `weighting_scheme`.",
+    )
+
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
@@ -910,8 +1006,10 @@ def main():
         args.mixed_precision = accelerator.mixed_precision
 
     # Load scheduler, tokenizer and models.
-    if args.not_sigma_loss:
+    if args.loss_type == "normal":
         noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+    elif args.loss_type == "flow":
+        noise_scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
     else:
         train_diffusion = SpacedDiffusion(
             use_timesteps=space_timesteps(1000, str(args.train_sampling_steps)), betas=gd.get_named_beta_schedule("linear", 1000),
@@ -1649,9 +1747,9 @@ def main():
                     torch.cuda.empty_cache()
                     vae.to(accelerator.device)
                     if not args.enable_text_encoder_in_dataloader:
-                        text_encoder.to(accelerator.device)
+                        text_encoder.to('cpu')
                         if text_encoder_2 is not None:
-                            text_encoder_2.to(accelerator.device)
+                            text_encoder_2.to('cpu')
 
                 with torch.no_grad():
                     video_length = pixel_values.shape[1]
@@ -1819,8 +1917,8 @@ def main():
                 # timesteps = torch.randint(0, args.train_sampling_steps, (bsz,), device=latents.device, generator=torch_rng)
                 timesteps = idx_sampling(bsz, generator=torch_rng, device=latents.device)
                 timesteps = timesteps.long()
-
-                if args.not_sigma_loss:
+                
+                if args.loss_type != "sigma":
                     # Create image_rotary_emb, style embedding & time ids
                     height, width = batch["pixel_values"].size()[-2], batch["pixel_values"].size()[-1]
 
@@ -1864,14 +1962,44 @@ def main():
                     )
                     style = style.to(device=latents.device).repeat(bsz)
 
-                    # Add noise
-                    noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
-                    if noise_scheduler.config.prediction_type == "epsilon":
-                        target = noise
-                    elif noise_scheduler.config.prediction_type == "v_prediction":
-                        target = noise_scheduler.get_velocity(latents, noise, timesteps)
+                    if args.loss_type == "normal":
+                        # Add noise
+                        noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+                        if noise_scheduler.config.prediction_type == "epsilon":
+                            target = noise
+                        elif noise_scheduler.config.prediction_type == "v_prediction":
+                            target = noise_scheduler.get_velocity(latents, noise, timesteps)
+                        else:
+                            raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
                     else:
-                        raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
+                        def get_sigmas(timesteps, n_dim=4, dtype=torch.float32):
+                            sigmas = noise_scheduler.sigmas.to(device=accelerator.device, dtype=dtype)
+                            schedule_timesteps = noise_scheduler.timesteps.to(accelerator.device)
+                            timesteps = timesteps.to(accelerator.device)
+                            step_indices = [(schedule_timesteps == t).nonzero().item() for t in timesteps]
+
+                            sigma = sigmas[step_indices].flatten()
+                            while len(sigma.shape) < n_dim:
+                                sigma = sigma.unsqueeze(-1)
+                            return sigma
+
+                        u = compute_density_for_timestep_sampling(
+                            weighting_scheme=args.weighting_scheme,
+                            batch_size=bsz,
+                            logit_mean=args.logit_mean,
+                            logit_std=args.logit_std,
+                            mode_scale=args.mode_scale,
+                        )
+                        indices = (u * noise_scheduler.config.num_train_timesteps).long()
+                        timesteps = noise_scheduler.timesteps[indices].to(device=latents.device)
+
+                        # Add noise according to flow matching.
+                        # zt = (1 - texp) * x + texp * z1
+                        sigmas = get_sigmas(timesteps, n_dim=latents.ndim, dtype=latents.dtype)
+                        noisy_latents = (1.0 - sigmas) * latents + sigmas * noise
+
+                        # Add noise
+                        target = noise - latents
 
                     # Predict the noise residual
                     noise_pred = transformer3d(
@@ -1892,16 +2020,24 @@ def main():
                     if noise_pred.size()[1] != vae.config.latent_channels:
                         noise_pred, _ = noise_pred.chunk(2, dim=1)
 
-                    def custom_mse_loss(noise_pred, target, threshold=50):
+                    def custom_mse_loss(noise_pred, target, weighting=None, threshold=50):
                         noise_pred = noise_pred.float()
                         target = target.float()
                         diff = noise_pred - target
                         mse_loss = F.mse_loss(noise_pred, target, reduction='none')
                         mask = (diff.abs() <= threshold).float()
                         masked_loss = mse_loss * mask
+                        if weighting is not None:
+                            masked_loss = masked_loss * weighting
                         final_loss = masked_loss.mean()
                         return final_loss
-                    loss = custom_mse_loss(noise_pred.float(), target.float())
+                    
+                    if args.loss_type == "normal":
+                        loss = custom_mse_loss(noise_pred.float(), target.float())
+                    else:
+                        weighting = compute_loss_weighting_for_sd3(weighting_scheme=args.weighting_scheme, sigmas=sigmas)
+                        loss = custom_mse_loss(noise_pred.float(), target.float(), weighting.float())
+                        loss = loss.mean()
 
                     if args.motion_sub_loss and noise_pred.size()[2] > 2:
                         gt_sub_noise = noise_pred[:, :, 1:].float() - noise_pred[:, :, :-1].float()

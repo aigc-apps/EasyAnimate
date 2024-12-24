@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 
 import argparse
+import copy
 import gc
 import logging
 import math
@@ -35,10 +36,15 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.state import AcceleratorState
 from accelerate.utils import ProjectConfiguration, set_seed
-from diffusers import AutoencoderKL, DDPMScheduler
+from diffusers import (AutoencoderKL, DDPMScheduler,
+                       FlowMatchEulerDiscreteScheduler)
 from diffusers.models.embeddings import get_3d_rotary_pos_embed
 from diffusers.optimization import get_scheduler
-from diffusers.training_utils import EMAModel
+from diffusers.training_utils import (EMAModel,
+                                      _set_state_dict_into_text_encoder,
+                                      cast_training_params,
+                                      compute_density_for_timestep_sampling,
+                                      compute_loss_weighting_for_sd3)
 from diffusers.utils import check_min_version, deprecate, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import is_compiled_module
@@ -51,8 +57,8 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import (BertModel, BertTokenizer, CLIPImageProcessor,
-                          CLIPVisionModelWithProjection, T5Tokenizer,
-                          T5EncoderModel, T5Tokenizer)
+                          CLIPVisionModelWithProjection, T5EncoderModel,
+                          T5Tokenizer)
 from transformers.utils import ContextManagers
 
 import datasets
@@ -71,8 +77,9 @@ from easyanimate.data.dataset_image_video import (ImageVideoControlDataset,
                                                   ImageVideoSampler)
 from easyanimate.models import (name_to_autoencoder_magvit,
                                 name_to_transformer3d)
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import (get_2d_rotary_pos_embed,
-    get_3d_rotary_pos_embed, get_resize_crop_region_for_grid)
+from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import (
+    get_2d_rotary_pos_embed, get_3d_rotary_pos_embed,
+    get_resize_crop_region_for_grid)
 from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_control import \
     EasyAnimatePipeline_Multi_Text_Encoder_Control
 from easyanimate.utils import gaussian_diffusion as gd
@@ -567,7 +574,13 @@ def parse_args():
         "--uniform_sampling", action="store_true", help="Whether or not to use uniform_sampling."
     )
     parser.add_argument(
-        "--not_sigma_loss", action="store_true", help="Whether or not to not use sigma_loss."
+        "--loss_type", 
+        type=str,
+        default="normal",
+        help=(
+            'The format of training data. Support `"normal"`'
+            ' (default), `"sigma"`, `"flow"`.'
+        ),
     )
     parser.add_argument(
         "--enable_text_encoder_in_dataloader", action="store_true", help="Whether or not to use text encoder in dataloader."
@@ -706,6 +719,35 @@ def parse_args():
             'The initial gradient is relative to the multiple of the max_grad_norm. '
         ),
     )
+    parser.add_argument(
+        "--train_mode",
+        type=str,
+        default="control",
+        help=(
+            'The format of training data. Support `"control"`'
+            ' (default), `"control_first_frame"`, `"control_ref"`.'
+        ),
+    )
+
+    parser.add_argument(
+        "--weighting_scheme",
+        type=str,
+        default="none",
+        choices=["sigma_sqrt", "logit_normal", "mode", "cosmap", "none"],
+        help=('We default to the "none" weighting scheme for uniform sampling and uniform loss'),
+    )
+    parser.add_argument(
+        "--logit_mean", type=float, default=0.0, help="mean to use when using the `'logit_normal'` weighting scheme."
+    )
+    parser.add_argument(
+        "--logit_std", type=float, default=1.0, help="std to use when using the `'logit_normal'` weighting scheme."
+    )
+    parser.add_argument(
+        "--mode_scale",
+        type=float,
+        default=1.29,
+        help="Scale of mode weighting scheme. Only effective when using the `'mode'` as the `weighting_scheme`.",
+    )
 
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
@@ -794,8 +836,10 @@ def main():
         args.mixed_precision = accelerator.mixed_precision
 
     # Load scheduler, tokenizer and models.
-    if args.not_sigma_loss:
+    if args.loss_type == "normal":
         noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+    elif args.loss_type == "flow":
+        noise_scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
     else:
         train_diffusion = SpacedDiffusion(
             use_timesteps=space_timesteps(1000, str(args.train_sampling_steps)), betas=gd.get_named_beta_schedule("linear", 1000),
@@ -1134,6 +1178,10 @@ def main():
             new_examples["text"]         = []
             # Used in Control Mode
             new_examples["control_pixel_values"] = []
+            # Used in Control Ref Mode
+            if args.train_mode != "control":
+                new_examples["ref_pixel_values"] = []
+                new_examples["clip_pixel_values"] = []
 
             # Get downsample ratio in image and videos
             pixel_value     = examples[0]["pixel_values"]
@@ -1190,9 +1238,6 @@ def main():
                     pixel_values = torch.from_numpy(example["pixel_values"]).permute(0, 3, 1, 2).contiguous()
                     pixel_values = pixel_values / 255.
 
-                    control_pixel_values = torch.from_numpy(example["control_pixel_values"]).permute(0, 3, 1, 2).contiguous()
-                    control_pixel_values = control_pixel_values / 255.
-
                     # Get adapt hw for resize
                     b, c, h, w = pixel_values.size()
                     th, tw = random_sample_size
@@ -1202,19 +1247,12 @@ def main():
                     else:
                         nw = int(tw)
                         nh = int(h / w * nw)
-                    
-                    transform = transforms.Compose([
-                        transforms.Resize([nh, nw]),
-                        transforms.CenterCrop([int(x) for x in random_sample_size]),
-                        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
-                    ])
+
+                    control_pixel_values = tor 
                 else:
                     # To 0~1
                     pixel_values = torch.from_numpy(example["pixel_values"]).permute(0, 3, 1, 2).contiguous()
                     pixel_values = pixel_values / 255.
-
-                    control_pixel_values = torch.from_numpy(example["control_pixel_values"]).permute(0, 3, 1, 2).contiguous()
-                    control_pixel_values = control_pixel_values / 255.
 
                     # Get adapt hw for resize
                     closest_size = list(map(lambda x: int(x), closest_size))
@@ -1222,7 +1260,9 @@ def main():
                         resize_size = closest_size[0], int(w * closest_size[0] / h)
                     else:
                         resize_size = int(h * closest_size[1] / w), closest_size[1]
-                    
+
+                    control_pixel_values = torch.from_numpy(example["control_pixel_values"]).permute(0, 3, 1, 2).contiguous()
+                    control_pixel_values = control_pixel_values / 255.
                     transform = transforms.Compose([
                         transforms.Resize(resize_size, interpolation=transforms.InterpolationMode.BILINEAR),  # Image.BICUBIC
                         transforms.CenterCrop(closest_size),
@@ -1250,9 +1290,24 @@ def main():
                 if batch_video_length == 0:
                     batch_video_length = 1
 
+                if args.train_mode != "control":
+                    if args.train_mode == "control_first_frame":
+                        clip_index = 0
+                    else:
+                        clip_index = np.random.randint(0, len(new_examples["pixel_values"][-1]))
+                    ref_pixel_values = new_examples["pixel_values"][-1][clip_index].unsqueeze(0)
+                    new_examples["ref_pixel_values"].append(ref_pixel_values)
+
+                    clip_pixel_values = new_examples["pixel_values"][-1][clip_index].permute(1, 2, 0).contiguous()
+                    clip_pixel_values = (clip_pixel_values * 0.5 + 0.5) * 255
+                    new_examples["clip_pixel_values"].append(clip_pixel_values)
+
             # Limit the number of frames to the same
             new_examples["pixel_values"] = torch.stack([example[:batch_video_length] for example in new_examples["pixel_values"]])
             new_examples["control_pixel_values"] = torch.stack([example[:batch_video_length] for example in new_examples["control_pixel_values"]])
+            if args.train_mode != "control":
+                new_examples["ref_pixel_values"] = torch.stack([example[:batch_video_length] for example in new_examples["ref_pixel_values"]])
+                new_examples["clip_pixel_values"] = torch.stack([example for example in new_examples["clip_pixel_values"]])
 
             # Encode prompts when enable_text_encoder_in_dataloader=True
             if args.enable_text_encoder_in_dataloader:
@@ -1440,6 +1495,14 @@ def main():
                     gif_name = '-'.join(text.replace('/', '').split()[:10]) if not text == '' else f'{global_step}-{idx}'
                     save_videos_grid(pixel_value, f"{args.output_dir}/sanity_check/{gif_name[:10]}.gif", rescale=True)
                     save_videos_grid(control_pixel_value, f"{args.output_dir}/sanity_check/{gif_name[:10]}_control.gif", rescale=True)
+                
+                if args.train_mode != "control":
+                    ref_pixel_values = batch["ref_pixel_values"].cpu()
+                    ref_pixel_values = rearrange(ref_pixel_values, "b f c h w -> b c f h w")
+                    for idx, (ref_pixel_value, text) in enumerate(zip(ref_pixel_values, texts)):
+                        ref_pixel_value = ref_pixel_value[None, ...]
+                        gif_name = '-'.join(text.replace('/', '').split()[:10]) if not text == '' else f'{global_step}-{idx}'
+                        save_videos_grid(ref_pixel_value, f"{args.output_dir}/sanity_check/{gif_name[:10]}_ref.gif", rescale=True)
 
             with accelerator.accumulate(transformer3d):
                 # Convert images to latent space
@@ -1470,6 +1533,18 @@ def main():
                                 batch['prompt_attention_mask_2'] = torch.tile(batch['prompt_attention_mask_2'], (2, 1))
                         else:
                             batch['text'] = batch['text'] * 2
+
+                if args.train_mode != "control":
+                    ref_pixel_values = batch["ref_pixel_values"].to(weight_dtype)
+                    clip_pixel_values = batch["clip_pixel_values"]
+                    # Increase the batch size when the length of the latent sequence of the current sample is small
+                    if args.training_with_video_token_length:
+                        if args.video_sample_n_frames * args.token_sample_size * args.token_sample_size // 16 >= pixel_values.size()[1] * pixel_values.size()[3] * pixel_values.size()[4]:
+                            clip_pixel_values = torch.tile(clip_pixel_values, (4, 1, 1, 1))
+                            ref_pixel_values = torch.tile(ref_pixel_values, (4, 1, 1, 1, 1))
+                        elif args.video_sample_n_frames * args.token_sample_size * args.token_sample_size // 4 >= pixel_values.size()[1] * pixel_values.size()[3] * pixel_values.size()[4]:
+                            clip_pixel_values = torch.tile(clip_pixel_values, (2, 1, 1, 1))
+                            ref_pixel_values = torch.tile(ref_pixel_values, (2, 1, 1, 1, 1))
 
                 # Random crop number of frames to adapt different frames of video.
                 if args.random_frame_crop:
@@ -1571,7 +1646,30 @@ def main():
                         
                     control_latents = _batch_encode_vae(control_pixel_values)
                     control_latents = control_latents * vae.config.scaling_factor
-            
+
+                    if args.train_mode != "control":
+                        ref_latents = _batch_encode_vae(ref_pixel_values)
+                        ref_latents = ref_latents * vae.config.scaling_factor
+
+                        ref_latents_conv_in = torch.zeros_like(control_latents).to(ref_latents.device, ref_latents.dtype)
+                        if rng is None:
+                            zero_init_ref_latents_conv_in = np.random.choice([0, 1], p = [0.50, 0.50])
+                        else:
+                            zero_init_ref_latents_conv_in = rng.choice([0, 1], p = [0.50, 0.50])
+                        print(zero_init_ref_latents_conv_in)
+                        if not zero_init_ref_latents_conv_in and control_latents.size()[1] != 1:
+                            print("Encode ref_pixel_values")
+                            ref_latents_conv_in[:, :, :1] = ref_latents
+                        control_latents = torch.cat([control_latents, ref_latents_conv_in], dim = 1)
+                        
+                        for i in range(len(ref_latents)):
+                            if rng is None:
+                                zero_init_ref_latents = np.random.choice([0, 1], p = [0.95, 0.05])
+                            else:
+                                zero_init_ref_latents = rng.choice([0, 1], p = [0.95, 0.05])
+                            if zero_init_ref_latents:
+                                ref_latents[i] = ref_latents[i] * 0
+
                 # wait for latents = vae.encode(pixel_values) to complete
                 if vae_stream_1 is not None:
                     torch.cuda.current_stream().wait_stream(vae_stream_1)
@@ -1651,7 +1749,7 @@ def main():
                 timesteps = idx_sampling(bsz, generator=torch_rng, device=latents.device)
                 timesteps = timesteps.long()
 
-                if args.not_sigma_loss:
+                if args.loss_type != "sigma":
                     # Create image_rotary_emb, style embedding & time ids
                     height, width = batch["pixel_values"].size()[-2], batch["pixel_values"].size()[-1]
 
@@ -1695,14 +1793,44 @@ def main():
                     )
                     style = style.to(device=latents.device).repeat(bsz)
 
-                    # Add noise
-                    noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
-                    if noise_scheduler.config.prediction_type == "epsilon":
-                        target = noise
-                    elif noise_scheduler.config.prediction_type == "v_prediction":
-                        target = noise_scheduler.get_velocity(latents, noise, timesteps)
+                    if args.loss_type == "normal":
+                        # Add noise
+                        noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+                        if noise_scheduler.config.prediction_type == "epsilon":
+                            target = noise
+                        elif noise_scheduler.config.prediction_type == "v_prediction":
+                            target = noise_scheduler.get_velocity(latents, noise, timesteps)
+                        else:
+                            raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
                     else:
-                        raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
+                        def get_sigmas(timesteps, n_dim=4, dtype=torch.float32):
+                            sigmas = noise_scheduler.sigmas.to(device=accelerator.device, dtype=dtype)
+                            schedule_timesteps = noise_scheduler.timesteps.to(accelerator.device)
+                            timesteps = timesteps.to(accelerator.device)
+                            step_indices = [(schedule_timesteps == t).nonzero().item() for t in timesteps]
+
+                            sigma = sigmas[step_indices].flatten()
+                            while len(sigma.shape) < n_dim:
+                                sigma = sigma.unsqueeze(-1)
+                            return sigma
+
+                        u = compute_density_for_timestep_sampling(
+                            weighting_scheme=args.weighting_scheme,
+                            batch_size=bsz,
+                            logit_mean=args.logit_mean,
+                            logit_std=args.logit_std,
+                            mode_scale=args.mode_scale,
+                        )
+                        indices = (u * noise_scheduler.config.num_train_timesteps).long()
+                        timesteps = noise_scheduler.timesteps[indices].to(device=latents.device)
+
+                        # Add noise according to flow matching.
+                        # zt = (1 - texp) * x + texp * z1
+                        sigmas = get_sigmas(timesteps, n_dim=latents.ndim, dtype=latents.dtype)
+                        noisy_latents = (1.0 - sigmas) * latents + sigmas * noise
+
+                        # Add noise
+                        target = noise - latents
 
                     # Predict the noise residual
                     noise_pred = transformer3d(
@@ -1721,16 +1849,26 @@ def main():
                     if noise_pred.size()[1] != vae.config.latent_channels:
                         noise_pred, _ = noise_pred.chunk(2, dim=1)
 
-                    def custom_mse_loss(noise_pred, target, threshold=50):
+                    def custom_mse_loss(noise_pred, target, weighting=None, threshold=50):
                         noise_pred = noise_pred.float()
                         target = target.float()
                         diff = noise_pred - target
                         mse_loss = F.mse_loss(noise_pred, target, reduction='none')
                         mask = (diff.abs() <= threshold).float()
                         masked_loss = mse_loss * mask
+                        if weighting is not None:
+                            masked_loss = masked_loss * weighting
                         final_loss = masked_loss.mean()
                         return final_loss
-                    loss = custom_mse_loss(noise_pred.float(), target.float())
+                    
+                    if args.loss_type == "normal":
+                        loss = custom_mse_loss(noise_pred.float(), target.float())
+                    else:
+                        weighting = compute_loss_weighting_for_sd3(weighting_scheme=args.weighting_scheme, sigmas=sigmas)
+                        # loss = (weighting.float() * (noise_pred.float() - target.float()) ** 2).reshape(target.shape[0], -1)
+                        # loss = loss[~torch.isnan(loss)]
+                        loss = custom_mse_loss(noise_pred.float(), target.float(), weighting.float())
+                        loss = loss.mean()
 
                     if args.motion_sub_loss and noise_pred.size()[2] > 2:
                         gt_sub_noise = noise_pred[:, :, 1:].float() - noise_pred[:, :, :-1].float()
