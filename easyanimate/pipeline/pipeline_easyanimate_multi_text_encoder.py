@@ -88,6 +88,66 @@ def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
     return noise_cfg
 
 
+# Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.retrieve_timesteps
+def retrieve_timesteps(
+    scheduler,
+    num_inference_steps: Optional[int] = None,
+    device: Optional[Union[str, torch.device]] = None,
+    timesteps: Optional[List[int]] = None,
+    sigmas: Optional[List[float]] = None,
+    **kwargs,
+):
+    """
+    Calls the scheduler's `set_timesteps` method and retrieves timesteps from the scheduler after the call. Handles
+    custom timesteps. Any kwargs will be supplied to `scheduler.set_timesteps`.
+
+    Args:
+        scheduler (`SchedulerMixin`):
+            The scheduler to get timesteps from.
+        num_inference_steps (`int`):
+            The number of diffusion steps used when generating samples with a pre-trained model. If used, `timesteps`
+            must be `None`.
+        device (`str` or `torch.device`, *optional*):
+            The device to which the timesteps should be moved to. If `None`, the timesteps are not moved.
+        timesteps (`List[int]`, *optional*):
+            Custom timesteps used to override the timestep spacing strategy of the scheduler. If `timesteps` is passed,
+            `num_inference_steps` and `sigmas` must be `None`.
+        sigmas (`List[float]`, *optional*):
+            Custom sigmas used to override the timestep spacing strategy of the scheduler. If `sigmas` is passed,
+            `num_inference_steps` and `timesteps` must be `None`.
+
+    Returns:
+        `Tuple[torch.Tensor, int]`: A tuple where the first element is the timestep schedule from the scheduler and the
+        second element is the number of inference steps.
+    """
+    if timesteps is not None and sigmas is not None:
+        raise ValueError("Only one of `timesteps` or `sigmas` can be passed. Please choose one to set custom values")
+    if timesteps is not None:
+        accepts_timesteps = "timesteps" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
+        if not accepts_timesteps:
+            raise ValueError(
+                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
+                f" timestep schedules. Please check whether you are using the correct scheduler."
+            )
+        scheduler.set_timesteps(timesteps=timesteps, device=device, **kwargs)
+        timesteps = scheduler.timesteps
+        num_inference_steps = len(timesteps)
+    elif sigmas is not None:
+        accept_sigmas = "sigmas" in set(inspect.signature(scheduler.set_timesteps).parameters.keys())
+        if not accept_sigmas:
+            raise ValueError(
+                f"The current scheduler class {scheduler.__class__}'s `set_timesteps` does not support custom"
+                f" sigmas schedules. Please check whether you are using the correct scheduler."
+            )
+        scheduler.set_timesteps(sigmas=sigmas, device=device, **kwargs)
+        timesteps = scheduler.timesteps
+        num_inference_steps = len(timesteps)
+    else:
+        scheduler.set_timesteps(num_inference_steps, device=device, **kwargs)
+        timesteps = scheduler.timesteps
+    return timesteps, num_inference_steps
+
+
 class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
     r"""
     Pipeline for text-to-video generation using EasyAnimate.
@@ -512,7 +572,8 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
             latents = latents.to(device)
         
         # scale the initial noise by the standard deviation required by the scheduler
-        latents = latents * self.scheduler.init_noise_sigma
+        if hasattr(self.scheduler, "init_noise_sigma"):
+            latents = latents * self.scheduler.init_noise_sigma
         return latents
 
     def smooth_output(self, video, mini_batch_encoder, mini_batch_decoder):
@@ -610,6 +671,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         target_size: Optional[Tuple[int, int]] = None,
         crops_coords_top_left: Tuple[int, int] = (0, 0),
         comfyui_progressbar: bool = False,
+        timesteps: Optional[List[int]] = None,
     ):
         r"""
         Generates images or video using the EasyAnimate pipeline based on the provided prompts.
@@ -740,28 +802,36 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
             negative_prompt_attention_mask=negative_prompt_attention_mask,
             text_encoder_index=0,
         )
-        (
-            prompt_embeds_2,
-            negative_prompt_embeds_2,
-            prompt_attention_mask_2,
-            negative_prompt_attention_mask_2,
-        ) = self.encode_prompt(
-            prompt=prompt,
-            device=device,
-            dtype=dtype,
-            num_images_per_prompt=num_images_per_prompt,
-            do_classifier_free_guidance=self.do_classifier_free_guidance,
-            negative_prompt=negative_prompt,
-            prompt_embeds=prompt_embeds_2,
-            negative_prompt_embeds=negative_prompt_embeds_2,
-            prompt_attention_mask=prompt_attention_mask_2,
-            negative_prompt_attention_mask=negative_prompt_attention_mask_2,
-            text_encoder_index=1,
-        )
+        if self.tokenizer_2 is not None:
+            (
+                prompt_embeds_2,
+                negative_prompt_embeds_2,
+                prompt_attention_mask_2,
+                negative_prompt_attention_mask_2,
+            ) = self.encode_prompt(
+                prompt=prompt,
+                device=device,
+                dtype=dtype,
+                num_images_per_prompt=num_images_per_prompt,
+                do_classifier_free_guidance=self.do_classifier_free_guidance,
+                negative_prompt=negative_prompt,
+                prompt_embeds=prompt_embeds_2,
+                negative_prompt_embeds=negative_prompt_embeds_2,
+                prompt_attention_mask=prompt_attention_mask_2,
+                negative_prompt_attention_mask=negative_prompt_attention_mask_2,
+                text_encoder_index=1,
+            )
+        else:
+            prompt_embeds_2 = None
+            negative_prompt_embeds_2 = None
+            prompt_attention_mask_2 = None
+            negative_prompt_attention_mask_2 = None
 
         # 4. Prepare timesteps
-        self.scheduler.set_timesteps(num_inference_steps, device=device)
-        timesteps = self.scheduler.timesteps
+        if hasattr(self.scheduler, "use_dynamic_shifting") and self.scheduler.use_dynamic_shifting:
+            timesteps, num_inference_steps = retrieve_timesteps(self.scheduler, num_inference_steps, device, timesteps, mu=1)
+        else:
+            timesteps, num_inference_steps = retrieve_timesteps(self.scheduler, num_inference_steps, device, timesteps)
         if comfyui_progressbar:
             from comfy.utils import ProgressBar
             pbar = ProgressBar(num_inference_steps + 1)
@@ -818,16 +888,18 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
         if self.do_classifier_free_guidance:
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
             prompt_attention_mask = torch.cat([negative_prompt_attention_mask, prompt_attention_mask])
-            prompt_embeds_2 = torch.cat([negative_prompt_embeds_2, prompt_embeds_2])
-            prompt_attention_mask_2 = torch.cat([negative_prompt_attention_mask_2, prompt_attention_mask_2])
+            if prompt_embeds_2 is not None:
+                prompt_embeds_2 = torch.cat([negative_prompt_embeds_2, prompt_embeds_2])
+                prompt_attention_mask_2 = torch.cat([negative_prompt_attention_mask_2, prompt_attention_mask_2])
             add_time_ids = torch.cat([add_time_ids] * 2, dim=0)
             style = torch.cat([style] * 2, dim=0)
 
         # To latents.device
         prompt_embeds = prompt_embeds.to(device=device)
         prompt_attention_mask = prompt_attention_mask.to(device=device)
-        prompt_embeds_2 = prompt_embeds_2.to(device=device)
-        prompt_attention_mask_2 = prompt_attention_mask_2.to(device=device)
+        if prompt_embeds_2 is not None:
+            prompt_embeds_2 = prompt_embeds_2.to(device=device)
+            prompt_attention_mask_2 = prompt_attention_mask_2.to(device=device)
         add_time_ids = add_time_ids.to(dtype=dtype, device=device).repeat(
             batch_size * num_images_per_prompt, 1
         )
@@ -843,7 +915,8 @@ class EasyAnimatePipeline_Multi_Text_Encoder(DiffusionPipeline):
 
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+                if hasattr(self.scheduler, "scale_model_input"):
+                    latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
                 # expand scalar t to 1-D tensor to match the 1st dim of latent_model_input
                 t_expand = torch.tensor([t] * latent_model_input.shape[0], device=device).to(
