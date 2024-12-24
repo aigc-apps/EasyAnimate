@@ -254,7 +254,7 @@ class AspectRatioBatchSampler(BatchSampler):
                     width = int(width)
                     ratio = height / width # self.dataset[idx]
             except Exception as e:
-                print(e)
+                print(e, self.dataset[idx], "This item is error, please check it.")
                 continue
             # find the closest aspect ratio
             closest_ratio = min(self.aspect_ratios.keys(), key=lambda r: abs(float(r) - ratio))
@@ -330,7 +330,7 @@ class AspectRatioBatchImageVideoSampler(BatchSampler):
                         width = int(width)
                         ratio = height / width # self.dataset[idx]
                 except Exception as e:
-                    print(e)
+                    print(e, self.dataset[idx], "This item is error, please check it.")
                     continue
                 # find the closest aspect ratio
                 closest_ratio = min(self.aspect_ratios.keys(), key=lambda r: abs(float(r) - ratio))
@@ -365,7 +365,7 @@ class AspectRatioBatchImageVideoSampler(BatchSampler):
                         width = int(width)
                         ratio = height / width # self.dataset[idx]
                 except Exception as e:
-                    print(e)
+                    print(e, self.dataset[idx], "This item is error, please check it.")
                     continue
                 # find the closest aspect ratio
                 closest_ratio = min(self.aspect_ratios.keys(), key=lambda r: abs(float(r) - ratio))
