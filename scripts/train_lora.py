@@ -757,6 +757,15 @@ def parse_args():
         "--uniform_sampling", action="store_true", help="Whether or not to use uniform_sampling."
     )
     parser.add_argument(
+        "--loss_type", 
+        type=str,
+        default="normal",
+        help=(
+            'The format of training data. Support `"normal"`'
+            ' (default), `"sigma"`, `"flow"`.'
+        ),
+    )
+    parser.add_argument(
         "--enable_text_encoder_in_dataloader", action="store_true", help="Whether or not to use text encoder in dataloader."
     )
     parser.add_argument(
