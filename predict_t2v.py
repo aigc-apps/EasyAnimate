@@ -2,9 +2,8 @@ import os
 
 import numpy as np
 import torch
-from diffusers import (DDIMScheduler,
-                       DPMSolverMultistepScheduler,
-                       EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
+from diffusers import (DDIMScheduler, DPMSolverMultistepScheduler,
+                       EulerAncestralDiscreteScheduler, EulerDiscreteScheduler, FlowMatchEulerDiscreteScheduler,
                        PNDMScheduler)
 from omegaconf import OmegaConf
 from PIL import Image
