@@ -2,8 +2,7 @@ import os
 
 import numpy as np
 import torch
-from diffusers import (DDIMScheduler,
-                       DPMSolverMultistepScheduler,
+from diffusers import (DDIMScheduler, DPMSolverMultistepScheduler,
                        EulerAncestralDiscreteScheduler, EulerDiscreteScheduler, FlowMatchEulerDiscreteScheduler,
                        PNDMScheduler)
 from omegaconf import OmegaConf
@@ -263,7 +262,7 @@ if partial_video_length is not None:
         else:
             _partial_video_length = partial_video_length
 
-        input_video, input_video_mask, clip_image = get_image_to_video_latent(validation_image, None, video_length=_partial_video_length, sample_size=sample_size)
+        input_video, input_video_mask, clip_image = get_image_to_video_latent(validation_image_start, None, video_length=_partial_video_length, sample_size=sample_size)
         
         with torch.no_grad():
             sample = pipeline(
@@ -297,7 +296,7 @@ if partial_video_length is not None:
         if last_frames >= video_length:
             break
 
-        validation_image = [
+        validation_image_start = [
             Image.fromarray(
                 (sample[0, :, _index].transpose(0, 1).transpose(1, 2) * 255).numpy().astype(np.uint8)
             ) for _index in range(-overlap_video_length, 0)
