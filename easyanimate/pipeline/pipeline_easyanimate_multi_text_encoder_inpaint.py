@@ -172,7 +172,7 @@ class EasyAnimatePipeline_Multi_Text_Encoder_Inpaint(DiffusionPipeline):
             The image processor for the CLIP image embedder.
     """
 
-    model_cpu_offload_seq = "text_encoder->text_encoder_2->clip_image_encoder->transformer->vae"
+    model_cpu_offload_seq = "text_encoder->text_encoder_2->transformer->vae"
     _optional_components = [
         "safety_checker",
         "feature_extractor",

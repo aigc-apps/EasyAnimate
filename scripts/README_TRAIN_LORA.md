@@ -8,12 +8,17 @@ Some parameters in the sh file can be confusing, and they are explained in this 
 
 - `enable_bucket` is used to enable bucket training. When enabled, the model does not crop the images and videos at the center, but instead, it trains the entire images and videos after grouping them into buckets based on resolution.
 - `random_frame_crop` is used for random cropping on video frames to simulate videos with different frame counts.
-- `random_hw_adapt` is used to enable automatic height and width scaling for images and videos. When random_hw_adapt is enabled, the training images will have their height and width set to image_sample_size as the maximum and video_sample_size as the minimum. For training videos, the height and width will be set to video_sample_size as the maximum and min(video_sample_size, 512) as the minimum.
-- `training_with_video_token_length` specifies training the model according to token length. The token length for a video with dimensions 512x512 and 49 frames is 13,312.
-  - At 512x512 resolution, the number of video frames is 49;
-  - At 768x768 resolution, the number of video frames is 21;
-  - At 1024x1024 resolution, the number of video frames is 9;
-  - These resolutions combined with their corresponding lengths allow the model to generate videos of different sizes.
+- `random_hw_adapt` is used to enable automatic height and width scaling for images and videos. When `random_hw_adapt` is enabled, the training images will have their height and width set to `image_sample_size` as the maximum and `min(video_sample_size, 512)` as the minimum. For training videos, the height and width will be set to `video_sample_size` as the maximum and `min(video_sample_size, 512)` as the minimum.
+  - For example, when `random_hw_adapt` is enabled, with `video_sample_n_frames=49`, `video_sample_size=1024`, and `image_sample_size=1024`, the resolution of image inputs for training is `512x512` to `1024x1024`, and the resolution of video inputs for training is `512x512x49` to `1024x1024x49`.
+  - For example, when `random_hw_adapt` is enabled, with `video_sample_n_frames=49`, `video_sample_size=1024`, and `image_sample_size=256`, the resolution of image inputs for training is `256x256` to `1024x1024`, and the resolution of video inputs for training is `256x256x49`.
+- `training_with_video_token_length` specifies training the model according to token length. For training images and videos, the height and width will be set to `image_sample_size` as the maximum and `video_sample_size` as the minimum.
+  - For example, when `training_with_video_token_length` is enabled, with `video_sample_n_frames=49`, `token_sample_size=1024`, `video_sample_size=1024`, and `image_sample_size=256`, the resolution of image inputs for training is `256x256` to `1024x1024`, and the resolution of video inputs for training is `256x256x49` to `1024x1024x49`.
+  - For example, when `training_with_video_token_length` is enabled, with `video_sample_n_frames=49`, `token_sample_size=512`, `video_sample_size=1024`, and `image_sample_size=256`, the resolution of image inputs for training is `256x256` to `1024x1024`, and the resolution of video inputs for training is `256x256x49` to `1024x1024x9`.
+  - The token length for a video with dimensions 512x512 and 49 frames is 13,312. We need to set the `token_sample_size = 512`.
+    - At 512x512 resolution, the number of video frames is 49 (~= 512 * 512 * 49 / 512 / 512).
+    - At 768x768 resolution, the number of video frames is 21 (~= 512 * 512 * 49 / 768 / 768).
+    - At 1024x1024 resolution, the number of video frames is 9 (~= 512 * 512 * 49 / 1024 / 1024).
+    - These resolutions combined with their corresponding lengths allow the model to generate videos of different sizes.
 - `train_mode` is used to specify the training mode, which can be either normal or inpaint. Since EasyAnimate uses the Inpaint model to achieve image-to-video generation, the default is set to inpaint mode. If you only wish to achieve text-to-video generation, you can remove this line, and it will default to the text-to-video mode.
 - `uniform_sampling` is used to ensure that each batch can be uniformly sampled from 0 to 1000.
 - The default parameter for training is the Inpaint model. If you only want to train the T2V model, please set train_made="normal" and use the EasyAnimateV5-12b-zh model.
@@ -150,8 +155,7 @@ accelerate launch --mixed_precision="bf16" scripts/train_lora.py \
   --motion_sub_loss \
   --not_sigma_loss \
   --enable_bucket \
-  --train_mode="inpaint" \
-  --random_frame_crop
+  --train_mode="inpaint"
 ```
 
 EasyAnimateV4 with deepspeed:
@@ -195,8 +199,7 @@ accelerate launch --use_deepspeed --deepspeed_config_file config/zero_stage2_con
   --not_sigma_loss \
   --enable_bucket \
   --use_deepspeed \
-  --train_mode="inpaint" \
-  --random_frame_crop
+  --train_mode="inpaint"
 ```
 </details>
 
@@ -239,8 +242,7 @@ accelerate launch --mixed_precision="bf16" scripts/train_lora.py \
   --max_grad_norm=1 \
   --vae_mini_batch=1 \
   --enable_bucket \
-  --train_mode="inpaint" \
-  --random_frame_crop
+  --train_mode="inpaint"
 ```
 </details>
 
@@ -282,7 +284,6 @@ accelerate launch --mixed_precision="bf16" scripts/train_t2iv_lora.py \
   --adam_epsilon=1e-10 \
   --max_grad_norm=1 \
   --vae_mini_batch=1 \
-  --enable_bucket \
-  --random_frame_crop
+  --enable_bucket
 ```
 </details>
