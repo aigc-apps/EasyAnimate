@@ -40,7 +40,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.state import AcceleratorState
 from accelerate.utils import ProjectConfiguration, set_seed
-from diffusers import DDIMScheduler
+from diffusers import DDIMScheduler, FlowMatchEulerDiscreteScheduler
 from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version, deprecate, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
@@ -68,9 +68,7 @@ from easyanimate.models import (name_to_autoencoder_magvit,
                                 name_to_transformer3d)
 from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import get_3d_rotary_pos_embed, get_resize_crop_region_for_grid
 from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import EasyAnimatePipeline_Multi_Text_Encoder_Inpaint
-from easyanimate.utils import gaussian_diffusion as gd
 from easyanimate.utils.lora_utils import create_network, merge_lora
-from easyanimate.utils.respace import SpacedDiffusion, space_timesteps
 from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 
 if is_wandb_available():
@@ -111,7 +109,11 @@ def log_validation(
     ).to(weight_dtype)
     transformer3d_val.load_state_dict(accelerator.unwrap_model(transformer3d).state_dict())
 
-    scheduler = DDIMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+    if "EasyAnimateV5.1" in args.pretrained_model_name_or_path:
+        scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+    else:
+        scheduler = DDIMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+
     pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
         args.pretrained_model_name_or_path, 
         vae=accelerator.unwrap_model(vae).to(weight_dtype), 
@@ -849,9 +851,11 @@ def main():
         args.mixed_precision = accelerator.mixed_precision
 
     # Load scheduler, tokenizer and models.
-    # Use DDIM instead of DDPM to sample training videos.
-    noise_scheduler = DDIMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
-    noise_scheduler.set_timesteps(args.num_inference_steps, device=accelerator.device)
+    if "EasyAnimateV5.1" in args.pretrained_model_name_or_path:
+        noise_scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+    else:
+        # Use DDIM instead of DDPM to sample training videos.
+        noise_scheduler = DDIMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
 
     if config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
         print("Init BertTokenizer")
@@ -1235,6 +1239,10 @@ def main():
             )
 
             # Prepare timesteps
+            if hasattr(noise_scheduler, "use_dynamic_shifting") and noise_scheduler.use_dynamic_shifting:
+                noise_scheduler.set_timesteps(args.num_inference_steps, device=accelerator.device, mu=1)
+            else:
+                noise_scheduler.set_timesteps(args.num_inference_steps, device=accelerator.device)
             timesteps = noise_scheduler.timesteps
 
             # Prepare latent variables
@@ -1252,7 +1260,9 @@ def main():
             with accelerator.accumulate(transformer3d):
                 with accelerator.autocast():
                     latents = torch.randn(*latent_shape, device=accelerator.device, dtype=weight_dtype)
-                    latents = latents * noise_scheduler.init_noise_sigma
+
+                    if hasattr(noise_scheduler, "init_noise_sigma"):
+                        latents = latents * noise_scheduler.init_noise_sigma
 
                     # Prepare inpaint latents if it needs.
                     # Use zero latents if we want to t2v.
@@ -1336,7 +1346,8 @@ def main():
                         
                         # expand the latents if we are doing classifier free guidance
                         latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-                        latent_model_input = noise_scheduler.scale_model_input(latent_model_input, t)
+                        if hasattr(noise_scheduler, "scale_model_input"):
+                            latent_model_input = noise_scheduler.scale_model_input(latent_model_input, t)
                         
                         # expand scalar t to 1-D tensor to match the 1st dim of latent_model_input
                         t_expand = torch.tensor([t] * latent_model_input.shape[0], device=accelerator.device).to(
