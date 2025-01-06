@@ -51,6 +51,23 @@ except:
     from diffusers.models.embeddings import \
         CaptionProjection as PixArtAlphaTextProjection
 
+try:
+    import xfuser
+    from xfuser.core.distributed import (
+        get_sequence_parallel_world_size,
+        get_sequence_parallel_rank,
+        get_sp_group,
+        initialize_model_parallel,
+        init_distributed_environment
+    )
+except Exception as ex:
+    xfuser = None
+    get_sequence_parallel_world_size = None
+    get_sequence_parallel_rank = None
+    get_sp_group = None
+    initialize_model_parallel = None
+    init_distributed_environment = None
+
 
 class CLIPProjection(nn.Module):
     """
@@ -1375,6 +1392,14 @@ class EasyAnimateTransformer3DModel(ModelMixin, ConfigMixin):
 
         self.gradient_checkpointing = False
 
+        try:
+            self.sp_world_size = get_sequence_parallel_world_size()
+            self.sp_world_rank = get_sequence_parallel_rank()
+        except Exception:
+            self.sp_world_size = 1
+            self.sp_world_rank = 0
+            xfuser = None
+
     def _set_gradient_checkpointing(self, module, value=False):
         self.gradient_checkpointing = value
 
@@ -1398,6 +1423,40 @@ class EasyAnimateTransformer3DModel(ModelMixin, ConfigMixin):
         return_dict=True,
     ):
         batch_size, channels, video_length, height, width = hidden_states.size()
+
+        if xfuser is not None and self.sp_world_size > 1:
+            if hidden_states.shape[-2] // self.patch_size % self.sp_world_size == 0:
+                split_height = height // self.sp_world_size
+                split_dim = -2
+            elif hidden_states.shape[-2] // self.patch_size % self.sp_world_size == 0:
+                split_width = width // self.sp_world_size
+                split_dim = -1
+            else:
+                raise ValueError("Cannot split video sequence into ulysses_degree x ring_degree=%d parts evenly, hidden_states.shape=%s" % (self.sp_world_size, str(hidden_states.shape)))
+
+
+            hidden_states = torch.chunk(hidden_states, self.sp_world_size, dim=split_dim)[self.sp_world_rank]
+            if inpaint_latents is not None:
+                inpaint_latents = torch.chunk(inpaint_latents, self.sp_world_size, dim=split_dim)[self.sp_world_rank]
+
+            if image_rotary_emb is not None:
+                embed_dim = image_rotary_emb[0].shape[-1]
+                freq_cos = image_rotary_emb[0].reshape(video_length, height // self.patch_size, width // self.patch_size, embed_dim)
+                freq_sin = image_rotary_emb[1].reshape(video_length, height // self.patch_size, width // self.patch_size, embed_dim)
+
+                freq_cos = torch.chunk(freq_cos, self.sp_world_size, dim=split_dim-1)[self.sp_world_rank]
+                freq_sin = torch.chunk(freq_sin, self.sp_world_size, dim=split_dim-1)[self.sp_world_rank]
+
+                freq_cos = freq_cos.reshape(-1, embed_dim)
+                freq_sin = freq_sin.reshape(-1, embed_dim)
+
+                image_rotary_emb = (freq_cos, freq_sin)
+         
+            if split_dim == -2:
+                height = split_height
+            elif split_dim == -1:
+                width = split_width
+
 
         # 1. Time embedding
         temb = self.time_proj(timestep).to(dtype=hidden_states.dtype)
@@ -1485,6 +1544,9 @@ class EasyAnimateTransformer3DModel(ModelMixin, ConfigMixin):
         p = self.config.patch_size
         output = hidden_states.reshape(batch_size, video_length, height // p, width // p, channels, p, p)
         output = output.permute(0, 4, 1, 2, 5, 3, 6).flatten(5, 6).flatten(3, 4)
+
+        if xfuser is not None and self.sp_world_size > 1:
+            output = get_sp_group().all_gather(output, dim=split_dim)
 
         if not return_dict:
             return (output,)
