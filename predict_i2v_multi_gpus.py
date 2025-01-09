@@ -50,7 +50,7 @@ if ulysses_degree > 1 or ring_degree > 1:
         ulysses_degree, ring_degree, dist.get_rank(),
         dist.get_world_size()))
     assert dist.get_world_size() == ring_degree * ulysses_degree, \
-                "number of GPUs should be equal to ring_degree * ulysses_degree."
+                "number of GPUs(%d) should be equal to ring_degree * ulysses_degree." % dist.get_world_size()
     init_distributed_environment(rank=dist.get_rank(), world_size=dist.get_world_size())
     initialize_model_parallel(sequence_parallel_degree=dist.get_world_size(),
             ring_degree=ring_degree,
@@ -87,7 +87,9 @@ vae_path            = None
 lora_path           = None
 
 # Other params
-sample_size         = [384, 672]
+# sample_size         = [384, 672]
+# sample_size         = [576, 1008]
+sample_size         = [720, 1280]
 # In EasyAnimateV1, the video_length of video is 40 ~ 80.
 # In EasyAnimateV2, V3, V4, the video_length of video is 1 ~ 144. 
 # In EasyAnimateV5, the video_length of video is 1 ~ 49.

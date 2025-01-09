@@ -1428,7 +1428,7 @@ class EasyAnimateTransformer3DModel(ModelMixin, ConfigMixin):
             if hidden_states.shape[-2] // self.patch_size % self.sp_world_size == 0:
                 split_height = height // self.sp_world_size
                 split_dim = -2
-            elif hidden_states.shape[-2] // self.patch_size % self.sp_world_size == 0:
+            elif hidden_states.shape[-1] // self.patch_size % self.sp_world_size == 0:
                 split_width = width // self.sp_world_size
                 split_dim = -1
             else:
