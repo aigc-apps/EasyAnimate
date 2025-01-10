@@ -8,7 +8,7 @@ export NCCL_P2P_DISABLE=1
 NCCL_DEBUG=INFO
 
 # When train model with multi machines, use "--config_file accelerate.yaml" instead of "--mixed_precision='bf16'".
-accelerate launch --num_processes=8 --mixed_precision="bf16" --use_deepspeed --deepspeed_config_file config/zero_stage2_config.json scripts/train_reward_lora.py \
+accelerate launch --num_processes=8 --mixed_precision="bf16" --deepspeed_config_file config/zero_stage2_config.json scripts/train_reward_lora.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
   --config_path="config/easyanimate_video_v5_magvit_multi_text_encoder.yaml" \
   --train_batch_size=1 \
@@ -23,6 +23,8 @@ accelerate launch --num_processes=8 --mixed_precision="bf16" --use_deepspeed --d
   --adam_weight_decay=3e-2 \
   --adam_epsilon=1e-10 \
   --max_grad_norm=0.3 \
+  --use_deepspeed \
+  --low_vram \
   --prompt_path=$TRAIN_PROMPT_PATH \
   --train_sample_height=256 \
   --train_sample_width=256 \

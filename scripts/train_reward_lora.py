@@ -690,6 +690,9 @@ def parse_args():
     parser.add_argument(
         "--use_deepspeed", action="store_true", help="Whether or not to use deepspeed."
     )
+    parser.add_argument(
+        "--low_vram", action="store_true", help="Whether enable low_vram mode."
+    )
 
     parser.add_argument(
         "--prompt_path",
@@ -762,7 +765,44 @@ def parse_args():
         "--backprop",
         action="store_true",
         default=False,
-        help="Whether to use the backprop training mode.",
+        help="Whether to use the reward backprop training mode.",
+    )
+    parser.add_argument(
+        "--backprop_step_list",
+        nargs="+",
+        type=int,
+        default=None,
+        help="The preset step list for reward backprop. If provided, overrides `backprop_strategy`."
+    )
+    parser.add_argument(
+        "--backprop_strategy",
+        choices=["last", "tail", "uniform", "random"],
+        default="last",
+        help="The strategy for reward backprop."
+    )
+    parser.add_argument(
+        "--stop_latent_model_input_gradient",
+        action="store_true",
+        default=False,
+        help="Whether to stop the gradient of the latents during reward backprop.",
+    )
+    parser.add_argument(
+        "--backprop_random_start_step",
+        type=int,
+        default=0,
+        help="The random start step for reward backprop. Only used when `backprop_strategy` is random."
+    )
+    parser.add_argument(
+        "--backprop_random_end_step",
+        type=int,
+        default=50,
+        help="The random end step for reward backprop. Only used when `backprop_strategy` is random."
+    )
+    parser.add_argument(
+        "--backprop_num_steps",
+        type=int,
+        default=5,
+        help="The number of steps for backprop. Only used when `backprop_strategy` is tail/uniform/random."
     )
 
     args = parser.parse_args()
@@ -806,14 +846,6 @@ def main():
         log_with=args.report_to,
         project_config=accelerator_project_config,
     )
-    
-    # Sanity check for validation
-    do_validation = (args.validation_prompt_path is not None or args.validation_prompts is not None)
-    if do_validation:
-        if not (os.path.exists(args.validation_prompt_path) or args.validation_prompt_path.endswith(".txt")):
-            raise ValueError("The `--validation_prompt_path` must be a txt file containing prompts.")
-        if args.validation_batch_size < accelerator.num_processes or args.validation_batch_size % accelerator.num_processes != 0:
-            raise ValueError("The `--validation_batch_size` must be divisible by the number of processes.")
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
@@ -830,6 +862,29 @@ def main():
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
         diffusers.utils.logging.set_verbosity_error()
+    
+    # Sanity check for validation
+    do_validation = (args.validation_prompt_path is not None or args.validation_prompts is not None)
+    if do_validation:
+        if not (os.path.exists(args.validation_prompt_path) or args.validation_prompt_path.endswith(".txt")):
+            raise ValueError("The `--validation_prompt_path` must be a txt file containing prompts.")
+        if args.validation_batch_size < accelerator.num_processes or args.validation_batch_size % accelerator.num_processes != 0:
+            raise ValueError("The `--validation_batch_size` must be divisible by the number of processes.")
+    
+    # Sanity check for validation
+    if args.backprop:
+        if args.backprop_step_list is not None:
+            logger.warning(
+                f"The backprop_strategy {args.backprop_strategy} will be ignored "
+                f"when using backprop_step_list {args.backprop_step_list}."
+            )
+            assert any(step <= args.num_inference_steps - 1 for step in args.backprop_step_list)
+        else:
+            if args.backprop_strategy in set("tail", "uniform", "random"):
+                assert args.backprop_num_steps <= args.num_inference_steps - 1
+            if args.backprop_strategy == "random":
+                assert args.backprop_random_start_step <= args.backprop_random_end_step
+                assert args.backprop_random_end_step <= args.num_inference_steps - 1
 
     # If passed along, set the training seed now.
     if args.seed is not None:
@@ -993,11 +1048,9 @@ def main():
             if accelerator.is_main_process:
                 safetensor_save_path = os.path.join(output_dir, f"lora_diffusion_pytorch_model.safetensors")
                 save_model(safetensor_save_path, accelerator.unwrap_model(models[-1]))
-                if not args.use_deepspeed:
-                    for _ in range(len(weights)):
-                        weights.pop()
 
         accelerator.register_save_state_pre_hook(save_model_hook)
+        # Save the model weights directly before save_state instead of using a hook.
         # accelerator.register_load_state_pre_hook(load_model_hook)
 
     if args.gradient_checkpointing:
@@ -1105,13 +1158,8 @@ def main():
     if accelerator.is_main_process:
         tracker_config = dict(vars(args))
         tracker_config.pop("validation_prompts")
+        tracker_config.pop("backprop_step_list", None)
         accelerator.init_trackers(args.tracker_project_name, tracker_config)
-
-    # Function for unwrapping if model was compiled with `torch.compile`.
-    def unwrap_model(model):
-        model = accelerator.unwrap_model(model)
-        model = model._orig_mod if is_compiled_module(model) else model
-        return model
 
     # Train!
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -1147,14 +1195,6 @@ def main():
             global_step = int(path.split("-")[1])
 
             initial_global_step = global_step
-
-            pkl_path = os.path.join(os.path.join(args.output_dir, path), "sampler_pos_start.pkl")
-            if os.path.exists(pkl_path):
-                with open(pkl_path, 'rb') as file:
-                    _, first_epoch = pickle.load(file)
-            else:
-                first_epoch = global_step // num_update_steps_per_epoch
-            print(f"Load pkl from {pkl_path}. Get first_epoch = {first_epoch}.")
 
             from safetensors.torch import load_file, safe_open
             state_dict = load_file(os.path.join(os.path.join(args.output_dir, path), "lora_diffusion_pytorch_model.safetensors"))
@@ -1200,6 +1240,13 @@ def main():
             # corresponds to doing no classifier free guidance.
             do_classifier_free_guidance = args.guidance_scale > 1.0
             
+            # Reduce the vram by offload text encoders
+            if args.low_vram:
+                torch.cuda.empty_cache()
+                text_encoder.to(accelerator.device)
+                if text_encoder_2 is not None:
+                    text_encoder_2.to(accelerator.device)
+
             # Encode input prompt
             (
                 prompt_embeds,
@@ -1237,6 +1284,13 @@ def main():
                 text_encoder_index=1,
                 enable_text_attention_mask=transformer3d.config.enable_text_attention_mask,
             )
+
+            # Reduce the vram by offload text encoders
+            if args.low_vram:
+                text_encoder.to("cpu")
+                if text_encoder_2 is not None:
+                    text_encoder_2.to("cpu")
+                torch.cuda.empty_cache()
 
             # Prepare timesteps
             if hasattr(noise_scheduler, "use_dynamic_shifting") and noise_scheduler.use_dynamic_shifting:
@@ -1332,18 +1386,26 @@ def main():
                     style = style.to(device=accelerator.device).repeat(args.train_batch_size)
 
                     # Denoising loop
-                    for i, t in enumerate(tqdm(timesteps)):
-                        # the reward gradient is back propagated only for the last K steps.
-                        if args.backprop:
-                            # backprop_cutoff_idx = random.randint(0, args.num_sampling_steps - 1)  # random
-                            backprop_cutoff_idx = args.num_inference_steps - 1  # last
-                            if i >= backprop_cutoff_idx:
-                                for param in network.parameters():
-                                    param.requires_grad = True
+                    if args.backprop:
+                        if args.backprop_step_list is None:
+                            if args.backprop_strategy == "last":
+                                backprop_step_list = [args.num_inference_steps - 1]
+                            elif args.backprop_strategy == "tail":
+                                backprop_step_list = list(range(args.num_inference_steps - 1))[-args.backprop_num_steps:]
+                            elif args.backprop_strategy == "uniform":
+                                interval = args.num_inference_steps // args.backprop_num_steps
+                                random_start = random.randint(0, interval)
+                                backprop_step_list = [random_start + i * interval for i in range(args.backprop_num_steps)]
+                            elif args.backprop_strategy == "random":
+                                backprop_step_list = random.sample(
+                                    range(args.backprop_random_start_step, args.backprop_random_end_step + 1), args.backprop_num_steps
+                                )
                             else:
-                                for param in network.parameters():
-                                    param.requires_grad = False
-                        
+                                raise ValueError(f"Invalid backprop strategy: {args.backprop_strategy}.")
+                        else:
+                            backprop_step_list = args.backprop_step_list
+                    
+                    for i, t in enumerate(tqdm(timesteps)):
                         # expand the latents if we are doing classifier free guidance
                         latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                         if hasattr(noise_scheduler, "scale_model_input"):
@@ -1355,6 +1417,9 @@ def main():
                         )
 
                         # predict the noise residual
+                        if args.stop_latent_model_input_gradient:
+                            # See https://arxiv.org/abs/2405.00760
+                            latent_model_input = latent_model_input.detach()
                         noise_pred = transformer3d(
                             latent_model_input,
                             t_expand,
@@ -1370,6 +1435,12 @@ def main():
                             clip_attention_mask=None,
                             return_dict=False,
                         )[0]
+
+                        # Optimize the denoising results only for the specified steps.
+                        if i in backprop_step_list:
+                            noise_pred = noise_pred
+                        else:
+                            noise_pred = noise_pred.detach()
 
                         # perform guidance
                         if do_classifier_free_guidance:
