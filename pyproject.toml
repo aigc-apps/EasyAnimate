@@ -10,6 +10,6 @@ Repository = "https://github.com/aigc-apps/EasyAnimate"
 #  Used by Comfy Registry https://comfyregistry.org
 
 [tool.comfy]
-PublisherId = ""
+PublisherId = "bubbliiiing"
 DisplayName = "EasyAnimate"
 Icon = ""
