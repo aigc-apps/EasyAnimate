@@ -1,0 +1,15 @@
+[project]
+name = "easyanimate"
+description = "Video Generation Nodes for EasyAnimate, which suppors text-to-video, image-to-video, video-to-video and different controls."
+version = "1.0.0"
+license = {file = "LICENSE"}
+dependencies = ["Pillow", "einops", "safetensors", "timm", "tomesd", "torch>=2.1.2", "torchdiffeq", "torchsde", "decord", "datasets", "numpy", "scikit-image", "opencv-python", "omegaconf", "SentencePiece", "albumentations", "imageio[ffmpeg]", "imageio[pyav]", "tensorboard", "beautifulsoup4", "ftfy", "func_timeout", "accelerate>=0.25.0", "gradio>=3.41.2,<=3.48.0", "diffusers>=0.30.1", "transformers>=4.37.2"]
+
+[project.urls]
+Repository = "https://github.com/aigc-apps/EasyAnimate"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = "bubbliiiing"
+DisplayName = "EasyAnimate"
+Icon = ""
