@@ -175,7 +175,7 @@ from omegaconf import OmegaConf
 from transformers import BertModel, BertTokenizer, T5EncoderModel, T5Tokenizer
 
 from easyanimate.models import AutoencoderKLMagvit, EasyAnimateTransformer3DModel
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import EasyAnimatePipeline_Multi_Text_Encoder_Inpaint
+from easyanimate.pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaintPipeline
 from easyanimate.utils.lora_utils import merge_lora
 from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 from easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
@@ -210,7 +210,7 @@ vae = AutoencoderKLMagvit.from_pretrained(
 if config['vae_kwargs'].get('vae_type', 'AutoencoderKL') == 'AutoencoderKLMagvit' and weight_dtype == torch.float16:
     vae.upcast_vae = True
 
-pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
+pipeline = EasyAnimateInpaintPipeline.from_pretrained(
     model_path,
     text_encoder=BertModel.from_pretrained(model_path, subfolder="text_encoder").to(weight_dtype),
     text_encoder_2=T5EncoderModel.from_pretrained(model_path, subfolder="text_encoder_2").to(weight_dtype),
@@ -243,7 +243,7 @@ sample = pipeline(
     num_inference_steps = 50,
     video = input_video,
     mask_video = input_video_mask,
-).videos
+).frames
 
 save_videos_grid(sample, "samples/output.mp4", fps=8)
 ```

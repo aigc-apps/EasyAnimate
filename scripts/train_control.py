@@ -36,13 +36,11 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.state import AcceleratorState
 from accelerate.utils import ProjectConfiguration, set_seed
-from diffusers import (AutoencoderKL, DDPMScheduler,
+from diffusers import (DDPMScheduler, DDIMScheduler,
                        FlowMatchEulerDiscreteScheduler)
 from diffusers.models.embeddings import get_3d_rotary_pos_embed
 from diffusers.optimization import get_scheduler
 from diffusers.training_utils import (EMAModel,
-                                      _set_state_dict_into_text_encoder,
-                                      cast_training_params,
                                       compute_density_for_timestep_sampling,
                                       compute_loss_weighting_for_sd3)
 from diffusers.utils import check_min_version, deprecate, is_wandb_available
@@ -56,8 +54,10 @@ from torch.utils.data import RandomSampler
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from tqdm.auto import tqdm
-from transformers import (BertModel, BertTokenizer, CLIPImageProcessor,
-                          CLIPVisionModelWithProjection, T5EncoderModel,
+from transformers import (Qwen2Tokenizer, AutoTokenizer, BertModel,
+                          BertTokenizer, CLIPImageProcessor,
+                          CLIPVisionModelWithProjection,
+                          Qwen2VLForConditionalGeneration, T5EncoderModel,
                           T5Tokenizer)
 from transformers.utils import ContextManagers
 
@@ -73,15 +73,16 @@ from easyanimate.data.bucket_sampler import (ASPECT_RATIO_512,
                                              ASPECT_RATIO_RANDOM_CROP_PROB,
                                              AspectRatioBatchImageVideoSampler,
                                              RandomSampler, get_closest_ratio)
-from easyanimate.data.dataset_image_video import (ImageVideoControlDataset,
+from easyanimate.data.dataset_image_video import (ImageVideoControlDataset, process_pose_params, process_pose_file,
                                                   ImageVideoSampler)
 from easyanimate.models import (name_to_autoencoder_magvit,
                                 name_to_transformer3d)
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import (
+from easyanimate.pipeline.pipeline_easyanimate import (
     get_2d_rotary_pos_embed, get_3d_rotary_pos_embed,
     get_resize_crop_region_for_grid)
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_control import \
-    EasyAnimatePipeline_Multi_Text_Encoder_Control
+from easyanimate.pipeline.pipeline_easyanimate_inpaint import resize_mask
+from easyanimate.pipeline.pipeline_easyanimate_control import \
+    EasyAnimateControlPipeline
 from easyanimate.utils import gaussian_diffusion as gd
 from easyanimate.utils.discrete_sampler import DiscreteSampling
 from easyanimate.utils.respace import SpacedDiffusion, space_timesteps
@@ -132,39 +133,76 @@ def encode_prompt(
     add_special_tokens = False,
     enable_text_attention_mask = True,
 ):
-    if max_sequence_length is None:
-        max_length = min(tokenizer.model_max_length, tokenizer_max_length)
-    else:
-        max_length = max_sequence_length
+    if type(tokenizer) in [BertTokenizer, T5Tokenizer]:
+        if max_sequence_length is None:
+            max_length = min(tokenizer.model_max_length, tokenizer_max_length)
+        else:
+            max_length = max_sequence_length
 
-    text_inputs = tokenizer(
-        prompt,
-        padding="max_length",
-        max_length=max_length,
-        truncation=True,
-        return_attention_mask=True,
-        add_special_tokens=add_special_tokens,
-        return_tensors="pt",
-    )
-
-    if device is not None:
-        text_input_ids = text_inputs.input_ids.to(device)
-        prompt_attention_mask = text_inputs.attention_mask.to(device)
+        text_inputs = tokenizer(
+            prompt,
+            padding="max_length",
+            max_length=max_length,
+            truncation=True,
+            return_attention_mask=True,
+            add_special_tokens=add_special_tokens,
+            return_tensors="pt",
+        )
+        if device is not None:
+            text_input_ids = text_inputs.input_ids.to(device)
+            prompt_attention_mask = text_inputs.attention_mask.to(device)
+        else:
+            text_input_ids = text_inputs.input_ids
+            prompt_attention_mask = text_inputs.attention_mask
+        
+        if enable_text_attention_mask:
+            prompt_embeds = text_encoder(
+                text_input_ids,
+                attention_mask=prompt_attention_mask,
+            )[0]
+        else:
+            prompt_embeds = text_encoder(
+                text_input_ids
+            )[0]
+        prompt_embeds = prompt_embeds.to(dtype=dtype, device=device)
+        prompt_attention_mask = prompt_attention_mask.to(dtype=dtype, device=device)
     else:
+        max_length = tokenizer_max_length
+        texts = []
+        for _prompt in prompt:
+            messages = [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": _prompt}],
+                } 
+            ]
+            text = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+            texts.append(text)
+        text_inputs = tokenizer(
+            text=texts,
+            images=None,
+            videos=None,
+            padding="max_length",
+            max_length=max_length,
+            truncation=True,
+            return_attention_mask=True,
+            padding_side="right",
+            return_tensors="pt",
+        )
+        text_inputs = text_inputs.to(text_encoder.device)
+
         text_input_ids = text_inputs.input_ids
         prompt_attention_mask = text_inputs.attention_mask
-    
-    if enable_text_attention_mask:
-        prompt_embeds = text_encoder(
-            text_input_ids,
-            attention_mask=prompt_attention_mask,
-        )[0]
-    else:
-        prompt_embeds = text_encoder(
-            text_input_ids
-        )[0]
-    prompt_embeds = prompt_embeds.to(dtype=dtype, device=device)
-    prompt_attention_mask = prompt_attention_mask.to(dtype=dtype, device=device)
+        if enable_text_attention_mask:
+            # Inference: Generation of the output
+            prompt_embeds = text_encoder(
+                input_ids=text_input_ids,
+                attention_mask=prompt_attention_mask,
+                output_hidden_states=True).hidden_states[-2]
+        else:
+            raise ValueError("LLM needs attention_mask")
     return prompt_embeds, prompt_attention_mask
 
 def get_random_downsample_ratio(sample_size, image_ratio=[], all_choices=False, rng=None):
@@ -221,20 +259,27 @@ def log_validation(
         ).to(weight_dtype)
         transformer3d_val.load_state_dict(accelerator.unwrap_model(transformer3d).state_dict())
 
-        if config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
-            pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Control.from_pretrained(
+        if args.loss_type == "flow":
+            scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(
                 args.pretrained_model_name_or_path, 
-                vae=accelerator.unwrap_model(vae).to(weight_dtype), 
-                text_encoder=accelerator.unwrap_model(text_encoder),
-                text_encoder_2=accelerator.unwrap_model(text_encoder_2),
-                tokenizer=tokenizer,
-                tokenizer_2=tokenizer_2,
-                transformer=transformer3d_val,
-                torch_dtype=weight_dtype,
+                subfolder="scheduler"
             )
         else:
-            raise ValueError("enable_multi_text_encoder == False is not support now")
-        pipeline = pipeline.to(accelerator.device)
+            scheduler = DDIMScheduler.from_pretrained(
+                args.pretrained_model_name_or_path, 
+                subfolder="scheduler"
+            )
+
+        pipeline = EasyAnimateControlPipeline(
+            vae=accelerator.unwrap_model(vae).to(weight_dtype), 
+            text_encoder=accelerator.unwrap_model(text_encoder),
+            text_encoder_2=accelerator.unwrap_model(text_encoder_2),
+            tokenizer=tokenizer,
+            tokenizer_2=tokenizer_2,
+            transformer=transformer3d_val,
+            scheduler=scheduler,
+        )
+        pipeline = pipeline.to(weight_dtype, accelerator.device)
 
         if args.enable_xformers_memory_efficient_attention \
             and config['transformer_additional_kwargs'].get('transformer_type', 'Transformer3DModel') == 'Transformer3DModel':
@@ -254,7 +299,14 @@ def log_validation(
                     else:
                         video_length = int(args.video_sample_n_frames // vae.mini_batch_encoder * vae.mini_batch_encoder) if args.video_sample_n_frames != 1 else 1
                     
-                    input_video, input_video_mask, clip_image = get_video_to_video_latent(args.validation_paths[i], video_length=video_length, sample_size=[args.video_sample_size, args.video_sample_size])
+                    if args.train_mode == "control_camera_ref": 
+                        input_video, input_video_mask = None, None
+                        control_camera_video = process_pose_file(args.validation_paths[i], args.video_sample_size, args.video_sample_size)
+                        control_camera_video = control_camera_video[::int(args.video_sample_stride)][:video_length].permute([3, 0, 1, 2]).unsqueeze(0)
+                    else:
+                        input_video, input_video_mask, clip_image = get_video_to_video_latent(args.validation_paths[i], video_length=video_length, sample_size=[args.video_sample_size, args.video_sample_size])
+                        control_camera_video = None
+
                     sample = pipeline(
                         args.validation_prompts[i], 
                         video_length = video_length,
@@ -264,7 +316,8 @@ def log_validation(
                         generator   = generator, 
 
                         control_video = input_video,
-                    ).videos
+                        control_camera_video = control_camera_video,
+                    ).frames
                     os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
                     save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-{i}.gif"))
 
@@ -576,10 +629,10 @@ def parse_args():
     parser.add_argument(
         "--loss_type", 
         type=str,
-        default="normal",
+        default="sigma",
         help=(
-            'The format of training data. Support `"normal"`'
-            ' (default), `"sigma"`, `"flow"`.'
+            'The format of training data. Support `"sigma"`'
+            ' (default), `"ddpm"`, `"flow"`.'
         ),
     )
     parser.add_argument(
@@ -725,7 +778,16 @@ def parse_args():
         default="control",
         help=(
             'The format of training data. Support `"control"`'
-            ' (default), `"control_first_frame"`, `"control_ref"`.'
+            ' (default), `"control_ref"`, `"control_camera_ref"`.'
+        ),
+    )
+    parser.add_argument(
+        "--control_ref_image",
+        type=str,
+        default="first_frame",
+        help=(
+            'The format of training data. Support `"first_frame"`'
+            ' (default), `"random"`.'
         ),
     )
 
@@ -836,7 +898,7 @@ def main():
         args.mixed_precision = accelerator.mixed_precision
 
     # Load scheduler, tokenizer and models.
-    if args.loss_type == "normal":
+    if args.loss_type == "ddpm":
         noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
     elif args.loss_type == "flow":
         noise_scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
@@ -852,15 +914,27 @@ def main():
         tokenizer = BertTokenizer.from_pretrained(
             args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
         )
-        print("Init T5Tokenizer")
-        tokenizer_2 = T5Tokenizer.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="tokenizer_2", revision=args.revision
-        )
+        if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+            print("Init LLM Processor")
+            tokenizer_2 = Qwen2Tokenizer.from_pretrained(
+                os.path.join(args.pretrained_model_name_or_path, "tokenizer_2"), revision=args.revision
+            )
+        else:
+            print("Init T5Tokenizer")
+            tokenizer_2 = T5Tokenizer.from_pretrained(
+                args.pretrained_model_name_or_path, subfolder="tokenizer_2", revision=args.revision
+            )
     else:
-        print("Init T5Tokenizer")
-        tokenizer = T5Tokenizer.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
-        )
+        if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+            print("Init LLM Processor")
+            tokenizer = Qwen2Tokenizer.from_pretrained(
+                os.path.join(args.pretrained_model_name_or_path, "tokenizer"), revision=args.revision
+            )
+        else:
+            print("Init T5Tokenizer")
+            tokenizer = T5Tokenizer.from_pretrained(
+                args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
+            )
         tokenizer_2 = None
 
     def deepspeed_zero_init_disabled_context_manager():
@@ -888,16 +962,29 @@ def main():
                 args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision, variant=args.variant,
                 torch_dtype=weight_dtype
             )
-            text_encoder_2 = T5EncoderModel.from_pretrained(
-                args.pretrained_model_name_or_path, subfolder="text_encoder_2", revision=args.revision, variant=args.variant,
-                torch_dtype=weight_dtype
-            )
+            if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                text_encoder_2 = Qwen2VLForConditionalGeneration.from_pretrained(
+                    os.path.join(args.pretrained_model_name_or_path, "text_encoder_2"), revision=args.revision, variant=args.variant,
+                    torch_dtype=weight_dtype,
+                )
+            else:
+                text_encoder_2 = T5EncoderModel.from_pretrained(
+                    args.pretrained_model_name_or_path, subfolder="text_encoder_2", revision=args.revision, variant=args.variant,
+                    torch_dtype=weight_dtype,
+                )
         else:
-            text_encoder = T5EncoderModel.from_pretrained(
-                args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision, variant=args.variant,
-                torch_dtype=weight_dtype
-            )
+            if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                text_encoder = Qwen2VLForConditionalGeneration.from_pretrained(
+                    os.path.join(args.pretrained_model_name_or_path, "text_encoder"), revision=args.revision, variant=args.variant,
+                    torch_dtype=weight_dtype,
+                )
+            else:
+                text_encoder = T5EncoderModel.from_pretrained(
+                    args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision, variant=args.variant,
+                    torch_dtype=weight_dtype
+                )
             text_encoder_2 = None
+
 
         # Get Vae
         Choosen_AutoencoderKL = name_to_autoencoder_magvit[
@@ -1134,6 +1221,7 @@ def main():
         video_repeat=args.video_repeat, 
         image_sample_size=args.image_sample_size,
         enable_bucket=args.enable_bucket, enable_inpaint=False,
+        enable_camera_info=args.train_mode == "control_camera_ref"
     )
     
     if args.enable_bucket:
@@ -1182,6 +1270,9 @@ def main():
             if args.train_mode != "control":
                 new_examples["ref_pixel_values"] = []
                 new_examples["clip_pixel_values"] = []
+            # Used in Control Camera Ref Mode
+            if args.train_mode == "control_camera_ref":
+                new_examples["control_camera_values"] = []
 
             # Get downsample ratio in image and videos
             pixel_value     = examples[0]["pixel_values"]
@@ -1233,11 +1324,14 @@ def main():
                 random_sample_size = [int(x / 16) * 16 for x in random_sample_size]
 
             for example in examples:
-                if args.random_ratio_crop:
-                    # To 0~1
-                    pixel_values = torch.from_numpy(example["pixel_values"]).permute(0, 3, 1, 2).contiguous()
-                    pixel_values = pixel_values / 255.
+                # To 0~1
+                pixel_values = torch.from_numpy(example["pixel_values"]).permute(0, 3, 1, 2).contiguous()
+                pixel_values = pixel_values / 255.
 
+                control_pixel_values = torch.from_numpy(example["control_pixel_values"]).permute(0, 3, 1, 2).contiguous()
+                control_pixel_values = control_pixel_values / 255.
+
+                if args.random_ratio_crop:
                     # Get adapt hw for resize
                     b, c, h, w = pixel_values.size()
                     th, tw = random_sample_size
@@ -1247,30 +1341,53 @@ def main():
                     else:
                         nw = int(tw)
                         nh = int(h / w * nw)
-
-                    control_pixel_values = tor 
+                    
+                    transform = transforms.Compose([
+                        transforms.Resize([nh, nw]),
+                        transforms.CenterCrop([int(x) for x in random_sample_size]),
+                        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
+                    ])
+    
+                    transform_no_normalize = transforms.Compose([
+                        transforms.Resize([nh, nw]),
+                        transforms.CenterCrop([int(x) for x in random_sample_size]),
+                    ])
                 else:
-                    # To 0~1
-                    pixel_values = torch.from_numpy(example["pixel_values"]).permute(0, 3, 1, 2).contiguous()
-                    pixel_values = pixel_values / 255.
-
                     # Get adapt hw for resize
                     closest_size = list(map(lambda x: int(x), closest_size))
                     if closest_size[0] / h > closest_size[1] / w:
                         resize_size = closest_size[0], int(w * closest_size[0] / h)
                     else:
                         resize_size = int(h * closest_size[1] / w), closest_size[1]
-
-                    control_pixel_values = torch.from_numpy(example["control_pixel_values"]).permute(0, 3, 1, 2).contiguous()
-                    control_pixel_values = control_pixel_values / 255.
+                    
                     transform = transforms.Compose([
                         transforms.Resize(resize_size, interpolation=transforms.InterpolationMode.BILINEAR),  # Image.BICUBIC
                         transforms.CenterCrop(closest_size),
                         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
                     ])
     
+                    transform_no_normalize = transforms.Compose([
+                        transforms.Resize(resize_size, interpolation=transforms.InterpolationMode.BILINEAR),  # Image.BICUBIC
+                        transforms.CenterCrop(closest_size),
+                    ])
                 new_examples["pixel_values"].append(transform(pixel_values))
                 new_examples["control_pixel_values"].append(transform(control_pixel_values))
+            
+                if args.train_mode == "control_camera_ref":
+                    control_camera_values = example.get("control_camera_values", None)
+                    if control_camera_values is None:
+                        control_camera_values_size = (
+                            new_examples["control_pixel_values"][-1].size()[0], 
+                            6, 
+                            new_examples["control_pixel_values"][-1].size()[2], 
+                            new_examples["control_pixel_values"][-1].size()[3]
+                        )
+                        local_control_camera_values = torch.zeros(control_camera_values_size)
+                        new_examples["control_camera_values"].append(local_control_camera_values)
+                    else:
+                        local_control_camera_values = process_pose_params(example["control_camera_values"], height=resize_size[0], width=resize_size[1]).permute(0, 3, 1, 2).contiguous()
+                        new_examples["control_camera_values"].append(transform_no_normalize(local_control_camera_values))
+
                 new_examples["text"].append(example["text"])
                 # Magvae needs the number of frames to be 4n + 1.
                 if vae.cache_mag_vae:
@@ -1291,10 +1408,23 @@ def main():
                     batch_video_length = 1
 
                 if args.train_mode != "control":
-                    if args.train_mode == "control_first_frame":
+                    if args.control_ref_image == "first_frame":
+                        clip_index = 0
+                    elif control_camera_values is not None:
                         clip_index = 0
                     else:
-                        clip_index = np.random.randint(0, len(new_examples["pixel_values"][-1]))
+                        def _create_special_list(length):
+                            if length == 1:
+                                return [1.0]
+                            if length >= 2:
+                                first_element = 0.40
+                                remaining_sum = 1.0 - first_element
+                                other_elements_value = remaining_sum / (length - 1)
+                                special_list = [first_element] + [other_elements_value] * (length - 1)
+                                return special_list
+                        number_list_prob = np.array(_create_special_list(len(new_examples["pixel_values"][-1])))
+                        clip_index = np.random.choice(list(range(len(new_examples["pixel_values"][-1]))), p = number_list_prob)
+
                     ref_pixel_values = new_examples["pixel_values"][-1][clip_index].unsqueeze(0)
                     new_examples["ref_pixel_values"].append(ref_pixel_values)
 
@@ -1308,6 +1438,8 @@ def main():
             if args.train_mode != "control":
                 new_examples["ref_pixel_values"] = torch.stack([example[:batch_video_length] for example in new_examples["ref_pixel_values"]])
                 new_examples["clip_pixel_values"] = torch.stack([example for example in new_examples["clip_pixel_values"]])
+            if args.train_mode == "control_camera_ref":
+                new_examples["control_camera_values"] = torch.stack([example[:batch_video_length] for example in new_examples["control_camera_values"]])
 
             # Encode prompts when enable_text_encoder_in_dataloader=True
             if args.enable_text_encoder_in_dataloader:
@@ -1508,12 +1640,16 @@ def main():
                 # Convert images to latent space
                 pixel_values = batch["pixel_values"].to(weight_dtype)
                 control_pixel_values = batch["control_pixel_values"].to(weight_dtype)
+                if args.train_mode == "control_camera_ref":
+                    control_camera_values = batch["control_camera_values"].to(weight_dtype)
 
                 # Increase the batch size when the length of the latent sequence of the current sample is small
                 if args.training_with_video_token_length:
                     if args.video_sample_n_frames * args.token_sample_size * args.token_sample_size // 16 >= pixel_values.size()[1] * pixel_values.size()[3] * pixel_values.size()[4]:
                         pixel_values = torch.tile(pixel_values, (4, 1, 1, 1, 1))
                         control_pixel_values = torch.tile(control_pixel_values, (4, 1, 1, 1, 1))
+                        if args.train_mode == "control_camera_ref":
+                            control_camera_values = torch.tile(control_camera_values, (4, 1, 1, 1, 1))
                         if args.enable_text_encoder_in_dataloader:
                             batch['prompt_embeds'] = torch.tile(batch['prompt_embeds'], (4, 1, 1))
                             batch['prompt_attention_mask'] = torch.tile(batch['prompt_attention_mask'], (4, 1))
@@ -1525,6 +1661,8 @@ def main():
                     elif args.video_sample_n_frames * args.token_sample_size * args.token_sample_size // 4 >= pixel_values.size()[1] * pixel_values.size()[3] * pixel_values.size()[4]:
                         pixel_values = torch.tile(pixel_values, (2, 1, 1, 1, 1))
                         control_pixel_values = torch.tile(control_pixel_values, (2, 1, 1, 1, 1))
+                        if args.train_mode == "control_camera_ref":
+                            control_camera_values = torch.tile(control_camera_values, (2, 1, 1, 1, 1))
                         if args.enable_text_encoder_in_dataloader:
                             batch['prompt_embeds'] = torch.tile(batch['prompt_embeds'], (2, 1, 1))
                             batch['prompt_attention_mask'] = torch.tile(batch['prompt_attention_mask'], (2, 1))
@@ -1643,32 +1781,40 @@ def main():
                     else:
                         latents = _batch_encode_vae(pixel_values)
                     latents = latents * vae.config.scaling_factor
-                        
-                    control_latents = _batch_encode_vae(control_pixel_values)
-                    control_latents = control_latents * vae.config.scaling_factor
+
+                    if args.train_mode != "control_camera_ref":
+                        control_latents = _batch_encode_vae(control_pixel_values)
+                        control_latents = control_latents * vae.config.scaling_factor
+                        # Make control latents to zero
+                        for bs_index in range(control_latents.size()[0]):
+                            if rng is None:
+                                zero_init_control_latents_conv_in = np.random.choice([0, 1], p = [0.80, 0.20])
+                            else:
+                                zero_init_control_latents_conv_in = rng.choice([0, 1], p = [0.80, 0.20])
+
+                            if zero_init_control_latents_conv_in:
+                                control_latents[bs_index] = control_latents[bs_index] * 0
+                    else:
+                        control_latents = rearrange(control_camera_values, "b f c h w -> b c f h w", f=video_length)
+                        control_latents = resize_mask(control_latents, latents, vae.cache_mag_vae)
+                        control_latents = control_latents * 6
 
                     if args.train_mode != "control":
                         ref_latents = _batch_encode_vae(ref_pixel_values)
                         ref_latents = ref_latents * vae.config.scaling_factor
 
-                        ref_latents_conv_in = torch.zeros_like(control_latents).to(ref_latents.device, ref_latents.dtype)
-                        if rng is None:
-                            zero_init_ref_latents_conv_in = np.random.choice([0, 1], p = [0.50, 0.50])
-                        else:
-                            zero_init_ref_latents_conv_in = rng.choice([0, 1], p = [0.50, 0.50])
-                        print(zero_init_ref_latents_conv_in)
-                        if not zero_init_ref_latents_conv_in and control_latents.size()[1] != 1:
-                            print("Encode ref_pixel_values")
-                            ref_latents_conv_in[:, :, :1] = ref_latents
-                        control_latents = torch.cat([control_latents, ref_latents_conv_in], dim = 1)
-                        
-                        for i in range(len(ref_latents)):
+                        ref_latents_conv_in = torch.zeros_like(latents).to(ref_latents.device, ref_latents.dtype)
+                        ref_latents_conv_in[:, :, :1] = ref_latents
+                        for bs_index in range(ref_latents.size()[0]):
                             if rng is None:
-                                zero_init_ref_latents = np.random.choice([0, 1], p = [0.95, 0.05])
+                                zero_init_ref_latents_conv_in = np.random.choice([0, 1], p = [0.80, 0.20])
                             else:
-                                zero_init_ref_latents = rng.choice([0, 1], p = [0.95, 0.05])
-                            if zero_init_ref_latents:
-                                ref_latents[i] = ref_latents[i] * 0
+                                zero_init_ref_latents_conv_in = rng.choice([0, 1], p = [0.80, 0.20])
+
+                            if zero_init_ref_latents_conv_in and control_latents.size()[1] != 1:
+                                ref_latents_conv_in[bs_index, :, :1] = ref_latents_conv_in[bs_index, :, :1] * 0
+
+                        control_latents = torch.cat([control_latents, ref_latents_conv_in], dim = 1)
 
                 # wait for latents = vae.encode(pixel_values) to complete
                 if vae_stream_1 is not None:
@@ -1793,7 +1939,7 @@ def main():
                     )
                     style = style.to(device=latents.device).repeat(bsz)
 
-                    if args.loss_type == "normal":
+                    if args.loss_type == "ddpm":
                         # Add noise
                         noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
                         if noise_scheduler.config.prediction_type == "epsilon":
@@ -1861,7 +2007,7 @@ def main():
                         final_loss = masked_loss.mean()
                         return final_loss
                     
-                    if args.loss_type == "normal":
+                    if args.loss_type == "ddpm":
                         loss = custom_mse_loss(noise_pred.float(), target.float())
                     else:
                         weighting = compute_loss_weighting_for_sd3(weighting_scheme=args.weighting_scheme, sigmas=sigmas)

@@ -1,4 +1,4 @@
-export MODEL_NAME="models/Diffusion_Transformer/EasyAnimateV5-12b-zh-Control"
+export MODEL_NAME="models/Diffusion_Transformer/EasyAnimateV5.1-12b-zh-Control"
 export DATASET_NAME="datasets/internal_datasets/"
 export DATASET_META_NAME="datasets/internal_datasets/metadata.json"
 export NCCL_IB_DISABLE=1
@@ -10,7 +10,7 @@ accelerate launch --mixed_precision="bf16" scripts/train_control.py \
   --pretrained_model_name_or_path=$MODEL_NAME \
   --train_data_dir=$DATASET_NAME \
   --train_data_meta=$DATASET_META_NAME \
-  --config_path "config/easyanimate_video_v5_magvit_multi_text_encoder.yaml" \
+  --config_path "config/easyanimate_video_v5.1_magvit_qwen.yaml" \
   --image_sample_size=1024 \
   --video_sample_size=256 \
   --token_sample_size=512 \
@@ -35,7 +35,8 @@ accelerate launch --mixed_precision="bf16" scripts/train_control.py \
   --max_grad_norm=0.05 \
   --random_hw_adapt \
   --training_with_video_token_length \
-  --not_sigma_loss \
+  --loss_type="flow" \
   --enable_bucket \
   --uniform_sampling \
+  --train_mode="control_ref" \
   --trainable_modules "."

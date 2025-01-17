@@ -84,12 +84,9 @@ from easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
 from easyanimate.models.transformer2d import Transformer2DModel
 from easyanimate.models.transformer3d import (HunyuanTransformer3DModel,
                                               Transformer3DModel)
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import EasyAnimatePipeline_Multi_Text_Encoder
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import EasyAnimatePipeline_Multi_Text_Encoder_Inpaint
 from easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
-from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
-    EasyAnimateInpaintPipeline
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import (
+from easyanimate.pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaintPipeline
+from easyanimate.pipeline.pipeline_easyanimate import (
     get_2d_rotary_pos_embed, get_resize_crop_region_for_grid)
 from easyanimate.pipeline.pipeline_pixart_magvit import \
     PixArtAlphaMagvitPipeline
@@ -205,70 +202,35 @@ def log_validation(vae, text_encoder, text_encoder_2, tokenizer, tokenizer_2, tr
         ).to(weight_dtype)
         transformer3d_val.load_state_dict(accelerator.unwrap_model(transformer3d).state_dict())
         
-        if config.get('enable_multi_text_encoder', False):
-            if args.train_mode != "normal":
-                clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
-                    args.pretrained_model_name_or_path, subfolder="image_encoder"
-                )
-                clip_image_processor = CLIPImageProcessor.from_pretrained(
-                    args.pretrained_model_name_or_path, subfolder="image_encoder"
-                )
-                pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
-                    args.pretrained_model_name_or_path, 
-                    vae=accelerator.unwrap_model(vae).to(weight_dtype), 
-                    text_encoder=accelerator.unwrap_model(text_encoder),
-                    text_encoder_2=accelerator.unwrap_model(text_encoder_2),
-                    tokenizer=tokenizer,
-                    tokenizer_2=tokenizer_2,
-                    transformer=transformer3d_val,
-                    torch_dtype=weight_dtype,
-                    clip_image_encoder=clip_image_encoder,
-                    clip_image_processor=clip_image_processor,
-                    scheduler=LCMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler"),
-                )
-            else:
-                pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
-                    args.pretrained_model_name_or_path, 
-                    vae=accelerator.unwrap_model(vae).to(weight_dtype), 
-                    text_encoder=accelerator.unwrap_model(text_encoder),
-                    text_encoder_2=accelerator.unwrap_model(text_encoder_2),
-                    tokenizer=tokenizer,
-                    tokenizer_2=tokenizer_2,
-                    transformer=transformer3d_val,
-                    scheduler=LCMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler"),
-                    torch_dtype=weight_dtype
-                )
+        if args.train_mode != "normal":
+            clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+                args.pretrained_model_name_or_path, subfolder="image_encoder"
+            )
+            clip_image_processor = CLIPImageProcessor.from_pretrained(
+                args.pretrained_model_name_or_path, subfolder="image_encoder"
+            )
+            pipeline = EasyAnimateInpaintPipeline(
+                vae=accelerator.unwrap_model(vae).to(weight_dtype), 
+                text_encoder=accelerator.unwrap_model(text_encoder),
+                text_encoder_2=accelerator.unwrap_model(text_encoder_2),
+                tokenizer=tokenizer,
+                tokenizer_2=tokenizer_2,
+                transformer=transformer3d_val,
+                clip_image_encoder=clip_image_encoder,
+                clip_image_processor=clip_image_processor,
+                scheduler=LCMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler"),
+            )
         else:
-            if args.train_mode != "normal":
-                clip_image_encoder = CLIPVisionModelWithProjection.from_pretrained(
-                    args.pretrained_model_name_or_path, subfolder="image_encoder"
-                )
-                clip_image_processor = CLIPImageProcessor.from_pretrained(
-                    args.pretrained_model_name_or_path, subfolder="image_encoder"
-                )
-                pipeline = EasyAnimateInpaintPipeline.from_pretrained(
-                    args.pretrained_model_name_or_path, 
-                    vae=accelerator.unwrap_model(vae).to(weight_dtype), 
-                    text_encoder=accelerator.unwrap_model(text_encoder),
-                    tokenizer=tokenizer,
-                    transformer=transformer3d_val,
-                    torch_dtype=weight_dtype,
-                    clip_image_encoder=clip_image_encoder,
-                    clip_image_processor=clip_image_processor,
-                    scheduler=LCMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler"),
-                )
-            else:
-                pipeline = EasyAnimatePipeline.from_pretrained(
-                    args.pretrained_model_name_or_path, 
-                    vae=accelerator.unwrap_model(vae).to(weight_dtype), 
-                    text_encoder=accelerator.unwrap_model(text_encoder),
-                    tokenizer=tokenizer,
-                    transformer=transformer3d_val,
-                    scheduler=LCMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler"),
-                    torch_dtype=weight_dtype
-                )
-
-        pipeline = pipeline.to(accelerator.device)
+            pipeline = EasyAnimatePipeline(
+                vae=accelerator.unwrap_model(vae).to(weight_dtype), 
+                text_encoder=accelerator.unwrap_model(text_encoder),
+                text_encoder_2=accelerator.unwrap_model(text_encoder_2),
+                tokenizer=tokenizer,
+                tokenizer_2=tokenizer_2,
+                transformer=transformer3d_val,
+                scheduler=LCMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler"),
+            )
+        pipeline = pipeline.to(weight_dtype, accelerator.device)
         pipeline = merge_lora(
             pipeline, None, 1, accelerator.device, state_dict=accelerator.unwrap_model(network).state_dict(), transformer_only=True
         )
@@ -300,7 +262,7 @@ def log_validation(vae, text_encoder, text_encoder_2, tokenizer, tokenizer_2, tr
                             video        = input_video,
                             mask_video   = input_video_mask,
                             clip_image   = clip_image, 
-                        ).videos
+                        ).frames
                         os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
                         save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-{i}.gif"))
 
@@ -319,7 +281,7 @@ def log_validation(vae, text_encoder, text_encoder_2, tokenizer, tokenizer_2, tr
                             video        = input_video,
                             mask_video   = input_video_mask,
                             clip_image   = clip_image, 
-                        ).videos
+                        ).frames
                         os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
                         save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-image-{i}.gif"))
                 else:
@@ -333,7 +295,7 @@ def log_validation(vae, text_encoder, text_encoder_2, tokenizer, tokenizer_2, tr
                             num_inference_steps=4,
                             guidance_scale = 0,
                             generator   = generator
-                        ).videos
+                        ).frames
                         os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
                         save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-{i}.gif"))
 
@@ -346,7 +308,7 @@ def log_validation(vae, text_encoder, text_encoder_2, tokenizer, tokenizer_2, tr
                             num_inference_steps=4,
                             guidance_scale = 0,
                             generator   = generator
-                        ).videos
+                        ).frames
                         os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
                         save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-image-{i}.gif"))
 

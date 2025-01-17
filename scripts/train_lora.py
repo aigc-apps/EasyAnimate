@@ -36,67 +36,8 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.state import AcceleratorState
 from accelerate.utils import ProjectConfiguration, set_seed
-from diffusers import AutoencoderKL, DDPMScheduler
-from diffusers.optimization import get_scheduler
-from diffusers.training_utils import EMAModel
-from diffusers.utils import check_min_version, deprecate, is_wandb_available
-from diffusers.utils.import_utils import is_xformers_available
-from diffusers.utils.torch_utils import is_compiled_module
-from einops import rearrange
-from huggingface_hub import create_repo, upload_folder
-from omegaconf import OmegaConf
-from packaging import version
-from PIL import Image
-from torch.utils.data import RandomSampler
-from torch.utils.tensorboard import SummaryWriter
-from torchvision import transforms
-from tqdm.auto import tqdm
-from transformers import (BertModel, BertTokenizer, CLIPImageProcessor,
-                          CLIPVisionModelWithProjection, T5EncoderModel,
-                          T5Tokenizer)
-from transformers.utils import ContextManagers
-
-"""Modified from https://github.com/huggingface/diffusers/blob/main/examples/text_to_image/train_text_to_image.py
-"""
-#!/usr/bin/env python
-# coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-
-import argparse
-import gc
-import logging
-import math
-import os
-import pickle
-import shutil
-import sys
-
-import accelerate
-import diffusers
-import numpy as np
-import torch
-import torch.nn.functional as F
-import torch.utils.checkpoint
-import transformers
-from accelerate import Accelerator
-from accelerate.logging import get_logger
-from accelerate.state import AcceleratorState
-from accelerate.utils import ProjectConfiguration, set_seed
-from diffusers import (AutoencoderKL, DDIMScheduler, DDPMScheduler,
-                       DPMSolverMultistepScheduler,
-                       EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
-                       FlowMatchEulerDiscreteScheduler, PNDMScheduler)
+from diffusers import (DDIMScheduler, DDPMScheduler,
+                       FlowMatchEulerDiscreteScheduler)
 from diffusers.optimization import get_scheduler
 from diffusers.training_utils import (EMAModel,
                                       _set_state_dict_into_text_encoder,
@@ -115,8 +56,10 @@ from torch.utils.data import RandomSampler
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from tqdm.auto import tqdm
-from transformers import (BertModel, BertTokenizer, CLIPImageProcessor,
-                          CLIPVisionModelWithProjection, T5EncoderModel,
+from transformers import (Qwen2Tokenizer, AutoTokenizer, BertModel,
+                          BertTokenizer, CLIPImageProcessor,
+                          CLIPVisionModelWithProjection,
+                          Qwen2VLForConditionalGeneration, T5EncoderModel,
                           T5Tokenizer)
 from transformers.utils import ContextManagers
 
@@ -127,39 +70,21 @@ project_roots = [os.path.dirname(current_file_path), os.path.dirname(os.path.dir
 for project_root in project_roots:
     sys.path.insert(0, project_root) if project_root not in sys.path else None
 
-from transformers import (CLIPImageProcessor, CLIPVisionModelWithProjection,
-                          T5EncoderModel, T5Tokenizer)
-from transformers.utils import ContextManagers
-
 from easyanimate.data.bucket_sampler import (ASPECT_RATIO_512,
                                              ASPECT_RATIO_RANDOM_CROP_512,
                                              ASPECT_RATIO_RANDOM_CROP_PROB,
-                                             AspectRatioBatchImageSampler,
                                              AspectRatioBatchImageVideoSampler,
-                                             AspectRatioBatchSampler,
                                              RandomSampler, get_closest_ratio)
-from easyanimate.data.dataset_image import CC15M
 from easyanimate.data.dataset_image_video import (ImageVideoDataset,
                                                   ImageVideoSampler,
                                                   get_random_mask)
-from easyanimate.data.dataset_video import VideoDataset, WebVid10M
 from easyanimate.models import (name_to_autoencoder_magvit,
                                 name_to_transformer3d)
-from easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
-from easyanimate.models.transformer2d import Transformer2DModel
-from easyanimate.models.transformer3d import (HunyuanTransformer3DModel,
-                                              Transformer3DModel)
-from easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
-from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
-    EasyAnimateInpaintPipeline
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import (
-    EasyAnimatePipeline_Multi_Text_Encoder, get_2d_rotary_pos_embed,
-    get_3d_rotary_pos_embed, get_resize_crop_region_for_grid)
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import (
-    EasyAnimatePipeline_Multi_Text_Encoder_Inpaint,
-    add_noise_to_reference_video, resize_mask)
-from easyanimate.pipeline.pipeline_pixart_magvit import \
-    PixArtAlphaMagvitPipeline
+from easyanimate.pipeline.pipeline_easyanimate import (
+    EasyAnimatePipeline, get_2d_rotary_pos_embed, get_3d_rotary_pos_embed,
+    get_resize_crop_region_for_grid)
+from easyanimate.pipeline.pipeline_easyanimate_inpaint import (
+    EasyAnimateInpaintPipeline, add_noise_to_reference_video, resize_mask)
 from easyanimate.utils import gaussian_diffusion as gd
 from easyanimate.utils.discrete_sampler import DiscreteSampling
 from easyanimate.utils.lora_utils import (create_network, merge_lora,
@@ -212,39 +137,76 @@ def encode_prompt(
     add_special_tokens = False,
     enable_text_attention_mask = True,
 ):
-    if max_sequence_length is None:
-        max_length = min(tokenizer.model_max_length, tokenizer_max_length)
-    else:
-        max_length = max_sequence_length
+    if type(tokenizer) in [BertTokenizer, T5Tokenizer]:
+        if max_sequence_length is None:
+            max_length = min(tokenizer.model_max_length, tokenizer_max_length)
+        else:
+            max_length = max_sequence_length
 
-    text_inputs = tokenizer(
-        prompt,
-        padding="max_length",
-        max_length=max_length,
-        truncation=True,
-        return_attention_mask=True,
-        add_special_tokens=add_special_tokens,
-        return_tensors="pt",
-    )
-
-    if device is not None:
-        text_input_ids = text_inputs.input_ids.to(device)
-        prompt_attention_mask = text_inputs.attention_mask.to(device)
+        text_inputs = tokenizer(
+            prompt,
+            padding="max_length",
+            max_length=max_length,
+            truncation=True,
+            return_attention_mask=True,
+            add_special_tokens=add_special_tokens,
+            return_tensors="pt",
+        )
+        if device is not None:
+            text_input_ids = text_inputs.input_ids.to(device)
+            prompt_attention_mask = text_inputs.attention_mask.to(device)
+        else:
+            text_input_ids = text_inputs.input_ids
+            prompt_attention_mask = text_inputs.attention_mask
+        
+        if enable_text_attention_mask:
+            prompt_embeds = text_encoder(
+                text_input_ids,
+                attention_mask=prompt_attention_mask,
+            )[0]
+        else:
+            prompt_embeds = text_encoder(
+                text_input_ids
+            )[0]
+        prompt_embeds = prompt_embeds.to(dtype=dtype, device=device)
+        prompt_attention_mask = prompt_attention_mask.to(dtype=dtype, device=device)
     else:
+        max_length = tokenizer_max_length
+        texts = []
+        for _prompt in prompt:
+            messages = [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": _prompt}],
+                } 
+            ]
+            text = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+            texts.append(text)
+        text_inputs = tokenizer(
+            text=texts,
+            images=None,
+            videos=None,
+            padding="max_length",
+            max_length=max_length,
+            truncation=True,
+            return_attention_mask=True,
+            padding_side="right",
+            return_tensors="pt",
+        )
+        text_inputs = text_inputs.to(text_encoder.device)
+
         text_input_ids = text_inputs.input_ids
         prompt_attention_mask = text_inputs.attention_mask
-    
-    if enable_text_attention_mask:
-        prompt_embeds = text_encoder(
-            text_input_ids,
-            attention_mask=prompt_attention_mask,
-        )[0]
-    else:
-        prompt_embeds = text_encoder(
-            text_input_ids
-        )[0]
-    prompt_embeds = prompt_embeds.to(dtype=dtype, device=device)
-    prompt_attention_mask = prompt_attention_mask.to(dtype=dtype, device=device)
+        if enable_text_attention_mask:
+            # Inference: Generation of the output
+            prompt_embeds = text_encoder(
+                input_ids=text_input_ids,
+                attention_mask=prompt_attention_mask,
+                output_hidden_states=True).hidden_states[-2]
+        else:
+            raise ValueError("LLM needs attention_mask")
     return prompt_embeds, prompt_attention_mask
 
 def get_random_downsample_ratio(sample_size, image_ratio=[], all_choices=False, rng=None):
@@ -312,57 +274,29 @@ def log_validation(
                 subfolder="scheduler"
             )
 
-        if config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
-            if args.train_mode != "normal":
-                pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
-                    args.pretrained_model_name_or_path, 
-                    vae=accelerator.unwrap_model(vae).to(weight_dtype), 
-                    text_encoder=accelerator.unwrap_model(text_encoder),
-                    text_encoder_2=accelerator.unwrap_model(text_encoder_2),
-                    tokenizer=tokenizer,
-                    tokenizer_2=tokenizer_2,
-                    transformer=transformer3d_val,
-                    scheduler=scheduler,
-                    torch_dtype=weight_dtype,
-                    clip_image_encoder=image_encoder,
-                    clip_image_processor=image_processor,
-                )
-            else:
-                pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
-                    args.pretrained_model_name_or_path, 
-                    vae=accelerator.unwrap_model(vae).to(weight_dtype), 
-                    text_encoder=accelerator.unwrap_model(text_encoder),
-                    text_encoder_2=accelerator.unwrap_model(text_encoder_2),
-                    tokenizer=tokenizer,
-                    tokenizer_2=tokenizer_2,
-                    transformer=transformer3d_val,
-                    scheduler=scheduler,
-                    torch_dtype=weight_dtype
-                )
+        if args.train_mode != "normal":
+            pipeline = EasyAnimateInpaintPipeline(
+                vae=accelerator.unwrap_model(vae).to(weight_dtype), 
+                text_encoder=accelerator.unwrap_model(text_encoder),
+                text_encoder_2=accelerator.unwrap_model(text_encoder_2),
+                tokenizer=tokenizer,
+                tokenizer_2=tokenizer_2,
+                transformer=transformer3d_val,
+                scheduler=scheduler,
+                clip_image_encoder=image_encoder,
+                clip_image_processor=image_processor,
+            )
         else:
-            if args.train_mode != "normal":
-                pipeline = EasyAnimateInpaintPipeline.from_pretrained(
-                    args.pretrained_model_name_or_path, 
-                    vae=accelerator.unwrap_model(vae).to(weight_dtype), 
-                    text_encoder=accelerator.unwrap_model(text_encoder),
-                    tokenizer=tokenizer,
-                    transformer=transformer3d_val,
-                    scheduler=scheduler,
-                    torch_dtype=weight_dtype,
-                    clip_image_encoder=image_encoder,
-                    clip_image_processor=image_processor,
-                )
-            else:
-                pipeline = EasyAnimatePipeline.from_pretrained(
-                    args.pretrained_model_name_or_path, 
-                    vae=accelerator.unwrap_model(vae).to(weight_dtype), 
-                    text_encoder=accelerator.unwrap_model(text_encoder),
-                    tokenizer=tokenizer,
-                    transformer=transformer3d_val,
-                    scheduler=scheduler,
-                    torch_dtype=weight_dtype
-                )
-        pipeline = pipeline.to(accelerator.device)
+            pipeline = EasyAnimatePipeline(
+                vae=accelerator.unwrap_model(vae).to(weight_dtype), 
+                text_encoder=accelerator.unwrap_model(text_encoder),
+                text_encoder_2=accelerator.unwrap_model(text_encoder_2),
+                tokenizer=tokenizer,
+                tokenizer_2=tokenizer_2,
+                transformer=transformer3d_val,
+                scheduler=scheduler,
+            )
+        pipeline = pipeline.to(weight_dtype, accelerator.device)
         pipeline = merge_lora(
             pipeline, None, 1, accelerator.device, state_dict=accelerator.unwrap_model(network).state_dict(), transformer_only=True
         )
@@ -396,7 +330,7 @@ def log_validation(
                             video        = input_video,
                             mask_video   = input_video_mask,
                             clip_image   = clip_image, 
-                        ).videos
+                        ).frames
                         os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
                         save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-{i}.gif"))
 
@@ -413,7 +347,7 @@ def log_validation(
                             video        = input_video,
                             mask_video   = input_video_mask,
                             clip_image   = clip_image, 
-                        ).videos
+                        ).frames
                         os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
                         save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-image-{i}.gif"))
                 else:
@@ -425,7 +359,7 @@ def log_validation(
                             height      = args.video_sample_size,
                             width       = args.video_sample_size,
                             generator   = generator
-                        ).videos
+                        ).frames
                         os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
                         save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-{i}.gif"))
 
@@ -436,7 +370,7 @@ def log_validation(
                             height      = args.video_sample_size,
                             width       = args.video_sample_size,
                             generator   = generator
-                        ).videos
+                        ).frames
                         os.makedirs(os.path.join(args.output_dir, "sample"), exist_ok=True)
                         save_videos_grid(sample, os.path.join(args.output_dir, f"sample/sample-{global_step}-image-{i}.gif"))
 
@@ -759,10 +693,10 @@ def parse_args():
     parser.add_argument(
         "--loss_type", 
         type=str,
-        default="normal",
+        default="sigma",
         help=(
-            'The format of training data. Support `"normal"`'
-            ' (default), `"sigma"`, `"flow"`.'
+            'The format of training data. Support `"sigma"`'
+            ' (default), `"ddpm"`, `"flow"`.'
         ),
     )
     parser.add_argument(
@@ -1015,7 +949,7 @@ def main():
         args.mixed_precision = accelerator.mixed_precision
 
     # Load scheduler, tokenizer and models.
-    if args.loss_type == "normal":
+    if args.loss_type == "ddpm":
         noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
     elif args.loss_type == "flow":
         noise_scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
@@ -1031,15 +965,27 @@ def main():
         tokenizer = BertTokenizer.from_pretrained(
             args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
         )
-        print("Init T5Tokenizer")
-        tokenizer_2 = T5Tokenizer.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="tokenizer_2", revision=args.revision
-        )
+        if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+            print("Init LLM Processor")
+            tokenizer_2 = Qwen2Tokenizer.from_pretrained(
+                os.path.join(args.pretrained_model_name_or_path, "tokenizer_2"), revision=args.revision
+            )
+        else:
+            print("Init T5Tokenizer")
+            tokenizer_2 = T5Tokenizer.from_pretrained(
+                args.pretrained_model_name_or_path, subfolder="tokenizer_2", revision=args.revision
+            )
     else:
-        print("Init T5Tokenizer")
-        tokenizer = T5Tokenizer.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
-        )
+        if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+            print("Init LLM Processor")
+            tokenizer = Qwen2Tokenizer.from_pretrained(
+                os.path.join(args.pretrained_model_name_or_path, "tokenizer"), revision=args.revision
+            )
+        else:
+            print("Init T5Tokenizer")
+            tokenizer = T5Tokenizer.from_pretrained(
+                args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
+            )
         tokenizer_2 = None
 
     def deepspeed_zero_init_disabled_context_manager():
@@ -1067,15 +1013,27 @@ def main():
                 args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision, variant=args.variant,
                 torch_dtype=weight_dtype
             )
-            text_encoder_2 = T5EncoderModel.from_pretrained(
-                args.pretrained_model_name_or_path, subfolder="text_encoder_2", revision=args.revision, variant=args.variant,
-                torch_dtype=weight_dtype
-            )
+            if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                text_encoder_2 = Qwen2VLForConditionalGeneration.from_pretrained(
+                    os.path.join(args.pretrained_model_name_or_path, "text_encoder_2"), revision=args.revision, variant=args.variant,
+                    torch_dtype=weight_dtype,
+                )
+            else:
+                text_encoder_2 = T5EncoderModel.from_pretrained(
+                    args.pretrained_model_name_or_path, subfolder="text_encoder_2", revision=args.revision, variant=args.variant,
+                    torch_dtype=weight_dtype,
+                )
         else:
-            text_encoder = T5EncoderModel.from_pretrained(
-                args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision, variant=args.variant,
-                torch_dtype=weight_dtype
-            )
+            if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                text_encoder = Qwen2VLForConditionalGeneration.from_pretrained(
+                    os.path.join(args.pretrained_model_name_or_path, "text_encoder"), revision=args.revision, variant=args.variant,
+                    torch_dtype=weight_dtype,
+                )
+            else:
+                text_encoder = T5EncoderModel.from_pretrained(
+                    args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision, variant=args.variant,
+                    torch_dtype=weight_dtype
+                )
             text_encoder_2 = None
 
         # Get Vae
@@ -1175,9 +1133,6 @@ def main():
             if accelerator.is_main_process:
                 safetensor_save_path = os.path.join(output_dir, f"lora_diffusion_pytorch_model.safetensors")
                 save_model(safetensor_save_path, accelerator.unwrap_model(models[-1]))
-                if not args.use_deepspeed:
-                    for _ in range(len(weights)):
-                        weights.pop()
 
                 with open(os.path.join(output_dir, "sampler_pos_start.pkl"), 'wb') as file:
                     pickle.dump([batch_sampler.sampler._pos_start, first_epoch], file)
@@ -1971,7 +1926,7 @@ def main():
                     )
                     style = style.to(device=latents.device).repeat(bsz)
 
-                    if args.loss_type == "normal":
+                    if args.loss_type == "ddpm":
                         # Add noise
                         noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
                         if noise_scheduler.config.prediction_type == "epsilon":
@@ -2041,7 +1996,7 @@ def main():
                         final_loss = masked_loss.mean()
                         return final_loss
                     
-                    if args.loss_type == "normal":
+                    if args.loss_type == "ddpm":
                         loss = custom_mse_loss(noise_pred.float(), target.float())
                     else:
                         weighting = compute_loss_weighting_for_sd3(weighting_scheme=args.weighting_scheme, sigmas=sigmas)
