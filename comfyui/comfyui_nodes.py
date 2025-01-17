@@ -2,12 +2,14 @@
 """
 import gc
 import os
+import json
 
 import comfy.model_management as mm
 import cv2
 import folder_paths
 import numpy as np
 import torch
+import torch.nn.functional as F
 import copy
 from comfy.utils import ProgressBar, load_torch_file
 from diffusers import (AutoencoderKL, DDIMScheduler,
@@ -17,27 +19,28 @@ from diffusers import (AutoencoderKL, DDIMScheduler,
 from einops import rearrange
 from omegaconf import OmegaConf
 from PIL import Image
-from transformers import (BertModel, BertTokenizer, CLIPImageProcessor,
-                          CLIPVisionModelWithProjection, T5EncoderModel,
-                          T5Tokenizer)
+from transformers import (BertModel, BertTokenizer,
+                          CLIPImageProcessor, CLIPVisionModelWithProjection,
+                          Qwen2Tokenizer, Qwen2VLForConditionalGeneration,
+                          T5EncoderModel, T5Tokenizer)
 
+from .utils import combine_camera_motion, get_camera_motion, CAMERA
 from ..easyanimate.data.bucket_sampler import (ASPECT_RATIO_512,
                                                get_closest_ratio)
+from ..easyanimate.data.dataset_image_video import process_pose_params
 from ..easyanimate.models import (name_to_autoencoder_magvit,
                                   name_to_transformer3d)
-from ..easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
+from ..easyanimate.pipeline.pipeline_easyanimate import \
+    EasyAnimatePipeline
 from ..easyanimate.pipeline.pipeline_easyanimate_inpaint import \
     EasyAnimateInpaintPipeline
-from ..easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import \
-    EasyAnimatePipeline_Multi_Text_Encoder
-from ..easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import \
-    EasyAnimatePipeline_Multi_Text_Encoder_Inpaint
-from ..easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_control import \
-    EasyAnimatePipeline_Multi_Text_Encoder_Control
+from ..easyanimate.pipeline.pipeline_easyanimate_control import \
+    EasyAnimateControlPipeline
 from ..easyanimate.utils.lora_utils import merge_lora, unmerge_lora
-from ..easyanimate.utils.utils import (get_image_to_video_latent,
+from ..easyanimate.utils.utils import (get_image_to_video_latent, get_image_latent,
                                        get_video_to_video_latent)
 from ..easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
+from ..easyanimate.ui.ui import ddpm_scheduler_dict, flow_scheduler_dict, all_cheduler_dict
 
 # Compatible with Alibaba EAS for quick launch
 eas_cache_dir           = '/stable-diffusion-cache/models'
@@ -63,6 +66,22 @@ def to_pil(image):
         return numpy2pil(image)
     raise ValueError(f"Cannot convert {type(image)} to PIL.Image")
 
+def gen_gaussian_heatmap(imgSize=200):
+    circle_img = np.zeros((imgSize, imgSize,), np.float32) 
+    circle_mask = cv2.circle(circle_img, (imgSize//2, imgSize//2), imgSize//2 - 1, 1, -1)
+
+    isotropicGrayscaleImage = np.zeros((imgSize, imgSize), np.float32)
+
+    # 生成高斯图
+    for i in range(imgSize):
+        for j in range(imgSize):
+            isotropicGrayscaleImage[i, j] = 1 / (2 * np.pi * (40 ** 2)) * np.exp(
+                -1 / 2 * ((i - imgSize / 2) ** 2 / (40 ** 2) + (j - imgSize / 2) ** 2 / (40 ** 2)))
+
+    isotropicGrayscaleImage = isotropicGrayscaleImage * circle_mask
+    isotropicGrayscaleImage = (isotropicGrayscaleImage / np.max(isotropicGrayscaleImage) * 255).astype(np.uint8)
+    return isotropicGrayscaleImage
+
 class LoadEasyAnimateModel:
     @classmethod
     def INPUT_TYPES(s):
@@ -79,9 +98,12 @@ class LoadEasyAnimateModel:
                         'EasyAnimateV5-12b-zh-InP',
                         'EasyAnimateV5-12b-zh-Control',
                         'EasyAnimateV5-12b-zh',
+                        'EasyAnimateV5.1-12b-zh-InP',
+                        'EasyAnimateV5.1-12b-zh-Control',
+                        'EasyAnimateV5.1-12b-zh-Control-Camera',
                     ],
                     {
-                        "default": 'EasyAnimateV5-7b-zh-InP',
+                        "default": 'EasyAnimateV5.1-12b-zh-InP',
                     }
                 ),
                 "GPU_memory_mode":(
@@ -101,9 +123,10 @@ class LoadEasyAnimateModel:
                         "easyanimate_video_v3_slicevae_motion_module.yaml",
                         "easyanimate_video_v4_slicevae_multi_text_encoder.yaml",
                         "easyanimate_video_v5_magvit_multi_text_encoder.yaml",
+                        "easyanimate_video_v5.1_magvit_qwen.yaml",
                     ],
                     {
-                        "default": "easyanimate_video_v5_magvit_multi_text_encoder.yaml",
+                        "default": "easyanimate_video_v5.1_magvit_qwen.yaml",
                     }
                 ),
                 "precision": (
@@ -179,26 +202,48 @@ class LoadEasyAnimateModel:
             tokenizer = BertTokenizer.from_pretrained(
                 model_name, subfolder="tokenizer"
             )
-            tokenizer_2 = T5Tokenizer.from_pretrained(
-                model_name, subfolder="tokenizer_2"
-            )
+            if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                tokenizer_2 = Qwen2Tokenizer.from_pretrained(
+                    os.path.join(model_name, "tokenizer_2")
+                )
+            else:
+                tokenizer_2 = T5Tokenizer.from_pretrained(
+                    model_name, subfolder="tokenizer_2"
+                )
         else:
-            tokenizer = T5Tokenizer.from_pretrained(
-                model_name, subfolder="tokenizer"
-            )
+            if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                tokenizer = Qwen2Tokenizer.from_pretrained(
+                    os.path.join(model_name, "tokenizer")
+                )
+            else:
+                tokenizer = T5Tokenizer.from_pretrained(
+                    model_name, subfolder="tokenizer"
+                )
             tokenizer_2 = None
 
         if config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
             text_encoder = BertModel.from_pretrained(
                 model_name, subfolder="text_encoder", torch_dtype=weight_dtype
             )
-            text_encoder_2 = T5EncoderModel.from_pretrained(
-                model_name, subfolder="text_encoder_2", torch_dtype=weight_dtype
-            )
+            if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                text_encoder_2 = Qwen2VLForConditionalGeneration.from_pretrained(
+                    os.path.join(model_name, "text_encoder_2"),
+                    torch_dtype=weight_dtype,
+                )
+            else:
+                text_encoder_2 = T5EncoderModel.from_pretrained(
+                    model_name, subfolder="text_encoder_2"
+                ).to(weight_dtype)
         else:
-            text_encoder = T5EncoderModel.from_pretrained(
-                model_name, subfolder="text_encoder", torch_dtype=weight_dtype
-            )
+            if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                text_encoder = Qwen2VLForConditionalGeneration.from_pretrained(
+                    os.path.join(model_name, "text_encoder"),
+                    torch_dtype=weight_dtype,
+                )
+            else:
+                text_encoder = T5EncoderModel.from_pretrained(
+                    model_name, subfolder="text_encoder"
+                ).to(weight_dtype)
             text_encoder_2 = None
 
         # Load Clip
@@ -222,59 +267,30 @@ class LoadEasyAnimateModel:
         pbar.update(1)
 
         if model_type == "Inpaint":
-            if config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
-                if transformer.config.in_channels != vae.config.latent_channels:
-                    pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
-                        model_name,
-                        text_encoder=text_encoder,
-                        text_encoder_2=text_encoder_2,
-                        tokenizer=tokenizer,
-                        tokenizer_2=tokenizer_2,
-                        vae=vae,
-                        transformer=transformer,
-                        scheduler=scheduler,
-                        torch_dtype=weight_dtype,
-                        clip_image_encoder=clip_image_encoder,
-                        clip_image_processor=clip_image_processor,
-                    )
-                else:
-                    pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
-                        model_name,
-                        text_encoder=text_encoder,
-                        text_encoder_2=text_encoder_2,
-                        tokenizer=tokenizer,
-                        tokenizer_2=tokenizer_2,
-                        vae=vae,
-                        transformer=transformer,
-                        scheduler=scheduler,
-                        torch_dtype=weight_dtype
-                    )
+            if transformer.config.in_channels != vae.config.latent_channels:
+                pipeline = EasyAnimateInpaintPipeline(
+                    text_encoder=text_encoder,
+                    text_encoder_2=text_encoder_2,
+                    tokenizer=tokenizer,
+                    tokenizer_2=tokenizer_2,
+                    vae=vae,
+                    transformer=transformer,
+                    scheduler=scheduler,
+                    clip_image_encoder=clip_image_encoder,
+                    clip_image_processor=clip_image_processor,
+                ).to(weight_dtype)
             else:
-                if transformer.config.in_channels != vae.config.latent_channels:
-                    pipeline = EasyAnimateInpaintPipeline.from_pretrained(
-                        model_name,
-                        text_encoder=text_encoder,
-                        tokenizer=tokenizer,
-                        vae=vae,
-                        transformer=transformer,
-                        scheduler=scheduler,
-                        torch_dtype=weight_dtype,
-                        clip_image_encoder=clip_image_encoder,
-                        clip_image_processor=clip_image_processor,
-                    )
-                else:
-                    pipeline = EasyAnimatePipeline.from_pretrained(
-                        model_name,
-                        text_encoder=text_encoder,
-                        tokenizer=tokenizer,
-                        vae=vae,
-                        transformer=transformer,
-                        scheduler=scheduler,
-                        torch_dtype=weight_dtype
-                    )
+                pipeline = EasyAnimatePipeline(
+                    text_encoder=text_encoder,
+                    text_encoder_2=text_encoder_2,
+                    tokenizer=tokenizer,
+                    tokenizer_2=tokenizer_2,
+                    vae=vae,
+                    transformer=transformer,
+                    scheduler=scheduler,
+                ).to(weight_dtype)
         else:
-            pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Control.from_pretrained(
-                model_name,
+            pipeline = EasyAnimateControlPipeline(
                 text_encoder=text_encoder,
                 text_encoder_2=text_encoder_2,
                 tokenizer=tokenizer,
@@ -282,8 +298,7 @@ class LoadEasyAnimateModel:
                 vae=vae,
                 transformer=transformer,
                 scheduler=scheduler,
-                torch_dtype=weight_dtype
-            )
+            ).to(weight_dtype)
         if GPU_memory_mode == "sequential_cpu_offload":
             pipeline.enable_sequential_cpu_offload()
         elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
@@ -366,6 +381,216 @@ class EasyAnimate_TextBox:
     def process(self, prompt):
         return (prompt, )
 
+class EasyAnimateT2VSampler:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "easyanimate_model": (
+                    "EASYANIMATESMODEL", 
+                ),
+                "prompt": (
+                    "STRING_PROMPT", 
+                ),
+                "negative_prompt": (
+                    "STRING_PROMPT", 
+                ),
+                "video_length": (
+                    "INT", {"default": 72, "min": 8, "max": 144, "step": 8}
+                ),
+                "width": (
+                    "INT", {"default": 1008, "min": 64, "max": 2048, "step": 16}
+                ),
+                "height": (
+                    "INT", {"default": 576, "min": 64, "max": 2048, "step": 16}
+                ),
+                "is_image":(
+                    [
+                        False,
+                        True
+                    ], 
+                    {
+                        "default": False,
+                    }
+                ),
+                "seed": (
+                    "INT", {"default": 43, "min": 0, "max": 0xffffffffffffffff}
+                ),
+                "steps": (
+                    "INT", {"default": 25, "min": 1, "max": 200, "step": 1}
+                ),
+                "cfg": (
+                    "FLOAT", {"default": 7.0, "min": 1.0, "max": 20.0, "step": 0.01}
+                ),
+                "scheduler": (
+                    [ 
+                        "Euler",
+                        "Euler A",
+                        "DPM++",
+                        "PNDM",
+                        "DDIM",
+                    ],
+                    {
+                        "default": 'DDIM'
+                    }
+                ),
+            },
+        }
+    
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES =("images",)
+    FUNCTION = "process"
+    CATEGORY = "EasyAnimateWrapper"
+
+    def process(self, easyanimate_model, prompt, negative_prompt, video_length, width, height, is_image, seed, steps, cfg, scheduler):
+        global transformer_cpu_cache
+        global lora_path_before
+        device = mm.get_torch_device()
+        offload_device = mm.unet_offload_device()
+
+        mm.soft_empty_cache()
+        gc.collect()
+
+        # Get Pipeline
+        pipeline = easyanimate_model['pipeline']
+        model_name = easyanimate_model['model_name']
+        weight_dtype = easyanimate_model['dtype']
+
+        # Load Sampler
+        pipeline.scheduler = all_cheduler_dict[scheduler].from_pretrained(model_name, subfolder='scheduler')
+
+        generator= torch.Generator(device).manual_seed(seed)
+        
+        video_length = 1 if is_image else video_length
+        with torch.no_grad():
+            if pipeline.vae.cache_mag_vae:
+                video_length = int((video_length - 1) // pipeline.vae.mini_batch_encoder * pipeline.vae.mini_batch_encoder) + 1 if video_length != 1 else 1
+            else:
+                video_length = int(video_length // pipeline.vae.mini_batch_encoder * pipeline.vae.mini_batch_encoder) if video_length != 1 else 1
+
+            # Apply lora
+            if easyanimate_model.get("lora_cache", False):
+                if len(easyanimate_model.get("loras", [])) != 0:
+                    # Save the original weights to cpu
+                    if len(transformer_cpu_cache) == 0:
+                        print('Save transformer state_dict to cpu memory')
+                        transformer_state_dict = pipeline.transformer.state_dict()
+                        for key in transformer_state_dict:
+                            transformer_cpu_cache[key] = transformer_state_dict[key].clone().cpu()
+                    
+                    lora_path_now = str(easyanimate_model.get("loras", []) + easyanimate_model.get("strength_model", []))
+                    if lora_path_now != lora_path_before:
+                        print('Merge Lora with Cache')
+                        lora_path_before = copy.deepcopy(lora_path_now)
+                        pipeline.transformer.load_state_dict(transformer_cpu_cache)
+                        for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                            pipeline = merge_lora(pipeline, _lora_path, _lora_weight, device="cuda", dtype=weight_dtype)
+            else:
+                # Clear lora when switch from lora_cache=True to lora_cache=False.
+                if len(transformer_cpu_cache) != 0:
+                    print('Delete cpu state_dict')
+                    pipeline.transformer.load_state_dict(transformer_cpu_cache)
+                    transformer_cpu_cache = {}
+                    lora_path_before = ""
+                    gc.collect()
+                print('Merge Lora')
+                for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                    pipeline = merge_lora(pipeline, _lora_path, _lora_weight, device="cuda", dtype=weight_dtype)
+
+            if pipeline.transformer.config.in_channels != pipeline.vae.config.latent_channels:
+                input_video, input_video_mask, clip_image = get_image_to_video_latent(None, None, video_length=video_length, sample_size=(height, width))
+
+                sample = pipeline(
+                    prompt, 
+                    video_length = video_length,
+                    negative_prompt = negative_prompt,
+                    height      = height,
+                    width       = width,
+                    generator   = generator,
+                    guidance_scale = cfg,
+                    num_inference_steps = steps,
+
+                    video        = input_video,
+                    mask_video   = input_video_mask,
+                    clip_image   = clip_image, 
+                    comfyui_progressbar = True,
+                ).frames
+            else:
+                sample = pipeline(
+                    prompt, 
+                    video_length = video_length,
+                    negative_prompt = negative_prompt,
+                    height      = height,
+                    width       = width,
+                    generator   = generator,
+                    guidance_scale = cfg,
+                    num_inference_steps = steps,
+                ).frames
+            videos = rearrange(sample, "b c t h w -> (b t) h w c")
+
+            if not easyanimate_model.get("lora_cache", False):
+                print('Unmerge Lora')
+                for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
+                    pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight, device="cuda", dtype=weight_dtype)
+        return (videos,)   
+
+class EasyAnimateV5_T2VSampler(EasyAnimateT2VSampler):
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "easyanimate_model": (
+                    "EASYANIMATESMODEL", 
+                ),
+                "prompt": (
+                    "STRING_PROMPT", 
+                ),
+                "negative_prompt": (
+                    "STRING_PROMPT", 
+                ),
+                "video_length": (
+                    "INT", {"default": 49, "min": 1, "max": 49, "step": 4}
+                ),
+                "width": (
+                    "INT", {"default": 1008, "min": 64, "max": 2048, "step": 16}
+                ),
+                "height": (
+                    "INT", {"default": 576, "min": 64, "max": 2048, "step": 16}
+                ),
+                "is_image":(
+                    [
+                        False,
+                        True
+                    ], 
+                    {
+                        "default": False,
+                    }
+                ),
+                "seed": (
+                    "INT", {"default": 43, "min": 0, "max": 0xffffffffffffffff}
+                ),
+                "steps": (
+                    "INT", {"default": 25, "min": 1, "max": 200, "step": 1}
+                ),
+                "cfg": (
+                    "FLOAT", {"default": 7.0, "min": 1.0, "max": 20.0, "step": 0.01}
+                ),
+                "scheduler": (
+                    [ 
+                        "Euler",
+                        "Euler A",
+                        "DPM++",
+                        "PNDM",
+                        "DDIM",
+                        "Flow",
+                    ],
+                    {
+                        "default": 'Flow'
+                    }
+                ),
+            },
+        }
+
 class EasyAnimateI2VSampler:
     @classmethod
     def INPUT_TYPES(s):
@@ -447,17 +672,7 @@ class EasyAnimateI2VSampler:
         weight_dtype = easyanimate_model['dtype']
 
         # Load Sampler
-        if scheduler == "DPM++":
-            noise_scheduler = DPMSolverMultistepScheduler.from_pretrained(model_name, subfolder='scheduler')
-        elif scheduler == "Euler":
-            noise_scheduler = EulerDiscreteScheduler.from_pretrained(model_name, subfolder='scheduler')
-        elif scheduler == "Euler A":
-            noise_scheduler = EulerAncestralDiscreteScheduler.from_pretrained(model_name, subfolder='scheduler')
-        elif scheduler == "PNDM":
-            noise_scheduler = PNDMScheduler.from_pretrained(model_name, subfolder='scheduler')
-        elif scheduler == "DDIM":
-            noise_scheduler = DDIMScheduler.from_pretrained(model_name, subfolder='scheduler')
-        pipeline.scheduler = noise_scheduler
+        pipeline.scheduler = all_cheduler_dict[scheduler].from_pretrained(model_name, subfolder='scheduler')
 
         generator= torch.Generator(device).manual_seed(seed)
 
@@ -510,7 +725,7 @@ class EasyAnimateI2VSampler:
                 mask_video   = input_video_mask,
                 clip_image   = clip_image, 
                 comfyui_progressbar = True,
-            ).videos
+            ).frames
             videos = rearrange(sample, "b c t h w -> (b t) h w c")
 
             if not easyanimate_model.get("lora_cache", False):
@@ -560,235 +775,16 @@ class EasyAnimateV5_I2VSampler(EasyAnimateI2VSampler):
                         "DPM++",
                         "PNDM",
                         "DDIM",
+                        "Flow",
                     ],
                     {
-                        "default": 'DDIM'
+                        "default": 'Flow'
                     }
                 )
             },
             "optional":{
                 "start_img": ("IMAGE",),
                 "end_img": ("IMAGE",),
-            },
-        }
-
-
-class EasyAnimateT2VSampler:
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "easyanimate_model": (
-                    "EASYANIMATESMODEL", 
-                ),
-                "prompt": (
-                    "STRING_PROMPT", 
-                ),
-                "negative_prompt": (
-                    "STRING_PROMPT", 
-                ),
-                "video_length": (
-                    "INT", {"default": 72, "min": 8, "max": 144, "step": 8}
-                ),
-                "width": (
-                    "INT", {"default": 1008, "min": 64, "max": 2048, "step": 16}
-                ),
-                "height": (
-                    "INT", {"default": 576, "min": 64, "max": 2048, "step": 16}
-                ),
-                "is_image":(
-                    [
-                        False,
-                        True
-                    ], 
-                    {
-                        "default": False,
-                    }
-                ),
-                "seed": (
-                    "INT", {"default": 43, "min": 0, "max": 0xffffffffffffffff}
-                ),
-                "steps": (
-                    "INT", {"default": 25, "min": 1, "max": 200, "step": 1}
-                ),
-                "cfg": (
-                    "FLOAT", {"default": 7.0, "min": 1.0, "max": 20.0, "step": 0.01}
-                ),
-                "scheduler": (
-                    [ 
-                        "Euler",
-                        "Euler A",
-                        "DPM++",
-                        "PNDM",
-                        "DDIM",
-                    ],
-                    {
-                        "default": 'DDIM'
-                    }
-                ),
-            },
-        }
-    
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES =("images",)
-    FUNCTION = "process"
-    CATEGORY = "EasyAnimateWrapper"
-
-    def process(self, easyanimate_model, prompt, negative_prompt, video_length, width, height, is_image, seed, steps, cfg, scheduler):
-        global transformer_cpu_cache
-        global lora_path_before
-        device = mm.get_torch_device()
-        offload_device = mm.unet_offload_device()
-
-        mm.soft_empty_cache()
-        gc.collect()
-
-        # Get Pipeline
-        pipeline = easyanimate_model['pipeline']
-        model_name = easyanimate_model['model_name']
-        weight_dtype = easyanimate_model['dtype']
-
-        # Load Sampler
-        if scheduler == "DPM++":
-            noise_scheduler = DPMSolverMultistepScheduler.from_pretrained(model_name, subfolder='scheduler')
-        elif scheduler == "Euler":
-            noise_scheduler = EulerDiscreteScheduler.from_pretrained(model_name, subfolder='scheduler')
-        elif scheduler == "Euler A":
-            noise_scheduler = EulerAncestralDiscreteScheduler.from_pretrained(model_name, subfolder='scheduler')
-        elif scheduler == "PNDM":
-            noise_scheduler = PNDMScheduler.from_pretrained(model_name, subfolder='scheduler')
-        elif scheduler == "DDIM":
-            noise_scheduler = DDIMScheduler.from_pretrained(model_name, subfolder='scheduler')
-        pipeline.scheduler = noise_scheduler
-
-        generator= torch.Generator(device).manual_seed(seed)
-        
-        video_length = 1 if is_image else video_length
-        with torch.no_grad():
-            if pipeline.vae.cache_mag_vae:
-                video_length = int((video_length - 1) // pipeline.vae.mini_batch_encoder * pipeline.vae.mini_batch_encoder) + 1 if video_length != 1 else 1
-            else:
-                video_length = int(video_length // pipeline.vae.mini_batch_encoder * pipeline.vae.mini_batch_encoder) if video_length != 1 else 1
-
-            # Apply lora
-            if easyanimate_model.get("lora_cache", False):
-                if len(easyanimate_model.get("loras", [])) != 0:
-                    # Save the original weights to cpu
-                    if len(transformer_cpu_cache) == 0:
-                        print('Save transformer state_dict to cpu memory')
-                        transformer_state_dict = pipeline.transformer.state_dict()
-                        for key in transformer_state_dict:
-                            transformer_cpu_cache[key] = transformer_state_dict[key].clone().cpu()
-                    
-                    lora_path_now = str(easyanimate_model.get("loras", []) + easyanimate_model.get("strength_model", []))
-                    if lora_path_now != lora_path_before:
-                        print('Merge Lora with Cache')
-                        lora_path_before = copy.deepcopy(lora_path_now)
-                        pipeline.transformer.load_state_dict(transformer_cpu_cache)
-                        for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
-                            pipeline = merge_lora(pipeline, _lora_path, _lora_weight, device="cuda", dtype=weight_dtype)
-            else:
-                # Clear lora when switch from lora_cache=True to lora_cache=False.
-                if len(transformer_cpu_cache) != 0:
-                    print('Delete cpu state_dict')
-                    pipeline.transformer.load_state_dict(transformer_cpu_cache)
-                    transformer_cpu_cache = {}
-                    lora_path_before = ""
-                    gc.collect()
-                print('Merge Lora')
-                for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
-                    pipeline = merge_lora(pipeline, _lora_path, _lora_weight, device="cuda", dtype=weight_dtype)
-
-            if pipeline.transformer.config.in_channels != pipeline.vae.config.latent_channels:
-                input_video, input_video_mask, clip_image = get_image_to_video_latent(None, None, video_length=video_length, sample_size=(height, width))
-
-                sample = pipeline(
-                    prompt, 
-                    video_length = video_length,
-                    negative_prompt = negative_prompt,
-                    height      = height,
-                    width       = width,
-                    generator   = generator,
-                    guidance_scale = cfg,
-                    num_inference_steps = steps,
-
-                    video        = input_video,
-                    mask_video   = input_video_mask,
-                    clip_image   = clip_image, 
-                    comfyui_progressbar = True,
-                ).videos
-            else:
-                sample = pipeline(
-                    prompt, 
-                    video_length = video_length,
-                    negative_prompt = negative_prompt,
-                    height      = height,
-                    width       = width,
-                    generator   = generator,
-                    guidance_scale = cfg,
-                    num_inference_steps = steps,
-                ).videos
-            videos = rearrange(sample, "b c t h w -> (b t) h w c")
-
-            if not easyanimate_model.get("lora_cache", False):
-                print('Unmerge Lora')
-                for _lora_path, _lora_weight in zip(easyanimate_model.get("loras", []), easyanimate_model.get("strength_model", [])):
-                    pipeline = unmerge_lora(pipeline, _lora_path, _lora_weight, device="cuda", dtype=weight_dtype)
-        return (videos,)   
-
-class EasyAnimateV5_T2VSampler(EasyAnimateT2VSampler):
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "easyanimate_model": (
-                    "EASYANIMATESMODEL", 
-                ),
-                "prompt": (
-                    "STRING_PROMPT", 
-                ),
-                "negative_prompt": (
-                    "STRING_PROMPT", 
-                ),
-                "video_length": (
-                    "INT", {"default": 49, "min": 1, "max": 49, "step": 4}
-                ),
-                "width": (
-                    "INT", {"default": 1008, "min": 64, "max": 2048, "step": 16}
-                ),
-                "height": (
-                    "INT", {"default": 576, "min": 64, "max": 2048, "step": 16}
-                ),
-                "is_image":(
-                    [
-                        False,
-                        True
-                    ], 
-                    {
-                        "default": False,
-                    }
-                ),
-                "seed": (
-                    "INT", {"default": 43, "min": 0, "max": 0xffffffffffffffff}
-                ),
-                "steps": (
-                    "INT", {"default": 25, "min": 1, "max": 200, "step": 1}
-                ),
-                "cfg": (
-                    "FLOAT", {"default": 7.0, "min": 1.0, "max": 20.0, "step": 0.01}
-                ),
-                "scheduler": (
-                    [ 
-                        "Euler",
-                        "Euler A",
-                        "DPM++",
-                        "PNDM",
-                        "DDIM",
-                    ],
-                    {
-                        "default": 'DDIM'
-                    }
-                ),
             },
         }
 
@@ -853,9 +849,10 @@ class EasyAnimateV2VSampler:
     FUNCTION = "process"
     CATEGORY = "EasyAnimateWrapper"
 
-    def process(self, easyanimate_model, prompt, negative_prompt, video_length, base_resolution, seed, steps, cfg, denoise_strength, scheduler, validation_video=None, control_video=None):
+    def process(self, easyanimate_model, prompt, negative_prompt, video_length, base_resolution, seed, steps, cfg, denoise_strength, scheduler, validation_video=None, control_video=None, ref_image=None, camera_conditions=None):
         global transformer_cpu_cache
         global lora_path_before
+
         device = mm.get_torch_device()
         offload_device = mm.unet_offload_device()
 
@@ -877,26 +874,23 @@ class EasyAnimateV2VSampler:
                 validation_video = np.array(validation_video.cpu().numpy() * 255, np.uint8)
                 original_width, original_height = Image.fromarray(validation_video[0]).size
         else:
-            if type(control_video) is str:
+            if control_video is not None and type(control_video) is str:
                 original_width, original_height = Image.fromarray(cv2.VideoCapture(control_video).read()[1]).size
-            else:
+            elif control_video is not None:
                 control_video = np.array(control_video.cpu().numpy() * 255, np.uint8)
                 original_width, original_height = Image.fromarray(control_video[0]).size
+            else:
+                original_width, original_height = 384 / 512 * base_resolution, 672 / 512 * base_resolution
+
+            if ref_image is not None:
+                ref_image = [to_pil(_ref_image) for _ref_image in ref_image]
+                original_width, original_height = ref_image[0].size if type(ref_image) is list else Image.open(ref_image).size
+
         closest_size, closest_ratio = get_closest_ratio(original_height, original_width, ratios=aspect_ratio_sample_size)
         height, width = [int(x / 16) * 16 for x in closest_size]
 
         # Load Sampler
-        if scheduler == "DPM++":
-            noise_scheduler = DPMSolverMultistepScheduler.from_pretrained(model_name, subfolder='scheduler')
-        elif scheduler == "Euler":
-            noise_scheduler = EulerDiscreteScheduler.from_pretrained(model_name, subfolder='scheduler')
-        elif scheduler == "Euler A":
-            noise_scheduler = EulerAncestralDiscreteScheduler.from_pretrained(model_name, subfolder='scheduler')
-        elif scheduler == "PNDM":
-            noise_scheduler = PNDMScheduler.from_pretrained(model_name, subfolder='scheduler')
-        elif scheduler == "DDIM":
-            noise_scheduler = DDIMScheduler.from_pretrained(model_name, subfolder='scheduler')
-        pipeline.scheduler = noise_scheduler
+        pipeline.scheduler = all_cheduler_dict[scheduler].from_pretrained(model_name, subfolder='scheduler')
 
         generator= torch.Generator(device).manual_seed(seed)
 
@@ -909,6 +903,16 @@ class EasyAnimateV2VSampler:
                 input_video, input_video_mask, clip_image = get_video_to_video_latent(validation_video, video_length=video_length, sample_size=(height, width), fps=8)
             else:
                 input_video, input_video_mask, clip_image = get_video_to_video_latent(control_video, video_length=video_length, sample_size=(height, width), fps=8)
+                if ref_image is not None:
+                    ref_image = get_image_latent(sample_size=(height, width), ref_image=ref_image[0])
+                if camera_conditions is not None and len(camera_conditions) > 0: 
+                    poses      = json.loads(camera_conditions)
+                    cam_params = np.array([[float(x) for x in pose] for pose in poses])
+                    cam_params = np.concatenate([np.zeros_like(cam_params[:, :1]), cam_params], 1)
+                    control_camera_video = process_pose_params(cam_params, width=width, height=height)
+                    control_camera_video = control_camera_video[:video_length].permute([3, 0, 1, 2]).unsqueeze(0)
+                else:
+                    control_camera_video = None
 
             # Apply lora
             if easyanimate_model.get("lora_cache", False):
@@ -954,7 +958,7 @@ class EasyAnimateV2VSampler:
                     clip_image   = clip_image, 
                     strength = float(denoise_strength),
                     comfyui_progressbar = True,
-                ).videos
+                ).frames
             else:
                 sample = pipeline(
                     prompt, 
@@ -966,9 +970,11 @@ class EasyAnimateV2VSampler:
                     guidance_scale = cfg,
                     num_inference_steps = steps,
 
+                    ref_image = ref_image,
+                    control_camera_video = control_camera_video,
                     control_video = input_video,
                     comfyui_progressbar = True,
-                ).videos
+                ).frames
             videos = rearrange(sample, "b c t h w -> (b t) h w c")
 
             if not easyanimate_model.get("lora_cache", False):
@@ -1021,17 +1027,220 @@ class EasyAnimateV5_V2VSampler(EasyAnimateV2VSampler):
                         "DPM++",
                         "PNDM",
                         "DDIM",
+                        "Flow",
                     ],
                     {
-                        "default": 'DDIM'
+                        "default": 'Flow'
                     }
                 ),
             },
             "optional":{
                 "validation_video": ("IMAGE",),
                 "control_video": ("IMAGE",),
+                "camera_conditions": ("STRING", {"forceInput": True}),
+                "ref_image": ("IMAGE",),
             },
         }
+
+class CreateTrajectoryBasedOnKJNodes:
+    # Modified from https://github.com/kijai/ComfyUI-KJNodes/blob/main/nodes/curve_nodes.py
+    # Modify to meet the trajectory control requirements of EasyAnimate.
+    RETURN_TYPES = ("IMAGE", )
+    RETURN_NAMES = ("image", )
+    FUNCTION = "createtrajectory"
+    CATEGORY = "EasyAnimateWrapper"
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "coordinates": ("STRING", {"forceInput": True}),
+                "masks": ("MASK", {"forceInput": True}),
+            },
+    } 
+
+    def createtrajectory(self, coordinates, masks):
+        # Define the number of images in the batch
+        if len(coordinates) < 10:
+            coords_list = []
+            for coords in coordinates:
+                coords = json.loads(coords.replace("'", '"'))
+                coords_list.append(coords)
+        else:
+            coords = json.loads(coordinates.replace("'", '"'))
+            coords_list = [coords]
+
+        _, frame_height, frame_width = masks.size()
+        heatmap = gen_gaussian_heatmap()
+
+        circle_size = int(50 * ((frame_height * frame_width) / (1280 * 720)) ** (1/2))
+
+        images_list = []
+        for coords in coords_list:
+            _images_list = []
+            for i in range(len(coords)):
+                _image = np.zeros((frame_height, frame_width, 3))
+                center_coordinate = [coords[i][key] for key in coords[i]]
+                print(center_coordinate, np.shape(_image))
+                y1 = max(center_coordinate[1] - circle_size, 0)
+                y2 = min(center_coordinate[1] + circle_size, np.shape(_image)[0] - 1)
+                x1 = max(center_coordinate[0] - circle_size, 0)
+                x2 = min(center_coordinate[0] + circle_size, np.shape(_image)[1] - 1)
+                
+                if x2 - x1 > 3 and y2 - y1 > 3:
+                    need_map = cv2.resize(heatmap, (x2 - x1, y2 - y1))[:, :, None]
+                    _image[y1:y2, x1:x2] = np.maximum(need_map.copy(), _image[y1:y2, x1:x2])
+                
+                _image = np.expand_dims(_image, 0) / 255
+                _images_list.append(_image)
+            images_list.append(np.concatenate(_images_list, axis=0))
+            
+        out_images = torch.from_numpy(np.max(np.array(images_list), axis=0))
+        return (out_images, )
+
+class ImageMaximumNode:
+    RETURN_TYPES = ("IMAGE", )
+    RETURN_NAMES = ("image", )
+    FUNCTION = "imagemaximum"
+    CATEGORY = "EasyAnimateWrapper"
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "video_1": ("IMAGE",),
+                "video_2": ("IMAGE",),
+            },
+    } 
+
+    def imagemaximum(self, video_1, video_2):
+        length_1, h_1, w_1, c_1 = video_1.size()
+        length_2, h_2, w_2, c_2 = video_2.size()
+        
+        if h_1 != h_2 or w_1 != w_2:
+            video_1, video_2 = video_1.permute([0, 3, 1, 2]), video_2.permute([0, 3, 1, 2])
+            video_2 = F.interpolate(video_2, video_1.size()[-2:])
+            video_1, video_2 = video_1.permute([0, 2, 3, 1]), video_2.permute([0, 2, 3, 1])
+
+        if length_1 > length_2:
+            outputs = torch.maximum(video_1[:length_2], video_2)
+        else:
+            outputs = torch.maximum(video_1, video_2[:length_1])
+        return (outputs, )
+
+class CameraBasicFromChaoJie:
+    # Copied from https://github.com/chaojie/ComfyUI-CameraCtrl-Wrapper/blob/main/nodes.py
+    # Since ComfyUI-CameraCtrl-Wrapper requires a specific version of diffusers, which is not suitable for us. 
+    # The code has been copied into the current repository.
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "camera_pose":(["Static","Pan Up","Pan Down","Pan Left","Pan Right","Zoom In","Zoom Out","ACW","CW"],{"default":"Static"}),
+                "speed":("FLOAT",{"default":1.0}),
+                "video_length":("INT",{"default":16}),
+            },
+        }
+
+    RETURN_TYPES = ("CameraPose",)
+    FUNCTION = "run"
+    CATEGORY = "CameraCtrl"
+
+    def run(self,camera_pose,speed,video_length):
+        camera_dict = {
+                "motion":[camera_pose],
+                "mode": "Basic Camera Poses",  # "First A then B", "Both A and B", "Custom"
+                "speed": speed,
+                "complex": None
+                } 
+        motion_list = camera_dict['motion']
+        mode = camera_dict['mode']
+        speed = camera_dict['speed'] 
+        angle = np.array(CAMERA[motion_list[0]]["angle"])
+        T = np.array(CAMERA[motion_list[0]]["T"])
+        RT = get_camera_motion(angle, T, speed, video_length)
+        return (RT,)
+
+class CameraCombineFromChaoJie:
+    # Copied from https://github.com/chaojie/ComfyUI-CameraCtrl-Wrapper/blob/main/nodes.py
+    # Since ComfyUI-CameraCtrl-Wrapper requires a specific version of diffusers, which is not suitable for us. 
+    # The code has been copied into the current repository.
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "camera_pose1":(["Static","Pan Up","Pan Down","Pan Left","Pan Right","Zoom In","Zoom Out","ACW","CW"],{"default":"Static"}),
+                "camera_pose2":(["Static","Pan Up","Pan Down","Pan Left","Pan Right","Zoom In","Zoom Out","ACW","CW"],{"default":"Static"}),
+                "camera_pose3":(["Static","Pan Up","Pan Down","Pan Left","Pan Right","Zoom In","Zoom Out","ACW","CW"],{"default":"Static"}),
+                "camera_pose4":(["Static","Pan Up","Pan Down","Pan Left","Pan Right","Zoom In","Zoom Out","ACW","CW"],{"default":"Static"}),
+                "speed":("FLOAT",{"default":1.0}),
+                "video_length":("INT",{"default":16}),
+            },
+        }
+
+    RETURN_TYPES = ("CameraPose",)
+    FUNCTION = "run"
+    CATEGORY = "CameraCtrl"
+
+    def run(self,camera_pose1,camera_pose2,camera_pose3,camera_pose4,speed,video_length):
+        angle = np.array(CAMERA[camera_pose1]["angle"]) + np.array(CAMERA[camera_pose2]["angle"]) + np.array(CAMERA[camera_pose3]["angle"]) + np.array(CAMERA[camera_pose4]["angle"])
+        T = np.array(CAMERA[camera_pose1]["T"]) + np.array(CAMERA[camera_pose2]["T"]) + np.array(CAMERA[camera_pose3]["T"]) + np.array(CAMERA[camera_pose4]["T"])
+        RT = get_camera_motion(angle, T, speed, video_length)
+        return (RT,)
+
+class CameraJoinFromChaoJie:
+    # Copied from https://github.com/chaojie/ComfyUI-CameraCtrl-Wrapper/blob/main/nodes.py
+    # Since ComfyUI-CameraCtrl-Wrapper requires a specific version of diffusers, which is not suitable for us. 
+    # The code has been copied into the current repository.
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "camera_pose1":("CameraPose",),
+                "camera_pose2":("CameraPose",),
+            },
+        }
+
+    RETURN_TYPES = ("CameraPose",)
+    FUNCTION = "run"
+    CATEGORY = "CameraCtrl"
+
+    def run(self,camera_pose1,camera_pose2):
+        RT = combine_camera_motion(camera_pose1, camera_pose2)
+        return (RT,)
+
+class CameraTrajectoryFromChaoJie:
+    # Copied from https://github.com/chaojie/ComfyUI-CameraCtrl-Wrapper/blob/main/nodes.py
+    # Since ComfyUI-CameraCtrl-Wrapper requires a specific version of diffusers, which is not suitable for us. 
+    # The code has been copied into the current repository.
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "camera_pose":("CameraPose",),
+                "fx":("FLOAT",{"default":0.474812461, "min": 0, "max": 1, "step": 0.000000001}),
+                "fy":("FLOAT",{"default":0.844111024, "min": 0, "max": 1, "step": 0.000000001}),
+                "cx":("FLOAT",{"default":0.5, "min": 0, "max": 1, "step": 0.01}),
+                "cy":("FLOAT",{"default":0.5, "min": 0, "max": 1, "step": 0.01}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING","INT",)
+    RETURN_NAMES = ("camera_trajectory","video_length",)
+    FUNCTION = "run"
+    CATEGORY = "CameraCtrl"
+
+    def run(self,camera_pose,fx,fy,cx,cy):
+        #print(camera_pose)
+        camera_pose_list=camera_pose.tolist()
+        trajs=[]
+        for cp in camera_pose_list:
+            traj=[fx,fy,cx,cy,0,0]
+            traj.extend(cp[0])
+            traj.extend(cp[1])
+            traj.extend(cp[2])
+            trajs.append(traj)
+        return (json.dumps(trajs),len(trajs),)
 
 NODE_CLASS_MAPPINGS = {
     "TextBox": TextBox,
@@ -1044,6 +1253,12 @@ NODE_CLASS_MAPPINGS = {
     "EasyAnimateV5_I2VSampler": EasyAnimateV5_I2VSampler,
     "EasyAnimateV5_T2VSampler": EasyAnimateV5_T2VSampler,
     "EasyAnimateV5_V2VSampler": EasyAnimateV5_V2VSampler,
+    "CreateTrajectoryBasedOnKJNodes": CreateTrajectoryBasedOnKJNodes,
+    "CameraBasicFromChaoJie": CameraBasicFromChaoJie,
+    "CameraTrajectoryFromChaoJie": CameraTrajectoryFromChaoJie,
+    "CameraJoinFromChaoJie": CameraJoinFromChaoJie,
+    "CameraCombineFromChaoJie": CameraCombineFromChaoJie,
+    "ImageMaximumNode": ImageMaximumNode,
 }
 
 
@@ -1058,4 +1273,10 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "EasyAnimateV5_I2VSampler": "EasyAnimateV5 Sampler for Image to Video",
     "EasyAnimateV5_T2VSampler": "EasyAnimateV5 Sampler for Text to Video",
     "EasyAnimateV5_V2VSampler": "EasyAnimateV5 Sampler for Video to Video",
-}
+    "CreateTrajectoryBasedOnKJNodes": "Create Trajectory Based On KJNodes",
+    "CameraBasicFromChaoJie": "CameraBasicFromChaoJie",
+    "CameraTrajectoryFromChaoJie": "CameraTrajectoryFromChaoJie",
+    "CameraJoinFromChaoJie": "CameraJoinFromChaoJie",
+    "CameraCombineFromChaoJie": "CameraCombineFromChaoJie",
+    "ImageMaximumNode": "ImageMaximumNode",
+} 
