@@ -318,11 +318,6 @@ except:
     print("Flash Attention is not installed. Please install with `pip install flash-attn`, if you want to use SWA.")
 
 class EasyAnimateSWAttnProcessor2_0:
-    r"""
-    Processor for implementing scaled dot-product attention for the CogVideoX model. It applies a rotary embedding on
-    query and key vectors, but does not include spatial normalization.
-    """
-
     def __init__(self, window_size=1024):
         self.window_size = window_size
 
