@@ -29,7 +29,7 @@ from diffusers.models.embeddings import (SinusoidalPositionalEmbedding,
                                          get_3d_sincos_pos_embed)
 from diffusers.models.modeling_outputs import Transformer2DModelOutput
 from diffusers.models.modeling_utils import ModelMixin
-from diffusers.models.normalization import (AdaLayerNorm, AdaLayerNormZero, 
+from diffusers.models.normalization import (AdaLayerNorm, AdaLayerNormZero,
                                             CogVideoXLayerNormZero)
 from diffusers.utils import USE_PEFT_BACKEND, is_torch_version, logging
 from diffusers.utils.import_utils import is_xformers_available
@@ -38,11 +38,10 @@ from einops import rearrange, repeat
 from torch import nn
 
 from .motion_module import PositionalEncoding, get_motion_module
-from .norm import AdaLayerNormShift, FP32LayerNorm, EasyAnimateLayerNormZero
+from .norm import AdaLayerNormShift, EasyAnimateLayerNormZero, FP32LayerNorm
 from .processor import (EasyAnimateAttnProcessor2_0,
+                        EasyAnimateSWAttnProcessor2_0,
                         LazyKVCompressionProcessor2_0)
-
-
 
 if is_xformers_available():
     import xformers
@@ -1044,6 +1043,7 @@ class EasyAnimateDiTBlock(nn.Module):
         after_norm: bool = False,
         norm_type: str="fp32_layer_norm",
         is_mmdit_block: bool = True,
+        is_swa: bool = False,
     ):
         super().__init__()
 
@@ -1052,6 +1052,7 @@ class EasyAnimateDiTBlock(nn.Module):
             time_embed_dim, dim, norm_elementwise_affine, norm_eps, norm_type=norm_type, bias=True
         )
 
+        self.is_swa = is_swa
         self.attn1 = Attention(
             query_dim=dim,
             dim_head=attention_head_dim,
@@ -1059,7 +1060,7 @@ class EasyAnimateDiTBlock(nn.Module):
             qk_norm="layer_norm" if qk_norm else None,
             eps=1e-6,
             bias=True,
-            processor=EasyAnimateAttnProcessor2_0(),
+            processor=EasyAnimateAttnProcessor2_0() if not is_swa else EasyAnimateSWAttnProcessor2_0(),
         )
         if is_mmdit_block:
             self.attn2 = Attention(
@@ -1069,7 +1070,7 @@ class EasyAnimateDiTBlock(nn.Module):
                 qk_norm="layer_norm" if qk_norm else None,
                 eps=1e-6,
                 bias=True,
-                processor=EasyAnimateAttnProcessor2_0(),
+                processor=EasyAnimateAttnProcessor2_0() if not is_swa else EasyAnimateSWAttnProcessor2_0(),
             )
         else:
             self.attn2 = None
@@ -1109,6 +1110,9 @@ class EasyAnimateDiTBlock(nn.Module):
         encoder_hidden_states: torch.Tensor,
         temb: torch.Tensor,
         image_rotary_emb: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        num_frames = None,
+        height = None,
+        width = None
     ) -> torch.Tensor:
         # Norm
         norm_hidden_states, norm_encoder_hidden_states, gate_msa, enc_gate_msa = self.norm1(
@@ -1116,12 +1120,23 @@ class EasyAnimateDiTBlock(nn.Module):
         )
 
         # Attn
-        attn_hidden_states, attn_encoder_hidden_states = self.attn1(
-            hidden_states=norm_hidden_states,
-            encoder_hidden_states=norm_encoder_hidden_states,
-            image_rotary_emb=image_rotary_emb,
-            attn2=self.attn2,
-        )
+        if self.is_swa:
+            attn_hidden_states, attn_encoder_hidden_states = self.attn1(
+                hidden_states=norm_hidden_states,
+                encoder_hidden_states=norm_encoder_hidden_states,
+                image_rotary_emb=image_rotary_emb,
+                attn2=self.attn2,
+                num_frames=num_frames,
+                height=height,
+                width=width,
+            )
+        else:
+            attn_hidden_states, attn_encoder_hidden_states = self.attn1(
+                hidden_states=norm_hidden_states,
+                encoder_hidden_states=norm_encoder_hidden_states,
+                image_rotary_emb=image_rotary_emb,
+                attn2=self.attn2
+            )
         hidden_states = hidden_states + gate_msa * attn_hidden_states
         encoder_hidden_states = encoder_hidden_states + enc_gate_msa * attn_encoder_hidden_states
 

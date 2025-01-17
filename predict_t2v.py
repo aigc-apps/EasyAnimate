@@ -3,26 +3,24 @@ import os
 import numpy as np
 import torch
 from diffusers import (DDIMScheduler, DPMSolverMultistepScheduler,
-                       EulerAncestralDiscreteScheduler, EulerDiscreteScheduler, FlowMatchEulerDiscreteScheduler,
-                       PNDMScheduler)
+                       EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
+                       FlowMatchEulerDiscreteScheduler, PNDMScheduler)
 from omegaconf import OmegaConf
 from PIL import Image
-from transformers import (BertModel, BertTokenizer, CLIPImageProcessor,
-                          CLIPVisionModelWithProjection,
+from transformers import (BertModel, BertTokenizer,
+                          CLIPImageProcessor, CLIPVisionModelWithProjection,
+                          Qwen2Tokenizer, Qwen2VLForConditionalGeneration,
                           T5EncoderModel, T5Tokenizer)
 
 from easyanimate.models import (name_to_autoencoder_magvit,
                                 name_to_transformer3d)
-from easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
+from easyanimate.pipeline.pipeline_easyanimate import \
+    EasyAnimatePipeline
 from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
     EasyAnimateInpaintPipeline
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import \
-    EasyAnimatePipeline_Multi_Text_Encoder
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import \
-    EasyAnimatePipeline_Multi_Text_Encoder_Inpaint
+from easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
-from easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
 
 # GPU memory mode, which can be choosen in [model_cpu_offload, model_cpu_offload_and_qfloat8, sequential_cpu_offload].
 # model_cpu_offload means that the entire model will be moved to the CPU after use, which can save some GPU memory.
@@ -32,16 +30,19 @@ from easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
 # 
 # sequential_cpu_offload means that each layer of the model will be moved to the CPU after use, 
 # resulting in slower speeds but saving a large amount of GPU memory.
-GPU_memory_mode     = "model_cpu_offload"
+# 
+# EasyAnimateV1, V2 and V3 support "model_cpu_offload" "sequential_cpu_offload"
+# EasyAnimateV4, V5 and V5.1 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" "sequential_cpu_offload"
+GPU_memory_mode     = "model_cpu_offload_and_qfloat8"
 
 # Config and model path
-config_path         = "config/easyanimate_video_v5_magvit_multi_text_encoder.yaml"
+config_path         = "config/easyanimate_video_v5.1_magvit_qwen.yaml"
 model_name          = "models/Diffusion_Transformer/EasyAnimateV5.1-12b-zh-InP"
 
 # Choose the sampler in "Euler" "Euler A" "DPM++" "PNDM" "DDIM" "Flow"
-# EasyAnimateV1, V2 and V3 cannot use DDIM.
-# EasyAnimateV4 and V5 support DDIM.
-# EasyAnimateV5.1 is a flow model, needs to use Flow.
+# EasyAnimateV1, V2 and V3 support "Euler" "Euler A" "DPM++" "PNDM"
+# EasyAnimateV4 and V5 support "Euler" "Euler A" "DPM++" "PNDM" "DDIM".
+# EasyAnimateV5.1 supports Flow.
 sampler_name        = "Flow"
 
 # Load pretrained model if need
@@ -55,7 +56,7 @@ lora_path           = None
 sample_size         = [384, 672]
 # In EasyAnimateV1, the video_length of video is 40 ~ 80.
 # In EasyAnimateV2, V3, V4, the video_length of video is 1 ~ 144. 
-# In EasyAnimateV5, the video_length of video is 1 ~ 49.
+# In EasyAnimateV5, V5.1, the video_length of video is 1 ~ 49.
 # If u want to generate a image, please set the video_length = 1.
 video_length        = 49
 fps                 = 8
@@ -65,10 +66,10 @@ fps                 = 8
 weight_dtype        = torch.bfloat16
 
 # EasyAnimateV1, V2 and V3 support English.
-# EasyAnimateV4 and V5 support English and Chinese.
+# EasyAnimateV4, V5 and V5.1 support English and Chinese.
 # 使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性
 # 在neg prompt中添加"安静，固定"等词语可以增加动态性。
-prompt              = "一条狗正在摇头。质量高、杰作、最佳品质、高分辨率、超精细、梦幻般。"
+prompt              = "一只棕褐色的狗在摇晃脑袋，坐在一个舒适的房间里的浅色沙发上。在狗的后面，架子上有一幅镶框的画，周围是粉红色的花朵。房间里的灯光柔和温暖，营造出舒适的氛围。"
 negative_prompt     = "扭曲的身体，肢体残缺，文本字幕，漫画，静止，丑陋，错误，乱码。"
 # 
 # Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics, text subtitles, line art." can increase stability
@@ -152,26 +153,49 @@ if config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
     tokenizer = BertTokenizer.from_pretrained(
         model_name, subfolder="tokenizer"
     )
-    tokenizer_2 = T5Tokenizer.from_pretrained(
-        model_name, subfolder="tokenizer_2"
-    )
+    if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+        tokenizer_2 = Qwen2Tokenizer.from_pretrained(
+            os.path.join(model_name, "tokenizer_2")
+        )
+    else:
+        tokenizer_2 = T5Tokenizer.from_pretrained(
+            model_name, subfolder="tokenizer_2"
+        )
 else:
-    tokenizer = T5Tokenizer.from_pretrained(
-        model_name, subfolder="tokenizer"
-    )
+    if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+        print(os.path.join(model_name, "tokenizer"))
+        tokenizer = Qwen2Tokenizer.from_pretrained(
+            os.path.join(model_name, "tokenizer")
+        )
+    else:
+        tokenizer = T5Tokenizer.from_pretrained(
+            model_name, subfolder="tokenizer"
+        )
     tokenizer_2 = None
 
 if config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
     text_encoder = BertModel.from_pretrained(
         model_name, subfolder="text_encoder"
-    ).to(torch.bfloat16)
-    text_encoder_2 = T5EncoderModel.from_pretrained(
-        model_name, subfolder="text_encoder_2"
-    ).to(torch.bfloat16)
-else:
-    text_encoder = T5EncoderModel.from_pretrained(
-        model_name, subfolder="text_encoder"
     ).to(weight_dtype)
+    if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+        text_encoder_2 = Qwen2VLForConditionalGeneration.from_pretrained(
+            os.path.join(model_name, "text_encoder_2"),
+            torch_dtype=weight_dtype,
+        )
+    else:
+        text_encoder_2 = T5EncoderModel.from_pretrained(
+            model_name, subfolder="text_encoder_2"
+        ).to(weight_dtype)
+else:
+    if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+        text_encoder = Qwen2VLForConditionalGeneration.from_pretrained(
+            os.path.join(model_name, "text_encoder"),
+            torch_dtype=weight_dtype,
+        )
+    else:
+        text_encoder = T5EncoderModel.from_pretrained(
+            model_name, subfolder="text_encoder"
+        ).to(weight_dtype)
     text_encoder_2 = None
 
 if transformer.config.in_channels != vae.config.latent_channels and config['transformer_additional_kwargs'].get('enable_clip_in_inpaint', True):
@@ -199,56 +223,30 @@ scheduler = Choosen_Scheduler.from_pretrained(
     model_name, 
     subfolder="scheduler"
 )
-if config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
-    if transformer.config.in_channels != vae.config.latent_channels:
-        pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
-            model_name,
-            text_encoder=text_encoder,
-            text_encoder_2=text_encoder_2,
-            tokenizer=tokenizer,
-            tokenizer_2=tokenizer_2,
-            vae=vae,
-            transformer=transformer,
-            scheduler=scheduler,
-            torch_dtype=weight_dtype,
-            clip_image_encoder=clip_image_encoder,
-            clip_image_processor=clip_image_processor,
-        )
-    else:
-        pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
-            model_name,
-            text_encoder=text_encoder,
-            text_encoder_2=text_encoder_2,
-            tokenizer=tokenizer,
-            tokenizer_2=tokenizer_2,
-            vae=vae,
-            transformer=transformer,
-            scheduler=scheduler,
-            torch_dtype=weight_dtype
-        )
+
+if transformer.config.in_channels != vae.config.latent_channels:
+    pipeline = EasyAnimateInpaintPipeline(
+        text_encoder=text_encoder,
+        text_encoder_2=text_encoder_2,
+        tokenizer=tokenizer,
+        tokenizer_2=tokenizer_2,
+        vae=vae,
+        transformer=transformer,
+        scheduler=scheduler,
+        clip_image_encoder=clip_image_encoder,
+        clip_image_processor=clip_image_processor,
+    ).to(weight_dtype)
 else:
-    if transformer.config.in_channels != vae.config.latent_channels:
-        pipeline = EasyAnimateInpaintPipeline.from_pretrained(
-            model_name,
-            text_encoder=text_encoder,
-            tokenizer=tokenizer,
-            vae=vae,
-            transformer=transformer,
-            scheduler=scheduler,
-            torch_dtype=weight_dtype,
-            clip_image_encoder=clip_image_encoder,
-            clip_image_processor=clip_image_processor,
-        )
-    else:
-        pipeline = EasyAnimatePipeline.from_pretrained(
-            model_name,
-            text_encoder=text_encoder,
-            tokenizer=tokenizer,
-            vae=vae,
-            transformer=transformer,
-            scheduler=scheduler,
-            torch_dtype=weight_dtype
-        )
+    pipeline = EasyAnimatePipeline(
+        text_encoder=text_encoder,
+        text_encoder_2=text_encoder_2,
+        tokenizer=tokenizer,
+        tokenizer_2=tokenizer_2,
+        vae=vae,
+        transformer=transformer,
+        scheduler=scheduler,
+    ).to(weight_dtype)
+
 if GPU_memory_mode == "sequential_cpu_offload":
     pipeline.enable_sequential_cpu_offload()
 elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
@@ -283,7 +281,7 @@ with torch.no_grad():
             video        = input_video,
             mask_video   = input_video_mask,
             clip_image   = clip_image, 
-        ).videos
+        ).frames
     else:
         sample = pipeline(
             prompt, 
@@ -294,7 +292,7 @@ with torch.no_grad():
             generator   = generator,
             guidance_scale = guidance_scale,
             num_inference_steps = num_inference_steps,
-        ).videos
+        ).frames
 
 if lora_path is not None:
     pipeline = unmerge_lora(pipeline, lora_path, lora_weight)

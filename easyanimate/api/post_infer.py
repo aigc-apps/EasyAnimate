@@ -54,14 +54,14 @@ if __name__ == '__main__':
     # -------------------------- #
     #  Step 1: update edition
     # -------------------------- #
-    edition = "v5"
+    edition = "v5.1"
     outputs = post_update_edition(edition)
     print('Output update edition: ', outputs)
 
     # -------------------------- #
     #  Step 2: update edition
     # -------------------------- #
-    diffusion_transformer_path = "models/Diffusion_Transformer/EasyAnimateV5-12b-zh-InP"
+    diffusion_transformer_path = "models/Diffusion_Transformer/EasyAnimateV5.1-12b-zh-InP"
     outputs = post_diffusion_transformer(diffusion_transformer_path)
     print('Output update edition: ', outputs)
 

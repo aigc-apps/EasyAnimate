@@ -4,8 +4,9 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn.functional as F
-from diffusers.models.embeddings import (PixArtAlphaTextProjection, get_timestep_embedding,
-                                         TimestepEmbedding, Timesteps)
+from diffusers.models.embeddings import (PixArtAlphaTextProjection,
+                                         TimestepEmbedding, Timesteps,
+                                         get_timestep_embedding)
 from einops import rearrange
 from torch import nn
 
