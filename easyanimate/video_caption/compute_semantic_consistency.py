@@ -170,8 +170,18 @@ def main():
 
         for idx, batch in enumerate(tqdm(video_loader)):
             if len(batch) > 0:
-                batch_video_path = batch["path"]
-                batch_frame = batch["sampled_frame"]
+                batch_video_path = []
+                batch_frame = []
+                batch_sampled_frame_idx = []
+                # At least two frames are required to calculate cross-frame semantic consistency.
+                for path, frame, frame_idx in zip(batch["path"], batch["sampled_frame"], batch["sampled_frame_idx"]):
+                    if len(frame) > 1:
+                        batch_video_path.append(path)
+                        batch_frame.append(frame)
+                        batch_sampled_frame_idx.append(frame_idx)
+                    else:
+                        logger.warning(f"Skip {path} because it only has {len(frame)} frames.")
+
                 frame_num_list = [len(video_frames) for video_frames in batch_frame]
                 # [B, T, H, W, C] => [(B * T), H, W, C]
                 reshaped_batch_frame = [frame for video_frames in batch_frame for frame in video_frames]
@@ -197,7 +207,7 @@ def main():
                 result_dict[args.video_path_column].extend(saved_video_path_list)
                 result_dict["similarity_cross_frame"].extend(batch_simi_cross_frame)
                 result_dict["similarity_mean"].extend(batch_similarity_mean)
-                result_dict["sample_frame_idx"].extend(batch["sampled_frame_idx"])
+                result_dict["sample_frame_idx"].extend(batch_sampled_frame_idx)
 
             # Save the metadata in the main process every saved_freq.
             if (idx % args.saved_freq) == 0 or idx == len(video_loader) - 1:
