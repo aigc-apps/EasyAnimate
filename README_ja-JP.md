@@ -140,8 +140,6 @@ EasyAnimateV5-12Bは異なるGPUで25ステップ生成する時間は次の通�
 | A10 24GB |約120秒 (4.8s/it)|約240秒 (9.6s/it)|約320秒 (12.7s/it)|約750秒 (29.8s/it)| ❌ | ❌ |
 | A100 80GB |約45秒 (1.75s/it)|約90秒 (3.7s/it)|約120秒 (4.7s/it)|約300秒 (11.4s/it)|約265秒 (10.6s/it)| 約710秒 (28.3s/it)|
 
-(⭕️) はlow_gpu_memory_mode=Trueの条件で実行可能であるが、速度が遅くなることを示しています。また、❌は実行できないことを示します。
-
 <details>
   <summary>(廃止予定) EasyAnimateV3:</summary>
 EasyAnimateV3のビデオサイズは異なるGPUメモリにより生成できます。以下の表をご覧ください：
@@ -152,6 +150,8 @@ EasyAnimateV3のビデオサイズは異なるGPUメモリにより生成でき�
 | 24GB | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
 | 40GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 80GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+(⭕️) はlow_gpu_memory_mode=Trueの条件で実行可能であるが、速度が遅くなることを示しています。また、❌は実行できないことを示します。
 </details>
 
 #### b. 重み
@@ -168,24 +168,21 @@ EasyAnimateV5:
 ```
 
 # ビデオ結果
-表示されている結果はすべて画像からの生成に基づいています。
 
-### EasyAnimateV5-12b-zh-InP
-
-#### I2V
+### Image to Video with EasyAnimateV5.1-12b-zh-InP
 <table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
   <tr>
       <td>
-          <video src="https://github.com/user-attachments/assets/bb393b7c-ba33-494c-ab06-b314adea9fc1" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/74a23109-f555-4026-a3d8-1ac27bb3884c" width="100%" controls autoplay loop></video>
       </td>
       <td>
-          <video src="https://github.com/user-attachments/assets/cb0d0253-919d-4dd6-9dc1-5cd94443c7f1" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/ab5aab27-fbd7-4f55-add9-29644125bde7" width="100%" controls autoplay loop></video>
       </td>
        <td>
-          <video src="https://github.com/user-attachments/assets/09ed361f-c0c5-4025-aad7-71fe1a1a52b1" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/238043c2-cdbd-4288-9857-a273d96f021f" width="100%" controls autoplay loop></video>
      </td>
       <td>
-          <video src="https://github.com/user-attachments/assets/9f42848d-34eb-473f-97ea-a5ebd0268106" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/48881a0e-5513-4482-ae49-13a0ad7a2557" width="100%" controls autoplay loop></video>
      </td>
   </tr>
 </table>
@@ -194,16 +191,17 @@ EasyAnimateV5:
 <table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
   <tr>
       <td>
-          <video src="https://github.com/user-attachments/assets/903fda91-a0bd-48ee-bf64-fff4e4d96f17" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/3e7aba7f-6232-4f39-80a8-6cfae968f38c" width="100%" controls autoplay loop></video>
       </td>
       <td>
-          <video src="https://github.com/user-attachments/assets/407c6628-9688-44b6-b12d-77de10fbbe95" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/986d9f77-8dc3-45fa-bc9d-8b26023fffbc" width="100%" controls autoplay loop></video>
       </td>
        <td>
-          <video src="https://github.com/user-attachments/assets/ccf30ec1-91d2-4d82-9ce0-fcc585fc2f21" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/7f62795a-2b3b-4c14-aeb1-1230cb818067" width="100%" controls autoplay loop></video>
      </td>
       <td>
-          <video src="https://github.com/user-attachments/assets/5dfe0f92-7d0d-43e0-b7df-0ff7b325663c" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/b581df84-ade1-4605-a7a8-fd735ce3e222
+          " width="100%" controls autoplay loop></video>
      </td>
   </tr>
 </table>
@@ -211,34 +209,34 @@ EasyAnimateV5:
 <table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
   <tr>
       <td>
-          <video src="https://github.com/user-attachments/assets/2b542b85-be19-4537-9607-9d28ea7e932e" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/eab1db91-1082-4de2-bb0a-d97fd25ceea1" width="100%" controls autoplay loop></video>
       </td>
       <td>
-          <video src="https://github.com/user-attachments/assets/c1662745-752d-4ad2-92bc-fe53734347b2" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/3fda0e96-c1a8-4186-9c4c-043e11420f05" width="100%" controls autoplay loop></video>
       </td>
        <td>
-          <video src="https://github.com/user-attachments/assets/8bec3d66-50a3-4af5-a381-be2c865825a0" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/4b53145d-7e98-493a-83c9-4ea4f5b58289" width="100%" controls autoplay loop></video>
      </td>
       <td>
-          <video src="https://github.com/user-attachments/assets/bcec22f4-732c-446f-958c-2ebbfd8f94be" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/75f7935f-17a8-4e20-b24c-b61479cf07fc" width="100%" controls autoplay loop></video>
      </td>
   </tr>
 </table>
 
-#### T2V
+### Text to Video with EasyAnimateV5.1-12b-zh
 <table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
   <tr>
       <td>
-          <video src="https://github.com/user-attachments/assets/eccb0797-4feb-48e9-91d3-5769ce30142b" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/8818dae8-e329-4b08-94fa-00d923f38fd2" width="100%" controls autoplay loop></video>
       </td>
       <td>
-          <video src="https://github.com/user-attachments/assets/76b3db64-9c7a-4d38-8854-dba940240ceb" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/d3e483c3-c710-47d2-9fac-89f732f2260a" width="100%" controls autoplay loop></video>
       </td>
        <td>
-          <video src="https://github.com/user-attachments/assets/0b8fab66-8de7-44ff-bd43-8f701bad6bb7" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/4dfa2067-d5d4-4741-a52c-97483de1050d" width="100%" controls autoplay loop></video>
      </td>
       <td>
-          <video src="https://github.com/user-attachments/assets/9fbddf5f-7fcd-4cc6-9d7c-3bdf1d4ce59e" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/fb44c2db-82c6-427e-9297-97dcce9a4948" width="100%" controls autoplay loop></video>
      </td>
   </tr>
 </table>
@@ -246,22 +244,38 @@ EasyAnimateV5:
 <table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
   <tr>
       <td>
-          <video src="https://github.com/user-attachments/assets/19c1742b-e417-45ac-97d6-8bf3a80d8e13" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/dc6b8eaf-f21b-4576-a139-0e10438f20e4" width="100%" controls autoplay loop></video>
       </td>
       <td>
-          <video src="https://github.com/user-attachments/assets/641e56c8-a3d9-489d-a3a6-42c50a9aeca1" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/b3f8fd5b-c5c8-44ee-9b27-49105a08fbff" width="100%" controls autoplay loop></video>
       </td>
        <td>
-          <video src="https://github.com/user-attachments/assets/2b16be76-518b-44c6-a69b-5c49d76df365" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/a68ed61b-eed3-41d2-b208-5f039bf2788e" width="100%" controls autoplay loop></video>
      </td>
       <td>
-          <video src="https://github.com/user-attachments/assets/e7d9c0fc-136f-405c-9fab-629389e196be" width="100%" controls autoplay loop></video>
+          <video src="https://github.com/user-attachments/assets/4e33f512-0126-4412-9ae8-236ff08bcd21" width="100%" controls autoplay loop></video>
      </td>
   </tr>
 </table>
 
-### EasyAnimateV5-12b-zh-Control
+### Control Video with EasyAnimateV5.1-12b-zh-Control
 
+Trajectory Control:
+<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
+  <tr>
+      <td>
+          <video src="https://github.com/user-attachments/assets/bf3b8970-ca7b-447f-8301-72dfe028055b" width="100%" controls autoplay loop></video>
+      </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/63a7057b-573e-4f73-9d7b-8f8001245af4" width="100%" controls autoplay loop></video>
+      </td>
+       <td>
+          <video src="https://github.com/user-attachments/assets/090ac2f3-1a76-45cf-abe5-4e326113389b" width="100%" controls autoplay loop></video>
+     </td>
+  <tr>
+</table>
+
+Generic Control Video (Canny, Pose, Depth, etc.):
 <table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
   <tr>
       <td>
@@ -286,32 +300,105 @@ EasyAnimateV5:
   </tr>
 </table>
 
+### Camera Control with EasyAnimateV5.1-12b-zh-Control-Camera
+
+<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
+  <tr>
+      <td>
+          Pan Up
+      </td>
+      <td>
+          Pan Left
+      </td>
+       <td>
+          Pan Right
+     </td>
+  <tr>
+      <td>
+          <video src="https://github.com/user-attachments/assets/a88f81da-e263-4038-a5b3-77b26f79719e" width="100%" controls autoplay loop></video>
+      </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/e346c59d-7bca-4253-97fb-8cbabc484afb" width="100%" controls autoplay loop></video>
+      </td>
+       <td>
+          <video src="https://github.com/user-attachments/assets/4de470d4-47b7-46e3-82d3-b714a2f6aef6" width="100%" controls autoplay loop></video>
+     </td>
+  <tr>
+      <td>
+          Pan Down
+      </td>
+      <td>
+          Pan Up + Pan Left
+      </td>
+       <td>
+          Pan Up + Pan Right
+     </td>
+  <tr>
+      <td>
+          <video src="https://github.com/user-attachments/assets/7a3fecc2-d41a-4de3-86cd-5e19aea34a0d" width="100%" controls autoplay loop></video>
+      </td>
+      <td>
+          <video src="https://github.com/user-attachments/assets/cb281259-28b6-448e-a76f-643c3465672e" width="100%" controls autoplay loop></video>
+      </td>
+       <td>
+          <video src="https://github.com/user-attachments/assets/44faf5b6-d83c-4646-9436-971b2b9c7216" width="100%" controls autoplay loop></video>
+     </td>
+  </tr>
+</table>
 
 # 使い方
 
 <h3 id="video-gen">1. 推論 </h3>
 
-#### a. Pythonコードを使用する
-- ステップ1：対応する[重み](#model-zoo)をダウンロードし、modelsフォルダに配置します。
-- ステップ2：predict_t2v.pyファイルでprompt、neg_prompt、guidance_scale、およびseedを変更します。
-- ステップ3：predict_t2v.pyファイルを実行し、生成された結果を待ちます。結果はsamples/easyanimate-videosフォルダに保存されます。
-- ステップ4：他のバックボーンとLoraを組み合わせたい場合は、状況に応じてpredict_t2v.pyおよびLora_pathを変更します。
+#### a、メモリ節約策
+EasyAnimateV5およびV5.1のパラメータが非常に大きいため、消費者向けグラフィックスカードに適応させるためにメモリの節約策を考慮する必要があります。各予測ファイルにはGPU_memory_modeを提供しており、model_cpu_offload、model_cpu_offload_and_qfloat8、sequential_cpu_offloadから選択することができます。
 
-#### b. WebUIを使用する
-- ステップ1：対応する[重み](#model-zoo)をダウンロードし、modelsフォルダに配置します。
-- ステップ2：app.pyファイルを実行してグラフページに入ります。
-- ステップ3：ページに基づいて生成モデルを選択し、prompt、neg_prompt、guidance_scale、およびseedを入力し、生成をクリックして生成結果を待ちます。結果はsamplesフォルダに保存されます。
+- model_cpu_offloadは、使用後にモデル全体がCPUに移動することを示し、メモリの一部を節約できます。
+- model_cpu_offload_and_qfloat8は、使用後にモデル全体がCPUに移動し、トランスフォーマーモデルをfloat8に量子化することを示し、さらに多くのメモリを節約できます。
+- sequential_cpu_offloadは、使用後に各レイヤーが順次CPUに移動することを示し、速度は遅くなりますが、大量のメモリを節約できます。
 
-#### c. ComfyUIから
-詳細は[ComfyUI README](comfyui/README.md)を参照してください。
+qfloat8はモデルの性能を低下させますが、さらに多くのメモリを節約できます。メモリが十分にある場合は、model_cpu_offloadを使用することをお勧めします。
 
-#### d. GPUメモリ節約スキーム
+#### b、ComfyUIを使用する
+詳細は[ComfyUI README](comfyui/README.md)をご覧ください。
 
-EasyAnimateV5のパラメータが大きいため、メモリを節約するためにGPUメモリ節約スキームを検討する必要があります。各予測ファイルには、`GPU_memory_mode`オプションがあり、`model_cpu_offload`、`model_cpu_offload_and_qfloat8`、および`sequential_cpu_offload`から選択できます。
+#### c、pythonファイルを実行する
+- ステップ1：対応する[重み](#model-zoo)をダウンロードし、modelsフォルダに入れます。
+- ステップ2：異なる重みと予測目標に応じて異なるファイルを使用して予測を行います。
+  - テキストからビデオの生成：
+    - predict_t2v.pyファイルでprompt、neg_prompt、guidance_scale、seedを変更します。
+    - 次にpredict_t2v.pyファイルを実行し、生成結果を待ちます。結果はsamples/easyanimate-videosフォルダに保存されます。
+  - 画像からビデオの生成：
+    - predict_i2v.pyファイルでvalidation_image_start、validation_image_end、prompt、neg_prompt、guidance_scale、seedを変更します。
+    - validation_image_startはビデオの開始画像、validation_image_endはビデオの終了画像です。
+    - 次にpredict_i2v.pyファイルを実行し、生成結果を待ちます。結果はsamples/easyanimate-videos_i2vフォルダに保存されます。
+  - ビデオからビデオの生成：
+    - predict_v2v.pyファイルでvalidation_video、validation_image_end、prompt、neg_prompt、guidance_scale、seedを変更します。
+    - validation_videoはビデオの参照ビデオです。以下のビデオを使用してデモを実行できます：[デモビデオ](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/cogvideox_fun/asset/v1/play_guitar.mp4)
+    - 次にpredict_v2v.pyファイルを実行し、生成結果を待ちます。結果はsamples/easyanimate-videos_v2vフォルダに保存されます。
+  - 通常のコントロールビデオ生成（Canny、Pose、Depthなど）：
+    - predict_v2v_control.pyファイルでcontrol_video、validation_image_end、prompt、neg_prompt、guidance_scale、seedを変更します。
+    - control_videoはCanny、Pose、Depthなどのフィルタを適用した後のビデオです。以下のビデオを使用してデモを実行できます：[デモビデオ](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/cogvideox_fun/asset/v1.1/pose.mp4)
+    - 次にpredict_v2v_control.pyファイルを実行し、生成結果を待ちます。結果はsamples/easyanimate-videos_v2v_controlフォルダに保存されます。
+  - トラジェクトリーコントロールビデオ：
+    - predict_v2v_control.pyファイルでcontrol_video、ref_image、validation_image_end、prompt、neg_prompt、guidance_scale、seedを変更します。
+    - control_videoはトラジェクトリーコントロールビデオのコントロールビデオ、ref_imageは参照の初期フレーム画像です。以下の画像とコントロールビデオを使用してデモを実行できます：[デモ画像](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v5.1/dog.png)、[デモビデオ](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v5.1/trajectory_demo.mp4)
+    - 次にpredict_v2v_control.pyファイルを実行し、生成結果を待ちます。結果はsamples/easyanimate-videos_v2v_controlフォルダに保存されます。
+    - 交互利用にComfyUIの使用を推奨します。
+  - カメラコントロールビデオ：
+    - predict_v2v_control.pyファイルでcontrol_video、ref_image、validation_image_end、prompt、neg_prompt、guidance_scale、seedを変更します。
+    - control_camera_txtはカメラコントロールビデオのコントロールファイル、ref_imageは参照の初期フレーム画像です。以下の画像とコントロールビデオを使用してデモを実行できます：[デモ画像](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/cogvideox_fun/asset/v1/firework.png)、[デモファイル（CameraCtrlから）](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v5.1/0a3b5fb184936a83.txt)
+    - 次にpredict_v2v_control.pyファイルを実行し、生成結果を待ちます。結果はsamples/easyanimate-videos_v2v_controlフォルダに保存されます。
+    - 交互利用にComfyUIの使用を推奨します。
+- ステップ3：他のトレーニング済みバックボーンとLoraを組み合わせたい場合、predict_t2v.pyでpredict_t2v.pyとlora_pathを適宜変更してください。
 
-- `model_cpu_offload`は、使用後にモデル全体がCPUにオフロードされることを示し、一部のGPUメモリを節約します。
-- `model_cpu_offload_and_qfloat8`は、使用後にモデル全体がCPUにオフロードされ、トランスフォーマーモデルがfloat8に量子化され、さらに多くのGPUメモリを節約します。
-- `sequential_cpu_offload`は、使用後にモデルの各層がCPUにオフロードされることを意味し、速度は遅くなりますが、大量のGPUメモリを節約します。
+#### d、UIインターフェイスを使用する
+
+webuiはテキストからビデオ、画像からビデオ、ビデオからビデオ、および通常のコントロールビデオ（Canny、Pose、Depthなど）の生成をサポートしています。
+
+- ステップ1：対応する[重み](#model-zoo)をダウンロードし、modelsフォルダに入れます。
+- ステップ2：app.pyファイルを実行し、gradioページに入ります。
+- ステップ3：ページで生成モデルを選択し、prompt、neg_prompt、guidance_scale、seedなどを入力して生成をクリックし、生成結果を待ちます。結果はsampleフォルダに保存されます。
 
 ### 2. モデルトレーニング
 完全なEasyAnimateトレーニングパイプラインには、データ前処理、Video VAEトレーニング、およびVideo DiTトレーニングが含まれる必要があります。これらの中で、Video VAEトレーニングはオプションです。すでにトレーニング済みのVideo VAEを提供しているためです。
@@ -402,7 +489,16 @@ sh scripts/train.sh
 
 # モデルズー
 
-EasyAnimateV5:
+12B:
+| 名前 | タイプ | ストレージスペース | Hugging Face | モデルスコープ | 説明 |
+|--|--|--|--|--|--|
+| EasyAnimateV5.1-12b-zh-InP | EasyAnimateV5.1 | 39 GB | [🤗リンク](https://huggingface.co/alibaba-pai/EasyAnimateV5.1-12b-zh-InP) | [😄リンク](https://modelscope.cn/models/PAI/EasyAnimateV5.1-12b-zh-InP) | 公式の画像からビデオへの変換用の重み。支持多解像度（512、768、1024）的ビデオ予測、49フレームで毎秒8フレームの訓練、多言語予測をサポート |
+| EasyAnimateV5.1-12b-zh-Control | EasyAnimateV5.1 | 39 GB | [🤗リンク](https://huggingface.co/alibaba-pai/EasyAnimateV5.1-12b-zh-Control) | [😄リンク](https://modelscope.cn/models/PAI/EasyAnimateV5.1-12b-zh-Control) | 公式のビデオ制御用の重み。Canny、Depth、Pose、MLSD、および軌道制御などのさまざまな制御条件をサポートします。支持多解像度（512、768、1024）的ビデオ予測、49フレームで毎秒8フレームの訓練、多言語予測をサポート |
+| EasyAnimateV5.1-12b-zh-Control-Camera | EasyAnimateV5.1 | 39 GB | [🤗リンク](https://huggingface.co/alibaba-pai/EasyAnimateV5.1-12b-zh-Control-Camera) | [😄リンク](https://modelscope.cn/models/PAI/EasyAnimateV5.1-12b-zh-Control-Camera) | 公式のビデオカメラ制御用の重み。カメラの動きの軌跡を入力することで方向生成を制御します。支持多解像度（512、768、1024）的ビデオ予測、49フレームで毎秒8フレームの訓練、多言語予測をサポート |
+| EasyAnimateV5.1-12b-zh | EasyAnimateV5.1 | 39 GB | [🤗リンク](https://huggingface.co/alibaba-pai/EasyAnimateV5.1-12b-zh) | [😄リンク](https://modelscope.cn/models/PAI/EasyAnimateV5.1-12b-zh) | 公式のテキストからビデオへの変換用の重み。支持多解像度（512、768、1024）的ビデオ予測、49フレームで毎秒8フレームの訓練、多言語予測をサポート |
+
+<details>
+  <summary>(Obsolete) EasyAnimateV5:</summary>
 
 7B:
 | 名前 | 種類 | ストレージスペース | Hugging Face | Model Scope | 説明 |
@@ -418,13 +514,14 @@ EasyAnimateV5:
 | EasyAnimateV5-12b-zh-Control | EasyAnimateV5 | 34 GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV5-12b-zh-Control) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV5-12b-zh-Control) | 公式の動画制御重み。Canny、Depth、Pose、MLSDなどのさまざまな制御条件をサポートします。複数の解像度（512、768、1024）での動画予測をサポートし、49フレーム、毎秒8フレームでトレーニングされ、中国語と英語のバイリンガル予測をサポートします。 |
 | EasyAnimateV5-12b-zh | EasyAnimateV5 | 34 GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV5-12b-zh) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV5-12b-zh) | 公式のテキストから動画への重み。複数の解像度（512、768、1024）での動画予測をサポートし、49フレーム、毎秒8フレームでトレーニングされ、中国語と英語のバイリンガル予測をサポートします。 |
 | EasyAnimateV5-Reward-LoRAs | EasyAnimateV5 | - | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV5-Reward-LoRAs) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV5-Reward-LoRAs) | 公式インバース伝播技術モデルによるEasyAnimateV 5-12 b生成ビデオの最適化によるヒト選好の最適化｜
+</details>
 
 <details>
   <summary>(Obsolete) EasyAnimateV4:</summary>
 
 | 名前 | 種類 | ストレージスペース | Hugging Face | Model Scope | 説明 |
 |--|--|--|--|--|--|
-| EasyAnimateV4-XL-2-InP.tar.gz | EasyAnimateV4 | 解凍前: 8.9 GB / 解凍後: 14.0 GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV4-XL-2-InP)| [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV4-XL-2-InP) | 公式のグラフ生成動画モデル。複数の解像度（512、768、1024、1280）での動画予測をサポートし、144フレーム、毎秒24フレームでトレーニングされています。 |
+| EasyAnimateV4-XL-2-InP | EasyAnimateV4 | 解凍前: 8.9 GB / 解凍後: 14.0 GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV4-XL-2-InP)| [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV4-XL-2-InP) | 公式のグラフ生成動画モデル。複数の解像度（512、768、1024、1280）での動画予測をサポートし、144フレーム、毎秒24フレームでトレーニングされています。 |
 </details>
 
 <details>
@@ -432,9 +529,9 @@ EasyAnimateV5:
 
 | 名前 | 種類 | ストレージスペース | Hugging Face | Model Scope | 説明 |
 |--|--|--|--|--|--|
-| EasyAnimateV3-XL-2-InP-512x512.tar | EasyAnimateV3 | 18.2GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-512x512)| [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV3-XL-2-InP-512x512) | EasyAnimateV3公式の512x512テキストおよび画像から動画への重み。144フレーム、毎秒24フレームでトレーニングされています。 |
-| EasyAnimateV3-XL-2-InP-768x768.tar | EasyAnimateV3 | 18.2GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-768x768) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV3-XL-2-InP-768x768) | EasyAnimateV3公式の768x768テキストおよび画像から動画への重み。144フレーム、毎秒24フレームでトレーニングされています。 |
-| EasyAnimateV3-XL-2-InP-960x960.tar | EasyAnimateV3 | 18.2GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-960x960) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV3-XL-2-InP-960x960) | EasyAnimateV3公式の960x960テキストおよび画像から動画への重み。144フレーム、毎秒24フレームでトレーニングされています。 |
+| EasyAnimateV3-XL-2-InP-512x512 | EasyAnimateV3 | 18.2GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-512x512)| [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV3-XL-2-InP-512x512) | EasyAnimateV3公式の512x512テキストおよび画像から動画への重み。144フレーム、毎秒24フレームでトレーニングされています。 |
+| EasyAnimateV3-XL-2-InP-768x768 | EasyAnimateV3 | 18.2GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-768x768) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV3-XL-2-InP-768x768) | EasyAnimateV3公式の768x768テキストおよび画像から動画への重み。144フレーム、毎秒24フレームでトレーニングされています。 |
+| EasyAnimateV3-XL-2-InP-960x960 | EasyAnimateV3 | 18.2GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV3-XL-2-InP-960x960) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV3-XL-2-InP-960x960) | EasyAnimateV3公式の960x960テキストおよび画像から動画への重み。144フレーム、毎秒24フレームでトレーニングされています。 |
 </details>
 
 <details>
@@ -442,8 +539,8 @@ EasyAnimateV5:
 
 | 名前 | 種類 | ストレージスペース | URL | Hugging Face | Model Scope | 説明 |
 |--|--|--|--|--|--|--|
-| EasyAnimateV2-XL-2-512x512.tar | EasyAnimateV2 | 16.2GB |  - | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV2-XL-2-512x512)| [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV2-XL-2-512x512) | EasyAnimateV2公式の512x512解像度の重み。144フレーム、毎秒24フレームでトレーニングされています。 |
-| EasyAnimateV2-XL-2-768x768.tar | EasyAnimateV2 | 16.2GB | - | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV2-XL-2-768x768) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV2-XL-2-768x768) | EasyAnimateV2公式の768x768解像度の重み。144フレーム、毎秒24フレームでトレーニングされています。 |
+| EasyAnimateV2-XL-2-512x512 | EasyAnimateV2 | 16.2GB |  - | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV2-XL-2-512x512)| [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV2-XL-2-512x512) | EasyAnimateV2公式の512x512解像度の重み。144フレーム、毎秒24フレームでトレーニングされています。 |
+| EasyAnimateV2-XL-2-768x768 | EasyAnimateV2 | 16.2GB | - | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV2-XL-2-768x768) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV2-XL-2-768x768) | EasyAnimateV2公式の768x768解像度の重み。144フレーム、毎秒24フレームでトレーニングされています。 |
 | easyanimatev2_minimalism_lora.safetensors | Lora of Pixart | 485.1MB | [ダウンロード](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/Personalized_Model/easyanimatev2_minimalism_lora.safetensors) | - | - | 特定のタイプの画像でトレーニングされたLora。画像は[URL](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/easyanimate/asset/v2/Minimalism.zip)からダウンロードできます。 |
 </details>
 
@@ -483,8 +580,12 @@ EasyAnimateV5:
 - Open-Sora-Plan: https://github.com/PKU-YuanGroup/Open-Sora-Plan
 - Open-Sora: https://github.com/hpcaitech/Open-Sora
 - Animatediff: https://github.com/guoyww/AnimateDiff
-- ComfyUI-EasyAnimateWrapper: https://github.com/kijai/ComfyUI-EasyAnimateWrapper
 - HunYuan DiT: https://github.com/tencent/HunyuanDiT
+- ComfyUI-KJNodes: https://github.com/kijai/ComfyUI-KJNodes
+- ComfyUI-EasyAnimateWrapper: https://github.com/kijai/ComfyUI-EasyAnimateWrapper
+- ComfyUI-CameraCtrl-Wrapper: https://github.com/chaojie/ComfyUI-CameraCtrl-Wrapper
+- CameraCtrl: https://github.com/hehao13/CameraCtrl
+- DragAnything: https://github.com/showlab/DragAnything
 
 # ライセンス
 このプロジェクトは[Apache License (Version 2.0)](https://github.com/modelscope/modelscope/blob/master/LICENSE)の下でライセンスされています。

@@ -1081,7 +1081,7 @@ class CreateTrajectoryBasedOnKJNodes:
             for i in range(len(coords)):
                 _image = np.zeros((frame_height, frame_width, 3))
                 center_coordinate = [coords[i][key] for key in coords[i]]
-                print(center_coordinate, np.shape(_image))
+
                 y1 = max(center_coordinate[1] - circle_size, 0)
                 y2 = min(center_coordinate[1] + circle_size, np.shape(_image)[0] - 1)
                 x1 = max(center_coordinate[0] - circle_size, 0)
