@@ -17,43 +17,42 @@ import torch
 from diffusers import (AutoencoderKL, DDIMScheduler,
                        DPMSolverMultistepScheduler,
                        EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
-                       PNDMScheduler)
+                       FlowMatchEulerDiscreteScheduler, PNDMScheduler)
 from diffusers.utils.import_utils import is_xformers_available
 from omegaconf import OmegaConf
 from PIL import Image
 from safetensors import safe_open
 from transformers import (BertModel, BertTokenizer, CLIPImageProcessor,
-                          CLIPVisionModelWithProjection, T5Tokenizer,
-                          T5EncoderModel, T5Tokenizer)
+                          CLIPVisionModelWithProjection, Qwen2Tokenizer,
+                          Qwen2VLForConditionalGeneration, T5EncoderModel,
+                          T5Tokenizer)
 
-from easyanimate.data.bucket_sampler import ASPECT_RATIO_512, get_closest_ratio
-from easyanimate.models import (name_to_autoencoder_magvit,
+from ..data.bucket_sampler import ASPECT_RATIO_512, get_closest_ratio
+from ..models import (name_to_autoencoder_magvit,
                                 name_to_transformer3d)
-from easyanimate.models.autoencoder_magvit import AutoencoderKLMagvit
-from easyanimate.models.transformer3d import (HunyuanTransformer3DModel,
-                                              Transformer3DModel)
-from easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
-from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
+from ..pipeline.pipeline_easyanimate import \
+    EasyAnimatePipeline
+from ..pipeline.pipeline_easyanimate_control import \
+    EasyAnimateControlPipeline
+from ..pipeline.pipeline_easyanimate_inpaint import \
     EasyAnimateInpaintPipeline
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import \
-    EasyAnimatePipeline_Multi_Text_Encoder
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import \
-    EasyAnimatePipeline_Multi_Text_Encoder_Inpaint
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_control import \
-    EasyAnimatePipeline_Multi_Text_Encoder_Control
-from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
-from easyanimate.utils.utils import (
+from ..utils.fp8_optimization import convert_weight_dtype_wrapper
+from ..utils.lora_utils import merge_lora, unmerge_lora
+from ..utils.utils import (
     get_image_to_video_latent, get_video_to_video_latent,
     get_width_and_height_from_image_and_base_resolution, save_videos_grid)
-from easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
 
-scheduler_dict = {
+ddpm_scheduler_dict = {
     "Euler": EulerDiscreteScheduler,
     "Euler A": EulerAncestralDiscreteScheduler,
     "DPM++": DPMSolverMultistepScheduler, 
     "PNDM": PNDMScheduler,
     "DDIM": DDIMScheduler,
 }
+flow_scheduler_dict = {
+    "Flow": FlowMatchEulerDiscreteScheduler,
+}
+all_cheduler_dict = {**ddpm_scheduler_dict, **flow_scheduler_dict}
 
 gradio_version = pkg_resources.get_distribution("gradio").version
 gradio_version_is_above_4 = True if int(gradio_version.split('.')[0]) >= 4 else False
@@ -100,8 +99,8 @@ class EasyAnimateController:
         self.GPU_memory_mode       = GPU_memory_mode
         
         self.weight_dtype          = weight_dtype
-        self.edition               = "v5"
-        self.inference_config      = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_v5_magvit_multi_text_encoder.yaml"))
+        self.edition               = "v5.1"
+        self.inference_config      = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_v5.1_magvit_qwen.yaml"))
 
     def refresh_diffusion_transformer(self):
         self.diffusion_transformer_list = sorted(glob(os.path.join(self.diffusion_transformer_dir, "*/")))
@@ -123,26 +122,37 @@ class EasyAnimateController:
         if edition == "v1":
             self.inference_config = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_v1_motion_module.yaml"))
             return gr.update(), gr.update(value="none"), gr.update(visible=True), gr.update(visible=True), \
+                gr.update(choices=list(ddpm_scheduler_dict.keys()), value=list(ddpm_scheduler_dict.keys())[0]), \
                 gr.update(value=512, minimum=384, maximum=704, step=32), \
                 gr.update(value=512, minimum=384, maximum=704, step=32), gr.update(value=80, minimum=40, maximum=80, step=1)
         elif edition == "v2":
             self.inference_config = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_v2_magvit_motion_module.yaml"))
             return gr.update(), gr.update(value="none"), gr.update(visible=False), gr.update(visible=False), \
+                gr.update(choices=list(ddpm_scheduler_dict.keys()), value=list(ddpm_scheduler_dict.keys())[0]), \
                 gr.update(value=672, minimum=128, maximum=1344, step=16), \
                 gr.update(value=384, minimum=128, maximum=1344, step=16), gr.update(value=144, minimum=9, maximum=144, step=9)
         elif edition == "v3":
             self.inference_config = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_v3_slicevae_motion_module.yaml"))
             return gr.update(), gr.update(value="none"), gr.update(visible=False), gr.update(visible=False), \
+                gr.update(choices=list(ddpm_scheduler_dict.keys()), value=list(ddpm_scheduler_dict.keys())[0]), \
                 gr.update(value=672, minimum=128, maximum=1344, step=16), \
                 gr.update(value=384, minimum=128, maximum=1344, step=16), gr.update(value=144, minimum=8, maximum=144, step=8)
         elif edition == "v4":
             self.inference_config = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_v4_slicevae_multi_text_encoder.yaml"))
             return gr.update(), gr.update(value="none"), gr.update(visible=False), gr.update(visible=False), \
+                gr.update(choices=list(ddpm_scheduler_dict.keys()), value=list(ddpm_scheduler_dict.keys())[0]), \
                 gr.update(value=672, minimum=128, maximum=1344, step=16), \
                 gr.update(value=384, minimum=128, maximum=1344, step=16), gr.update(value=144, minimum=8, maximum=144, step=8)
         elif edition == "v5":
             self.inference_config = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_v5_magvit_multi_text_encoder.yaml"))
             return gr.update(), gr.update(value="none"), gr.update(visible=False), gr.update(visible=False), \
+                gr.update(choices=list(ddpm_scheduler_dict.keys()), value=list(ddpm_scheduler_dict.keys())[0]), \
+                gr.update(value=672, minimum=128, maximum=1344, step=16), \
+                gr.update(value=384, minimum=128, maximum=1344, step=16), gr.update(value=49, minimum=1, maximum=49, step=4)
+        elif edition == "v5.1":
+            self.inference_config = OmegaConf.load(os.path.join(self.config_dir, "easyanimate_video_v5.1_magvit_qwen.yaml"))
+            return gr.update(), gr.update(value="none"), gr.update(visible=False), gr.update(visible=False), \
+                gr.update(choices=list(flow_scheduler_dict.keys()), value=list(flow_scheduler_dict.keys())[0]), \
                 gr.update(value=672, minimum=128, maximum=1344, step=16), \
                 gr.update(value=384, minimum=128, maximum=1344, step=16), gr.update(value=49, minimum=1, maximum=49, step=4)
 
@@ -181,26 +191,48 @@ class EasyAnimateController:
             tokenizer = BertTokenizer.from_pretrained(
                 diffusion_transformer_dropdown, subfolder="tokenizer"
             )
-            tokenizer_2 = T5Tokenizer.from_pretrained(
-                diffusion_transformer_dropdown, subfolder="tokenizer_2"
-            )
+            if self.inference_config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                tokenizer_2 = Qwen2Tokenizer.from_pretrained(
+                    os.path.join(diffusion_transformer_dropdown, "tokenizer_2")
+                )
+            else:
+                tokenizer_2 = T5Tokenizer.from_pretrained(
+                    diffusion_transformer_dropdown, subfolder="tokenizer_2"
+                )
         else:
-            tokenizer = T5Tokenizer.from_pretrained(
-                diffusion_transformer_dropdown, subfolder="tokenizer"
-            )
+            if self.inference_config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                tokenizer = Qwen2Tokenizer.from_pretrained(
+                    os.path.join(diffusion_transformer_dropdown, "tokenizer")
+                )
+            else:
+                tokenizer = T5Tokenizer.from_pretrained(
+                    diffusion_transformer_dropdown, subfolder="tokenizer"
+                )
             tokenizer_2 = None
 
         if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
             text_encoder = BertModel.from_pretrained(
                 diffusion_transformer_dropdown, subfolder="text_encoder", torch_dtype=self.weight_dtype
             )
-            text_encoder_2 = T5EncoderModel.from_pretrained(
-                diffusion_transformer_dropdown, subfolder="text_encoder_2", torch_dtype=self.weight_dtype
-            )
-        else:
-            text_encoder = T5EncoderModel.from_pretrained(
-                diffusion_transformer_dropdown, subfolder="text_encoder", torch_dtype=self.weight_dtype
-            )
+            if self.inference_config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                text_encoder_2 = Qwen2VLForConditionalGeneration.from_pretrained(
+                    os.path.join(diffusion_transformer_dropdown, "text_encoder_2"),
+                    torch_dtype=self.weight_dtype,
+                )
+            else:
+                text_encoder_2 = T5EncoderModel.from_pretrained(
+                    diffusion_transformer_dropdown, subfolder="text_encoder_2", torch_dtype=self.weight_dtype
+                )
+        else:  
+            if self.inference_config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                text_encoder = Qwen2VLForConditionalGeneration.from_pretrained(
+                    os.path.join(diffusion_transformer_dropdown, "text_encoder"),
+                    torch_dtype=self.weight_dtype,
+                )
+            else:
+                text_encoder = T5EncoderModel.from_pretrained(
+                    diffusion_transformer_dropdown, subfolder="text_encoder", torch_dtype=self.weight_dtype
+                )
             text_encoder_2 = None
 
         # Get pipeline
@@ -216,73 +248,40 @@ class EasyAnimateController:
             clip_image_processor = None
 
         # Get Scheduler
-        Choosen_Scheduler = scheduler_dict = {
-            "Euler": EulerDiscreteScheduler,
-            "Euler A": EulerAncestralDiscreteScheduler,
-            "DPM++": DPMSolverMultistepScheduler, 
-            "PNDM": PNDMScheduler,
-            "DDIM": DDIMScheduler,
-        }["Euler"]
-
+        if self.edition in ["v5.1"]:
+            Choosen_Scheduler = all_cheduler_dict["Flow"]
+        else:
+            Choosen_Scheduler = all_cheduler_dict["Euler"]
         scheduler = Choosen_Scheduler.from_pretrained(
             diffusion_transformer_dropdown, 
             subfolder="scheduler"
         )
 
         if self.model_type == "Inpaint":
-            if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
-                if self.transformer.config.in_channels != self.vae.config.latent_channels:
-                    self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
-                        diffusion_transformer_dropdown,
-                        text_encoder=text_encoder,
-                        text_encoder_2=text_encoder_2,
-                        tokenizer=tokenizer,
-                        tokenizer_2=tokenizer_2,
-                        vae=self.vae,
-                        transformer=self.transformer,
-                        scheduler=scheduler,
-                        torch_dtype=self.weight_dtype,
-                        clip_image_encoder=clip_image_encoder,
-                        clip_image_processor=clip_image_processor,
-                    )
-                else:
-                    self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
-                        diffusion_transformer_dropdown,
-                        text_encoder=text_encoder,
-                        text_encoder_2=text_encoder_2,
-                        tokenizer=tokenizer,
-                        tokenizer_2=tokenizer_2,
-                        vae=self.vae,
-                        transformer=self.transformer,
-                        scheduler=scheduler,
-                        torch_dtype=self.weight_dtype
-                    )
+            if self.transformer.config.in_channels != self.vae.config.latent_channels:
+                self.pipeline = EasyAnimateInpaintPipeline(
+                    text_encoder=text_encoder,
+                    text_encoder_2=text_encoder_2,
+                    tokenizer=tokenizer,
+                    tokenizer_2=tokenizer_2,
+                    vae=self.vae,
+                    transformer=self.transformer,
+                    scheduler=scheduler,
+                    clip_image_encoder=clip_image_encoder,
+                    clip_image_processor=clip_image_processor,
+                )
             else:
-                if self.transformer.config.in_channels != self.vae.config.latent_channels:
-                    self.pipeline = EasyAnimateInpaintPipeline(
-                        diffusion_transformer_dropdown,
-                        text_encoder=text_encoder,
-                        tokenizer=tokenizer,
-                        vae=self.vae,
-                        transformer=self.transformer,
-                        scheduler=scheduler,
-                        torch_dtype=self.weight_dtype,
-                        clip_image_encoder=clip_image_encoder,
-                        clip_image_processor=clip_image_processor,
-                    )
-                else:
-                    self.pipeline = EasyAnimatePipeline(
-                        diffusion_transformer_dropdown,
-                        text_encoder=text_encoder,
-                        tokenizer=tokenizer,
-                        vae=self.vae, 
-                        transformer=self.transformer,
-                        scheduler=scheduler,
-                        torch_dtype=self.weight_dtype
-                    )
+                self.pipeline = EasyAnimatePipeline(
+                    text_encoder=text_encoder,
+                    text_encoder_2=text_encoder_2,
+                    tokenizer=tokenizer,
+                    tokenizer_2=tokenizer_2,
+                    vae=self.vae,
+                    transformer=self.transformer,
+                    scheduler=scheduler,
+                )
         else:
-            self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Control.from_pretrained(
-                diffusion_transformer_dropdown,
+            self.pipeline = EasyAnimateControlPipeline(
                 text_encoder=text_encoder,
                 text_encoder_2=text_encoder_2,
                 tokenizer=tokenizer,
@@ -290,7 +289,6 @@ class EasyAnimateController:
                 vae=self.vae,
                 transformer=self.transformer,
                 scheduler=scheduler,
-                torch_dtype=self.weight_dtype
             )
 
         if self.GPU_memory_mode == "sequential_cpu_offload":
@@ -394,8 +392,10 @@ class EasyAnimateController:
         if self.base_model_path != base_model_dropdown:
             self.update_base_model(base_model_dropdown)
 
+        if self.motion_module_path != motion_module_dropdown:
+            self.update_motion_module(motion_module_dropdown)
+
         if self.lora_model_path != lora_model_dropdown:
-            print("Update lora model")
             self.update_lora_model(lora_model_dropdown)
 
         if control_video is not None and self.model_type == "Inpaint":
@@ -446,19 +446,21 @@ class EasyAnimateController:
             else:
                 raise gr.Error(f"If specifying the ending image of the video, please specify a starting image of the video.")
 
-        fps = {"v1": 12, "v2": 24, "v3": 24, "v4": 24, "v5": 8}[self.edition]
+        fps = {"v1": 12, "v2": 24, "v3": 24, "v4": 24, "v5": 8, "v5.1": 8}[self.edition]
         is_image = True if generation_method == "Image Generation" else False
-
-        if is_xformers_available() and not self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False): self.transformer.enable_xformers_memory_efficient_attention()
-
-        self.pipeline.scheduler = scheduler_dict[sampler_dropdown].from_config(self.pipeline.scheduler.config)
-        if self.lora_model_path != "none":
-            # lora part
-            self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider, device="cuda", dtype=self.weight_dtype)
 
         if int(seed_textbox) != -1 and seed_textbox != "": torch.manual_seed(int(seed_textbox))
         else: seed_textbox = np.random.randint(0, 1e10)
         generator = torch.Generator(device="cuda").manual_seed(int(seed_textbox))
+
+        if is_xformers_available() \
+            and self.inference_config['transformer_additional_kwargs'].get('transformer_type', 'Transformer3DModel') == 'Transformer3DModel':
+            self.transformer.enable_xformers_memory_efficient_attention()
+
+        self.pipeline.scheduler = all_cheduler_dict[sampler_dropdown].from_config(self.pipeline.scheduler.config)
+        if self.lora_model_path != "none":
+            # lora part
+            self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
         
         try:
             if self.model_type == "Inpaint":
@@ -500,7 +502,7 @@ class EasyAnimateController:
                                     video        = input_video,
                                     mask_video   = input_video_mask,
                                     strength     = 1,
-                                ).videos
+                                ).frames
                             
                             if init_frames != 0:
                                 mix_ratio = torch.from_numpy(
@@ -551,7 +553,7 @@ class EasyAnimateController:
                             video        = input_video,
                             mask_video   = input_video_mask,
                             strength     = strength,
-                        ).videos
+                        ).frames
                 else:
                     if self.vae.cache_mag_vae:
                         length_slider = int((length_slider - 1) // self.vae.mini_batch_encoder * self.vae.mini_batch_encoder) + 1
@@ -567,7 +569,7 @@ class EasyAnimateController:
                         height              = height_slider,
                         video_length        = length_slider if not is_image else 1,
                         generator           = generator
-                    ).videos
+                    ).frames
             else:
                 if self.vae.cache_mag_vae:
                     length_slider = int((length_slider - 1) // self.vae.mini_batch_encoder * self.vae.mini_batch_encoder) + 1
@@ -586,7 +588,7 @@ class EasyAnimateController:
                     generator           = generator,
 
                     control_video = input_video,
-                ).videos
+                ).frames
         except Exception as e:
             gc.collect()
             torch.cuda.empty_cache()
@@ -696,8 +698,8 @@ def ui(GPU_memory_mode, weight_dtype):
             with gr.Row():
                 easyanimate_edition_dropdown = gr.Dropdown(
                     label="The config of EasyAnimate Edition (EasyAnimate版本配置)",
-                    choices=["v1", "v2", "v3", "v4", "v5"],
-                    value="v5",
+                    choices=["v1", "v2", "v3", "v4", "v5", "v5.1"],
+                    value="v5.1",
                     interactive=True,
                 )
             gr.Markdown(
@@ -771,7 +773,7 @@ def ui(GPU_memory_mode, weight_dtype):
                 """
             )
             
-            prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
+            prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="A young woman with beautiful, clear eyes and blonde hair stands in the forest, wearing a white dress and a crown. Her expression is serene, reminiscent of a movie star, with fair and youthful skin. Her brown long hair flows in the wind. The video quality is very high, with a clear view. High quality, masterpiece, best quality, high resolution, ultra-fine, fantastical.")
             gr.Markdown(
                 """
                 Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics, text subtitles, line art." can increase stability. Adding words such as "quiet, solid" to the neg prompt can increase dynamism.   
@@ -783,7 +785,10 @@ def ui(GPU_memory_mode, weight_dtype):
             with gr.Row():
                 with gr.Column():
                     with gr.Row():
-                        sampler_dropdown   = gr.Dropdown(label="Sampling method (采样器种类)", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
+                        sampler_dropdown   = gr.Dropdown(
+                            label="Sampling method (采样器种类)", 
+                            choices=list(flow_scheduler_dict.keys()), value=list(flow_scheduler_dict.keys())[0]
+                        )
                         sample_step_slider = gr.Slider(label="Sampling steps (生成步数)", value=50, minimum=10, maximum=100, step=1)
                         
                     resize_method = gr.Radio(
@@ -820,11 +825,11 @@ def ui(GPU_memory_mode, weight_dtype):
                         template_gallery_path = ["asset/1.png", "asset/2.png", "asset/3.png", "asset/4.png", "asset/5.png"]
                         def select_template(evt: gr.SelectData):
                             text = {
-                                "asset/1.png": "The dog is shaking head. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
-                                "asset/2.png": "a sailboat sailing in rough seas with a dramatic sunset. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
-                                "asset/3.png": "a beautiful woman with long hair and a dress blowing in the wind. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
-                                "asset/4.png": "a man in an astronaut suit playing a guitar. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
-                                "asset/5.png": "fireworks display over night city. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                "asset/1.png": "A brown dog is shaking its head and sitting on a light colored sofa in a comfortable room. Behind the dog, there is a framed painting on the shelf surrounded by pink flowers. The soft and warm lighting in the room creates a comfortable atmosphere.", 
+                                "asset/2.png": "A sailboat navigates through moderately rough seas, with waves and ocean spray visible. The sailboat features a white hull and sails, accompanied by an orange sail catching the wind. The sky above shows dramatic, cloudy formations with a sunset or sunrise backdrop, casting warm colors across the scene. The water reflects the golden light, enhancing the visual contrast between the dark ocean and the bright horizon. The camera captures the scene with a dynamic and immersive angle, showcasing the movement of the boat and the energy of the ocean.", 
+                                "asset/3.png": "A stunningly beautiful woman with flowing long hair stands gracefully, her elegant dress rippling and billowing in the gentle wind. Petals falling off. Her serene expression and the natural movement of her attire create an enchanting and captivating scene, full of ethereal charm.", 
+                                "asset/4.png": "An astronaut, clad in a full space suit with a helmet, plays an electric guitar while floating in a cosmic environment filled with glowing particles and rocky textures. The scene is illuminated by a warm light source, creating dramatic shadows and contrasts. The background features a complex geometry, similar to a space station or an alien landscape, indicating a futuristic or otherworldly setting.", 
+                                "asset/5.png": "Fireworks light up the evening sky over a sprawling cityscape with gothic-style buildings featuring pointed towers and clock faces. The city is lit by both artificial lights from the buildings and the colorful bursts of the fireworks. The scene is viewed from an elevated angle, showcasing a vibrant urban environment set against a backdrop of a dramatic, partially cloudy sky at dusk.", 
                             }[template_gallery_path[evt.index]]
                             return template_gallery_path[evt.index], text
 
@@ -864,6 +869,7 @@ def ui(GPU_memory_mode, weight_dtype):
                         gr.Markdown(
                             """
                             Demo pose control video can be downloaded here [URL](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/cogvideox_fun/asset/v1.1/pose.mp4).
+                            Only normal controls are supported in app.py; trajectory control and camera control need ComfyUI, as shown in https://github.com/aigc-apps/EasyAnimate/tree/main/comfyui.
                             """
                         )
                         control_video = gr.Video(
@@ -953,6 +959,7 @@ def ui(GPU_memory_mode, weight_dtype):
                     diffusion_transformer_dropdown, 
                     motion_module_dropdown, 
                     motion_module_refresh_button, 
+                    sampler_dropdown, 
                     width_slider, 
                     height_slider, 
                     length_slider, 
@@ -1038,26 +1045,46 @@ class EasyAnimateController_Modelscope:
             tokenizer = BertTokenizer.from_pretrained(
                 model_name, subfolder="tokenizer"
             )
-            tokenizer_2 = T5Tokenizer.from_pretrained(
-                model_name, subfolder="tokenizer_2"
-            )
+            if self.inference_config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                tokenizer_2 = Qwen2Tokenizer.from_pretrained(
+                    os.path.join(model_name, "tokenizer_2")
+                )
+            else:
+                tokenizer_2 = T5Tokenizer.from_pretrained(
+                    model_name, subfolder="tokenizer_2"
+                )
         else:
-            tokenizer = T5Tokenizer.from_pretrained(
-                model_name, subfolder="tokenizer"
-            )
+            if self.inference_config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                tokenizer = Qwen2Tokenizer.from_pretrained(
+                    os.path.join(model_name, "tokenizer")
+                )
+            else:
+                tokenizer = T5Tokenizer.from_pretrained(
+                    model_name, subfolder="tokenizer"
+                )
             tokenizer_2 = None
 
         if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
             text_encoder = BertModel.from_pretrained(
                 model_name, subfolder="text_encoder", torch_dtype=self.weight_dtype
             )
-            text_encoder_2 = T5EncoderModel.from_pretrained(
-                model_name, subfolder="text_encoder_2", torch_dtype=self.weight_dtype
-            )
-        else:
-            text_encoder = T5EncoderModel.from_pretrained(
-                model_name, subfolder="text_encoder", torch_dtype=self.weight_dtype
-            )
+            if self.inference_config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                text_encoder_2 = Qwen2VLForConditionalGeneration.from_pretrained(
+                    os.path.join(model_name, "text_encoder_2"), torch_dtype=self.weight_dtype
+                )
+            else:
+                text_encoder_2 = T5EncoderModel.from_pretrained(
+                    model_name, subfolder="text_encoder_2", torch_dtype=self.weight_dtype
+                )
+        else:  
+            if self.inference_config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                text_encoder = Qwen2VLForConditionalGeneration.from_pretrained(
+                    os.path.join(model_name, "text_encoder"), torch_dtype=self.weight_dtype
+                )
+            else:
+                text_encoder = T5EncoderModel.from_pretrained(
+                    model_name, subfolder="text_encoder", torch_dtype=self.weight_dtype
+                )
             text_encoder_2 = None
 
         # Get pipeline
@@ -1073,73 +1100,40 @@ class EasyAnimateController_Modelscope:
             clip_image_processor = None
 
         # Get Scheduler
-        Choosen_Scheduler = scheduler_dict = {
-            "Euler": EulerDiscreteScheduler,
-            "Euler A": EulerAncestralDiscreteScheduler,
-            "DPM++": DPMSolverMultistepScheduler, 
-            "PNDM": PNDMScheduler,
-            "DDIM": DDIMScheduler,
-        }["Euler"]
-
+        if self.edition in ["v5.1"]:
+            Choosen_Scheduler = all_cheduler_dict["Flow"]
+        else:
+            Choosen_Scheduler = all_cheduler_dict["Euler"]
         scheduler = Choosen_Scheduler.from_pretrained(
             model_name, 
             subfolder="scheduler"
         )
 
         if model_type == "Inpaint":
-            if self.inference_config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
-                if self.transformer.config.in_channels != self.vae.config.latent_channels:
-                    self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
-                        model_name,
-                        text_encoder=text_encoder,
-                        text_encoder_2=text_encoder_2,
-                        tokenizer=tokenizer,
-                        tokenizer_2=tokenizer_2,
-                        vae=self.vae,
-                        transformer=self.transformer,
-                        scheduler=scheduler,
-                        torch_dtype=self.weight_dtype,
-                        clip_image_encoder=clip_image_encoder,
-                        clip_image_processor=clip_image_processor,
-                    )
-                else:
-                    self.pipeline = EasyAnimatePipeline_Multi_Text_Encoder.from_pretrained(
-                        model_name,
-                        text_encoder=text_encoder,
-                        text_encoder_2=text_encoder_2,
-                        tokenizer=tokenizer,
-                        tokenizer_2=tokenizer_2,
-                        vae=self.vae,
-                        transformer=self.transformer,
-                        scheduler=scheduler,
-                        torch_dtype=self.weight_dtype
-                    )
+            if self.transformer.config.in_channels != self.vae.config.latent_channels:
+                self.pipeline = EasyAnimateInpaintPipeline(
+                    text_encoder=text_encoder,
+                    text_encoder_2=text_encoder_2,
+                    tokenizer=tokenizer,
+                    tokenizer_2=tokenizer_2,
+                    vae=self.vae,
+                    transformer=self.transformer,
+                    scheduler=scheduler,
+                    clip_image_encoder=clip_image_encoder,
+                    clip_image_processor=clip_image_processor,
+                )
             else:
-                if self.transformer.config.in_channels != self.vae.config.latent_channels:
-                    self.pipeline = EasyAnimateInpaintPipeline(
-                        model_name,
-                        text_encoder=text_encoder,
-                        tokenizer=tokenizer,
-                        vae=self.vae,
-                        transformer=self.transformer,
-                        scheduler=scheduler,
-                        torch_dtype=self.weight_dtype,
-                        clip_image_encoder=clip_image_encoder,
-                        clip_image_processor=clip_image_processor,
-                    )
-                else:
-                    self.pipeline = EasyAnimatePipeline(
-                        model_name,
-                        text_encoder=text_encoder,
-                        tokenizer=tokenizer,
-                        vae=self.vae, 
-                        transformer=self.transformer,
-                        scheduler=scheduler,
-                        torch_dtype=self.weight_dtype
-                    )
+                self.pipeline = EasyAnimatePipeline(
+                    text_encoder=text_encoder,
+                    text_encoder_2=text_encoder_2,
+                    tokenizer=tokenizer,
+                    tokenizer_2=tokenizer_2,
+                    vae=self.vae,
+                    transformer=self.transformer,
+                    scheduler=scheduler
+                )
         else:
-            pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Control.from_pretrained(
-                model_name,
+            self.pipeline = EasyAnimateControlPipeline(
                 text_encoder=text_encoder,
                 text_encoder_2=text_encoder_2,
                 tokenizer=tokenizer,
@@ -1147,7 +1141,6 @@ class EasyAnimateController_Modelscope:
                 vae=self.vae,
                 transformer=self.transformer,
                 scheduler=scheduler,
-                torch_dtype=weight_dtype
             )
 
         if GPU_memory_mode == "sequential_cpu_offload":
@@ -1254,17 +1247,17 @@ class EasyAnimateController_Modelscope:
             else:
                 raise gr.Error(f"If specifying the ending image of the video, please specify a starting image of the video.")
 
-        fps = {"v1": 12, "v2": 24, "v3": 24, "v4": 24, "v5": 8}[self.edition]
+        fps = {"v1": 12, "v2": 24, "v3": 24, "v4": 24, "v5": 8, "v5.1": 8}[self.edition]
         is_image = True if generation_method == "Image Generation" else False
-
-        self.pipeline.scheduler = scheduler_dict[sampler_dropdown].from_config(self.pipeline.scheduler.config)
-        if self.lora_model_path != "none":
-            # lora part
-            self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider, device="cuda", dtype=self.weight_dtype)
 
         if int(seed_textbox) != -1 and seed_textbox != "": torch.manual_seed(int(seed_textbox))
         else: seed_textbox = np.random.randint(0, 1e10)
         generator = torch.Generator(device="cuda").manual_seed(int(seed_textbox))
+
+        self.pipeline.scheduler = all_cheduler_dict[sampler_dropdown].from_config(self.pipeline.scheduler.config)
+        if self.lora_model_path != "none":
+            # lora part
+            self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
         
         try:
             if self.model_type == "Inpaint":
@@ -1294,7 +1287,7 @@ class EasyAnimateController_Modelscope:
                         video        = input_video,
                         mask_video   = input_video_mask,
                         strength     = strength,
-                    ).videos
+                    ).frames
                 else:
                     sample = self.pipeline(
                         prompt_textbox,
@@ -1305,7 +1298,7 @@ class EasyAnimateController_Modelscope:
                         height              = height_slider,
                         video_length        = length_slider if not is_image else 1,
                         generator           = generator
-                    ).videos
+                    ).frames
             else:
                 if self.vae.cache_mag_vae:
                     length_slider = int((length_slider - 1) // self.vae.mini_batch_encoder * self.vae.mini_batch_encoder) + 1
@@ -1325,7 +1318,7 @@ class EasyAnimateController_Modelscope:
                     generator           = generator,
 
                     control_video = input_video,
-                ).videos
+                ).frames
         except Exception as e:
             gc.collect()
             torch.cuda.empty_cache()
@@ -1446,7 +1439,7 @@ def ui_modelscope(model_type, edition, config_path, model_name, savedir_sample, 
                 """
             )
 
-            prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
+            prompt_textbox = gr.Textbox(label="Prompt (正向提示词)", lines=2, value="A young woman with beautiful, clear eyes and blonde hair stands in the forest, wearing a white dress and a crown. Her expression is serene, reminiscent of a movie star, with fair and youthful skin. Her brown long hair flows in the wind. The video quality is very high, with a clear view. High quality, masterpiece, best quality, high resolution, ultra-fine, fantastical.")
             gr.Markdown(
                 """
                 Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics, text subtitles, line art." can increase stability. Adding words such as "quiet, solid" to the neg prompt can increase dynamism.   
@@ -1458,7 +1451,16 @@ def ui_modelscope(model_type, edition, config_path, model_name, savedir_sample, 
             with gr.Row():
                 with gr.Column():
                     with gr.Row():
-                        sampler_dropdown   = gr.Dropdown(label="Sampling method (采样器种类)", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
+                        if edition in ["v5.1"]:
+                            sampler_dropdown   = gr.Dropdown(
+                                label="Sampling method (采样器种类)", 
+                                choices=list(flow_scheduler_dict.keys()), value=list(flow_scheduler_dict.keys())[0]
+                            )
+                        else:
+                            sampler_dropdown   = gr.Dropdown(
+                                label="Sampling method (采样器种类)", 
+                                choices=list(ddpm_scheduler_dict.keys()), value=list(ddpm_scheduler_dict.keys())[0]
+                            )
                         sample_step_slider = gr.Slider(label="Sampling steps (生成步数)", value=50, minimum=10, maximum=50, step=1, interactive=False)
                     
                     if edition == "v1":
@@ -1512,11 +1514,11 @@ def ui_modelscope(model_type, edition, config_path, model_name, savedir_sample, 
                             template_gallery_path = ["asset/1.png", "asset/2.png", "asset/3.png", "asset/4.png", "asset/5.png"]
                             def select_template(evt: gr.SelectData):
                                 text = {
-                                    "asset/1.png": "The dog is shaking head. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
-                                    "asset/2.png": "a sailboat sailing in rough seas with a dramatic sunset. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
-                                    "asset/3.png": "a beautiful woman with long hair and a dress blowing in the wind. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
-                                    "asset/4.png": "a man in an astronaut suit playing a guitar. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
-                                    "asset/5.png": "fireworks display over night city. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                    "asset/1.png": "A brown dog is shaking its head and sitting on a light colored sofa in a comfortable room. Behind the dog, there is a framed painting on the shelf surrounded by pink flowers. The soft and warm lighting in the room creates a comfortable atmosphere.", 
+                                    "asset/2.png": "A sailboat navigates through moderately rough seas, with waves and ocean spray visible. The sailboat features a white hull and sails, accompanied by an orange sail catching the wind. The sky above shows dramatic, cloudy formations with a sunset or sunrise backdrop, casting warm colors across the scene. The water reflects the golden light, enhancing the visual contrast between the dark ocean and the bright horizon. The camera captures the scene with a dynamic and immersive angle, showcasing the movement of the boat and the energy of the ocean.", 
+                                    "asset/3.png": "A stunningly beautiful woman with flowing long hair stands gracefully, her elegant dress rippling and billowing in the gentle wind. Petals falling off. Her serene expression and the natural movement of her attire create an enchanting and captivating scene, full of ethereal charm.", 
+                                    "asset/4.png": "An astronaut, clad in a full space suit with a helmet, plays an electric guitar while floating in a cosmic environment filled with glowing particles and rocky textures. The scene is illuminated by a warm light source, creating dramatic shadows and contrasts. The background features a complex geometry, similar to a space station or an alien landscape, indicating a futuristic or otherworldly setting.", 
+                                    "asset/5.png": "Fireworks light up the evening sky over a sprawling cityscape with gothic-style buildings featuring pointed towers and clock faces. The city is lit by both artificial lights from the buildings and the colorful bursts of the fireworks. The scene is viewed from an elevated angle, showcasing a vibrant urban environment set against a backdrop of a dramatic, partially cloudy sky at dusk.", 
                                 }[template_gallery_path[evt.index]]
                                 return template_gallery_path[evt.index], text
 
@@ -1556,6 +1558,7 @@ def ui_modelscope(model_type, edition, config_path, model_name, savedir_sample, 
                             gr.Markdown(
                                 """
                                 Demo pose control video can be downloaded here [URL](https://pai-aigc-photog.oss-cn-hangzhou.aliyuncs.com/cogvideox_fun/asset/v1.1/pose.mp4).
+                                Only normal controls are supported in app.py; trajectory control and camera control need ComfyUI, as shown in https://github.com/aigc-apps/EasyAnimate/tree/main/comfyui.
                                 """
                             )
                             control_video = gr.Video(
@@ -1866,7 +1869,7 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                 """
             )
             
-            prompt_textbox = gr.Textbox(label="Prompt", lines=2, value="A young woman with beautiful and clear eyes and blonde hair standing and white dress in a forest wearing a crown. She seems to be lost in thought, and the camera focuses on her face. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.")
+            prompt_textbox = gr.Textbox(label="Prompt", lines=2, value="A young woman with beautiful, clear eyes and blonde hair stands in the forest, wearing a white dress and a crown. Her expression is serene, reminiscent of a movie star, with fair and youthful skin. Her brown long hair flows in the wind. The video quality is very high, with a clear view. High quality, masterpiece, best quality, high resolution, ultra-fine, fantastical.")
             gr.Markdown(
                 """
                 Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics, text subtitles, line art." can increase stability. Adding words such as "quiet, solid" to the neg prompt can increase dynamism.   
@@ -1878,7 +1881,16 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
             with gr.Row():
                 with gr.Column():
                     with gr.Row():
-                        sampler_dropdown   = gr.Dropdown(label="Sampling method", choices=list(scheduler_dict.keys()), value=list(scheduler_dict.keys())[0])
+                        if edition in ["v5.1"]:
+                            sampler_dropdown   = gr.Dropdown(
+                                label="Sampling method (采样器种类)", 
+                                choices=list(flow_scheduler_dict.keys()), value=list(flow_scheduler_dict.keys())[0]
+                            )
+                        else:
+                            sampler_dropdown   = gr.Dropdown(
+                                label="Sampling method (采样器种类)", 
+                                choices=list(ddpm_scheduler_dict.keys()), value=list(ddpm_scheduler_dict.keys())[0]
+                            )
                         sample_step_slider = gr.Slider(label="Sampling steps", value=50, minimum=10, maximum=50, step=1, interactive=False)
                     
                     if edition == "v1":
@@ -1927,11 +1939,11 @@ def ui_eas(edition, config_path, model_name, savedir_sample):
                             template_gallery_path = ["asset/1.png", "asset/2.png", "asset/3.png", "asset/4.png", "asset/5.png"]
                             def select_template(evt: gr.SelectData):
                                 text = {
-                                    "asset/1.png": "The dog is shaking head. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
-                                    "asset/2.png": "a sailboat sailing in rough seas with a dramatic sunset. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
-                                    "asset/3.png": "a beautiful woman with long hair and a dress blowing in the wind. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
-                                    "asset/4.png": "a man in an astronaut suit playing a guitar. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
-                                    "asset/5.png": "fireworks display over night city. The video is of high quality, and the view is very clear. High quality, masterpiece, best quality, highres, ultra-detailed, fantastic.", 
+                                    "asset/1.png": "A brown dog is shaking its head and sitting on a light colored sofa in a comfortable room. Behind the dog, there is a framed painting on the shelf surrounded by pink flowers. The soft and warm lighting in the room creates a comfortable atmosphere.", 
+                                    "asset/2.png": "A sailboat navigates through moderately rough seas, with waves and ocean spray visible. The sailboat features a white hull and sails, accompanied by an orange sail catching the wind. The sky above shows dramatic, cloudy formations with a sunset or sunrise backdrop, casting warm colors across the scene. The water reflects the golden light, enhancing the visual contrast between the dark ocean and the bright horizon. The camera captures the scene with a dynamic and immersive angle, showcasing the movement of the boat and the energy of the ocean.", 
+                                    "asset/3.png": "A stunningly beautiful woman with flowing long hair stands gracefully, her elegant dress rippling and billowing in the gentle wind. Petals falling off. Her serene expression and the natural movement of her attire create an enchanting and captivating scene, full of ethereal charm.", 
+                                    "asset/4.png": "An astronaut, clad in a full space suit with a helmet, plays an electric guitar while floating in a cosmic environment filled with glowing particles and rocky textures. The scene is illuminated by a warm light source, creating dramatic shadows and contrasts. The background features a complex geometry, similar to a space station or an alien landscape, indicating a futuristic or otherworldly setting.", 
+                                    "asset/5.png": "Fireworks light up the evening sky over a sprawling cityscape with gothic-style buildings featuring pointed towers and clock faces. The city is lit by both artificial lights from the buildings and the colorful bursts of the fireworks. The scene is viewed from an elevated angle, showcasing a vibrant urban environment set against a backdrop of a dramatic, partially cloudy sky at dusk.", 
                                 }[template_gallery_path[evt.index]]
                                 return template_gallery_path[evt.index], text
 

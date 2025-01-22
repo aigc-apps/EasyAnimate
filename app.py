@@ -19,7 +19,11 @@ if __name__ == "__main__":
     # 
     # "sequential_cpu_offload" means that each layer of the model will be moved to the CPU after use, 
     # resulting in slower speeds but saving a large amount of GPU memory.
-    GPU_memory_mode = "model_cpu_offload"
+    # 
+    # EasyAnimateV1, V2 and V3 support "model_cpu_offload" "sequential_cpu_offload"
+    # EasyAnimateV4, V5 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" "sequential_cpu_offload"
+    # EasyAnimateV5.1 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" 
+    GPU_memory_mode = "model_cpu_offload_and_qfloat8"
     # Use torch.float16 if GPU does not support torch.bfloat16
     # ome graphics cards, such as v100, 2080ti, do not support torch.bfloat16
     weight_dtype = torch.bfloat16
@@ -29,11 +33,11 @@ if __name__ == "__main__":
     server_port = 7860
 
     # Params below is used when ui_mode = "modelscope"
-    edition = "v5"
+    edition = "v5.1"
     # Config
-    config_path = "config/easyanimate_video_v5_magvit_multi_text_encoder.yaml"
+    config_path = "config/easyanimate_video_v5.1_magvit_qwen.yaml"
     # Model path of the pretrained model
-    model_name = "models/Diffusion_Transformer/EasyAnimateV5-12b-zh-InP"
+    model_name = "models/Diffusion_Transformer/EasyAnimateV5.1-12b-zh-InP"
     # "Inpaint" or "Control"
     model_type = "Inpaint"
     # Save dir

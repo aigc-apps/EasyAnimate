@@ -222,7 +222,7 @@
       },
       "widgets_values": [
         "EasyAnimateV5-12b-zh-Control",
-        "model_cpu_offload",
+        "model_cpu_offload_and_qfloat8",
         "Control",
         "easyanimate_video_v5_magvit_multi_text_encoder.yaml",
         "bf16"

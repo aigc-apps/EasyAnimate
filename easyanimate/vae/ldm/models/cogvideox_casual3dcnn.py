@@ -277,23 +277,23 @@ class AutoencoderKLMagvit_CogVideoX(pl.LightningModule):
                 training_list = list(self.decoder.parameters()) + list(self.post_quant_conv.parameters())
             else:
                 training_list = list(self.decoder.parameters())
-            opt_ae = torch.optim.Adam(training_list, lr=lr, betas=(0.5, 0.9))
+            opt_ae = torch.optim.AdamW(training_list, lr=lr, betas=(0.9, 0.999), weight_decay=5e-2)
         elif self.train_encoder_only:
             if self.quant_conv is not None:
                 training_list = list(self.encoder.parameters()) + list(self.quant_conv.parameters())
             else:
                 training_list = list(self.encoder.parameters())
-            opt_ae = torch.optim.Adam(training_list, lr=lr, betas=(0.5, 0.9))
+            opt_ae = torch.optim.AdamW(training_list, lr=lr, betas=(0.9, 0.999), weight_decay=5e-2)
         else:
             training_list = list(self.encoder.parameters()) + list(self.decoder.parameters())
             if self.quant_conv is not None:
                 training_list = training_list + list(self.quant_conv.parameters())
             if self.post_quant_conv is not None:
                 training_list = training_list + list(self.post_quant_conv.parameters())
-            opt_ae = torch.optim.Adam(training_list, lr=lr, betas=(0.5, 0.9))
-        opt_disc = torch.optim.Adam(
+            opt_ae = torch.optim.AdamW(training_list, lr=lr, betas=(0.9, 0.999), weight_decay=5e-2)
+        opt_disc = torch.optim.AdamW(
             list(self.loss.discriminator3d.parameters()) + list(self.loss.discriminator.parameters()),
-            lr=lr, betas=(0.5, 0.9)
+            lr=lr, betas=(0.9, 0.999), weight_decay=5e-2
         )
         return [opt_ae, opt_disc], []
 

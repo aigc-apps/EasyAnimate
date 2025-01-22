@@ -279,13 +279,13 @@ class AutoencoderKL(pl.LightningModule):
 
     def configure_optimizers(self):
         lr = self.learning_rate
-        opt_ae = torch.optim.Adam(list(self.encoder.parameters())+
+        opt_ae = torch.optim.AdamW(list(self.encoder.parameters())+
                                   list(self.decoder.parameters())+
                                   list(self.quant_conv.parameters())+
-                                  list(self.post_quant_conv.parameters()),
-                                  lr=lr, betas=(0.5, 0.9))
-        opt_disc = torch.optim.Adam(self.loss.discriminator.parameters(),
-                                    lr=lr, betas=(0.5, 0.9))
+                                  list(self.post_quant_conv.parameters()), \
+                                  lr=lr, betas=(0.9, 0.999), weight_decay=5e-2)
+        opt_disc = torch.optim.AdamW(self.loss.discriminator.parameters(),
+                                    lr=lr, betas=(0.9, 0.999), weight_decay=5e-2)
         return [opt_ae, opt_disc], []
 
     def get_last_layer(self):

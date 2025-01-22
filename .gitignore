@@ -8,6 +8,7 @@ _*
 __pycache__/
 *.py[cod]
 *$py.class
+scripts_demo*
 
 # C extensions
 *.so

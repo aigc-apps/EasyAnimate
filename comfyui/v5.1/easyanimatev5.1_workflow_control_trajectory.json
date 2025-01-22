@@ -1,0 +1,1038 @@
+{
+  "last_node_id": 119,
+  "last_link_id": 267,
+  "nodes": [
+    {
+      "id": 105,
+      "type": "EasyAnimate_TextBox",
+      "pos": {
+        "0": 234,
+        "1": 813
+      },
+      "size": {
+        "0": 400,
+        "1": 200
+      },
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "prompt",
+          "type": "STRING_PROMPT",
+          "links": [
+            258
+          ],
+          "slot_index": 0
+        }
+      ],
+      "title": "Negtive Prompt（反向提示词）",
+      "properties": {
+        "Node name for S&R": "EasyAnimate_TextBox"
+      },
+      "widgets_values": [
+        "扭曲的身体，肢体残缺，文本字幕，漫画，静止，丑陋，错误，乱码。"
+      ]
+    },
+    {
+      "id": 107,
+      "type": "Note",
+      "pos": {
+        "0": 4,
+        "1": 634
+      },
+      "size": {
+        "0": 210,
+        "1": 58
+      },
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": ""
+      },
+      "widgets_values": [
+        "You can write prompt here\n（你可以在此填写提示词）"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 108,
+      "type": "Note",
+      "pos": {
+        "0": -110,
+        "1": 842
+      },
+      "size": {
+        "0": 326.1556091308594,
+        "1": 145.20904541015625
+      },
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": ""
+      },
+      "widgets_values": [
+        "Using longer neg prompt such as \"Blurring, mutation, deformation, distortion, dark and solid, comics.\" can increase stability. Adding words such as \"quiet, solid\" to the neg prompt can increase dynamism.\n(使用更长的neg prompt如\"模糊，突变，变形，失真，画面暗，画面固定，连环画，漫画，线稿，没有主体。\"，可以增加稳定性。在neg prompt中添加\"安静，固定\"等词语可以增加动态性。)"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 112,
+      "type": "Note",
+      "pos": {
+        "0": -203,
+        "1": 252
+      },
+      "size": {
+        "0": 427.074951171875,
+        "1": 143.9142608642578
+      },
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": ""
+      },
+      "widgets_values": [
+        "Due to the large size of models from EasyAnimateV5 and above, when using the 12B model, if your graphics card has 24GB or less of VRAM, please set GPU_memory_mode to model_cpu_offload_and_qfloat8. This will load the model in float8 to reduce VRAM consumption, otherwise you may receive an out-of-memory error. \n（由于EasyAnimateV5以上的模型较大，当使用12B模型时，如果使用的显卡显存为24G及以下，请将GPU_memory_mode设置为model_cpu_offload_and_qfloat8，使得模型加载在float8上减少显存消耗，否则会提示显存不足。）"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 104,
+      "type": "EasyAnimate_TextBox",
+      "pos": {
+        "0": 233,
+        "1": 539
+      },
+      "size": {
+        "0": 400,
+        "1": 200
+      },
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "prompt",
+          "type": "STRING_PROMPT",
+          "links": [
+            257
+          ],
+          "slot_index": 0
+        }
+      ],
+      "title": "Positive Prompt（正向提示词）",
+      "properties": {
+        "Node name for S&R": "EasyAnimate_TextBox"
+      },
+      "widgets_values": [
+        "一只棕褐色的狗在摇晃脑袋，坐在一个舒适的房间里的浅色沙发上。在狗的后面，架子上有一幅镶框的画，周围是粉红色的花朵。房间里的灯光柔和温暖，营造出舒适的氛围。"
+      ]
+    },
+    {
+      "id": 100,
+      "type": "LoadImage",
+      "pos": {
+        "0": 238,
+        "1": 1165
+      },
+      "size": {
+        "0": 378.07147216796875,
+        "1": 314
+      },
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            260
+          ],
+          "slot_index": 0,
+          "shape": 3,
+          "label": "图像"
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null,
+          "shape": 3,
+          "label": "遮罩"
+        }
+      ],
+      "title": "Start Image（图片到视频的开始图片）",
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "1.png",
+        "image"
+      ]
+    },
+    {
+      "id": 110,
+      "type": "Note",
+      "pos": {
+        "0": 847,
+        "1": 613
+      },
+      "size": {
+        "0": 608.1410522460938,
+        "1": 188.2682342529297
+      },
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "text": ""
+      },
+      "widgets_values": [
+        "Please set the mask height and mask width according to the height and width of the reference image. \nPlease set the video_length of the Spline Editor below to be the same as the video_length of the Sampler above. \nThe nodes are from KJNodes. For more details, please check https://github.com/kijai/ComfyUI-KJNodes/tree/main. \n\n请根据参考图片的高和宽设置mask height和mask width；\n请将下方Spline Editor的video_legnth置的与上方Sampler的video_legnth一样；\n部分节点来自于KJNodes，具体查看https://github.com/kijai/ComfyUI-KJNodes/tree/main；"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 106,
+      "type": "VHS_VideoCombine",
+      "pos": {
+        "0": 1497,
+        "1": 204
+      },
+      "size": [
+        390,
+        546
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 261,
+          "slot_index": 0,
+          "label": "图像",
+          "shape": 7
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": null,
+          "label": "音频",
+          "shape": 7
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "label": "批次管理",
+          "shape": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null,
+          "slot_index": 0,
+          "shape": 3,
+          "label": "文件名"
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 8,
+        "loop_count": 0,
+        "filename_prefix": "EasyAnimate",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 22,
+        "save_metadata": true,
+        "pingpong": false,
+        "save_output": true,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "filename": "EasyAnimate_00105.mp4",
+            "subfolder": "",
+            "type": "output",
+            "format": "video/h264-mp4",
+            "frame_rate": 8
+          }
+        }
+      }
+    },
+    {
+      "id": 99,
+      "type": "LoadEasyAnimateModel",
+      "pos": {
+        "0": 242,
+        "1": 250
+      },
+      "size": {
+        "0": 402.6313781738281,
+        "1": 154
+      },
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "easyanimate_model",
+          "type": "EASYANIMATESMODEL",
+          "links": [
+            256
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadEasyAnimateModel"
+      },
+      "widgets_values": [
+        "EasyAnimateV5.1-12b-zh-Control",
+        "model_cpu_offload",
+        "Control",
+        "easyanimate_video_v5.1_magvit_qwen.yaml",
+        "bf16"
+      ]
+    },
+    {
+      "id": 111,
+      "type": "EasyAnimateV5_V2VSampler",
+      "pos": {
+        "0": 905,
+        "1": 201
+      },
+      "size": {
+        "0": 504,
+        "1": 350
+      },
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "easyanimate_model",
+          "type": "EASYANIMATESMODEL",
+          "link": 256
+        },
+        {
+          "name": "prompt",
+          "type": "STRING_PROMPT",
+          "link": 257
+        },
+        {
+          "name": "negative_prompt",
+          "type": "STRING_PROMPT",
+          "link": 258
+        },
+        {
+          "name": "validation_video",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "control_video",
+          "type": "IMAGE",
+          "link": 259,
+          "shape": 7
+        },
+        {
+          "name": "ref_image",
+          "type": "IMAGE",
+          "link": 260,
+          "shape": 7
+        },
+        {
+          "name": "camera_conditions",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "camera_conditions"
+          },
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            261,
+            263
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EasyAnimateV5_V2VSampler"
+      },
+      "widgets_values": [
+        49,
+        512,
+        43,
+        "fixed",
+        50,
+        6,
+        1,
+        "Flow",
+        ""
+      ]
+    },
+    {
+      "id": 97,
+      "type": "SplineEditor",
+      "pos": {
+        "0": 855.1397705078125,
+        "1": 1058.91943359375
+      },
+      "size": {
+        "0": 645,
+        "1": 812
+      },
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "bg_image",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "links": [
+            249
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "coord_str",
+          "type": "STRING",
+          "links": [
+            265
+          ],
+          "slot_index": 1
+        },
+        {
+          "name": "float",
+          "type": "FLOAT",
+          "links": null
+        },
+        {
+          "name": "count",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "normalized_str",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SplineEditor",
+        "points": "SplineEditor",
+        "imgData": null
+      },
+      "widgets_values": [
+        "[{\"x\":236.74497000000005,\"y\":169.10355000000004},{\"x\":263.53799999999995,\"y\":230.59575},{\"x\":321.61075881587004,\"y\":229.72197058276433},{\"x\":355.3934015486295,\"y\":168.9132136637973},{\"x\":343.23165016483614,\"y\":82.42964826793309},{\"x\":275.6663646993172,\"y\":55.40353408172552},{\"x\":197.29063355931524,\"y\":85.13225968655384},{\"x\":177.02104791965957,\"y\":148.64362802414163},{\"x\":205.39846781517753,\"y\":232.4245820013851},{\"x\":259.45069618759265,\"y\":167.56190795448694}]",
+        "[{\"x\":236.74496459960938,\"y\":169.10354614257812},{\"x\":240.51321411132812,\"y\":183.380126953125},{\"x\":244.89556884765625,\"y\":197.47930908203125},{\"x\":250.2393035888672,\"y\":211.23939514160156},{\"x\":257.3768310546875,\"y\":224.13796997070312},{\"x\":268.3490295410156,\"y\":233.83712768554688},{\"x\":281.6380920410156,\"y\":240.17092895507812},{\"x\":296.2393493652344,\"y\":241.24598693847656},{\"x\":310.1653137207031,\"y\":236.51937866210938},{\"x\":322.80859375,\"y\":228.9126739501953},{\"x\":334.5792541503906,\"y\":220.0128173828125},{\"x\":344.1842346191406,\"y\":208.8701629638672},{\"x\":350.05450439453125,\"y\":195.3665771484375},{\"x\":353.41900634765625,\"y\":180.99649047851562},{\"x\":355.757568359375,\"y\":166.41757202148438},{\"x\":357.7420959472656,\"y\":151.78565979003906},{\"x\":359.0423889160156,\"y\":137.07997131347656},{\"x\":358.7975158691406,\"y\":122.32791900634766},{\"x\":356.0333251953125,\"y\":107.84730529785156},{\"x\":350.4529113769531,\"y\":94.20045471191406},{\"x\":342.6852722167969,\"y\":81.65638732910156},{\"x\":333.4718322753906,\"y\":70.13098907470703},{\"x\":322.0600891113281,\"y\":60.85353088378906},{\"x\":308.1234130859375,\"y\":56.22242736816406},{\"x\":293.40484619140625,\"y\":55.21137619018555},{\"x\":278.6397399902344,\"y\":55.34805679321289},{\"x\":263.8834228515625,\"y\":55.852020263671875},{\"x\":249.2041473388672,\"y\":57.398460388183594},{\"x\":234.8509979248047,\"y\":60.79948425292969},{\"x\":221.34671020507812,\"y\":66.71607971191406},{\"x\":209.08375549316406,\"y\":74.91584777832031},{\"x\":197.90423583984375,\"y\":84.55458068847656},{\"x\":187.44732666015625,\"y\":94.97555541992188},{\"x\":178.9163055419922,\"y\":106.95783233642578},{\"x\":175.8837890625,\"y\":121.3009262084961},{\"x\":176.28488159179688,\"y\":136.05682373046875},{\"x\":177.14378356933594,\"y\":150.79808044433594},{\"x\":178.22998046875,\"y\":165.5237579345703},{\"x\":179.88259887695312,\"y\":180.19593811035156},{\"x\":182.37294006347656,\"y\":194.7476043701172},{\"x\":186.19667053222656,\"y\":209.0009307861328},{\"x\":192.4387664794922,\"y\":222.34014892578125},{\"x\":203.41249084472656,\"y\":231.83749389648438},{\"x\":216.6136932373047,\"y\":227.41598510742188},{\"x\":226.70738220214844,\"y\":216.66171264648438},{\"x\":235.608642578125,\"y\":204.8833770751953},{\"x\":243.90171813964844,\"y\":192.6669921875},{\"x\":251.81112670898438,\"y\":180.19815063476562},{\"x\":259.45068359375,\"y\":167.56190490722656}]",
+        600,
+        382,
+        49,
+        "path",
+        "cardinal",
+        0.5,
+        1,
+        "list",
+        0,
+        1,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "id": 44,
+      "type": "VHS_VideoCombine",
+      "pos": {
+        "0": 2241.138427734375,
+        "1": 1051.91943359375
+      },
+      "size": [
+        530,
+        650.4
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 237,
+          "shape": 7
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null,
+          "slot_index": 0,
+          "shape": 3
+        }
+      ],
+      "title": "Trajectory Outputs",
+      "properties": {
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 8,
+        "loop_count": 0,
+        "filename_prefix": "EasyAnimate-Trajectory",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 22,
+        "save_metadata": true,
+        "pingpong": false,
+        "save_output": true,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "filename": "EasyAnimate-Trajectory_00030.mp4",
+            "subfolder": "",
+            "type": "output",
+            "format": "video/h264-mp4",
+            "frame_rate": 8
+          },
+          "muted": false
+        }
+      }
+    },
+    {
+      "id": 95,
+      "type": "CreateTrajectoryBasedOnKJNodes",
+      "pos": {
+        "0": 1574.139404296875,
+        "1": 929.9193115234375
+      },
+      "size": {
+        "0": 428.4000244140625,
+        "1": 58
+      },
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "masks",
+          "type": "MASK",
+          "link": 249
+        },
+        {
+          "name": "coordinates",
+          "type": "STRING",
+          "link": 267,
+          "widget": {
+            "name": "coordinates"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            237,
+            259,
+            262
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CreateTrajectoryBasedOnKJNodes"
+      },
+      "widgets_values": [
+        ""
+      ]
+    },
+    {
+      "id": 118,
+      "type": "AppendStringsToList",
+      "pos": {
+        "0": 1140.1396484375,
+        "1": 909.9193115234375
+      },
+      "size": [
+        315,
+        82
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "string1",
+          "type": "STRING",
+          "link": 265,
+          "widget": {
+            "name": "string1"
+          }
+        },
+        {
+          "name": "string2",
+          "type": "STRING",
+          "link": 266,
+          "widget": {
+            "name": "string2"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            267
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AppendStringsToList"
+      },
+      "widgets_values": [
+        "",
+        ""
+      ]
+    },
+    {
+      "id": 114,
+      "type": "ImageMaximumNode",
+      "pos": {
+        "0": 2123.13818359375,
+        "1": 909.9193115234375
+      },
+      "size": {
+        "0": 210,
+        "1": 46
+      },
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video_1",
+          "type": "IMAGE",
+          "link": 263
+        },
+        {
+          "name": "video_2",
+          "type": "IMAGE",
+          "link": 262
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            264
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ImageMaximumNode"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 115,
+      "type": "VHS_VideoCombine",
+      "pos": {
+        "0": 2819,
+        "1": 1056
+      },
+      "size": [
+        530,
+        630
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 264,
+          "shape": 7
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null,
+          "slot_index": 0,
+          "shape": 3
+        }
+      ],
+      "title": "Video with Trajectory Outputs",
+      "properties": {
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 8,
+        "loop_count": 0,
+        "filename_prefix": "EasyAnimate-Trajectory-Merge",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 22,
+        "save_metadata": true,
+        "pingpong": false,
+        "save_output": true,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "filename": "EasyAnimate-Trajectory-Merge_00009.mp4",
+            "subfolder": "",
+            "type": "output",
+            "format": "video/h264-mp4",
+            "frame_rate": 8
+          },
+          "muted": false
+        }
+      }
+    },
+    {
+      "id": 119,
+      "type": "SplineEditor",
+      "pos": {
+        "0": 1544.139404296875,
+        "1": 1047.919189453125
+      },
+      "size": [
+        645,
+        812
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "bg_image",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "links": [],
+          "slot_index": 0
+        },
+        {
+          "name": "coord_str",
+          "type": "STRING",
+          "links": [
+            266
+          ],
+          "slot_index": 1
+        },
+        {
+          "name": "float",
+          "type": "FLOAT",
+          "links": null
+        },
+        {
+          "name": "count",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "normalized_str",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SplineEditor",
+        "points": "SplineEditor",
+        "imgData": null
+      },
+      "widgets_values": [
+        "[{\"x\":63.916760050380844,\"y\":114.45559357858895},{\"x\":71.34894145158792,\"y\":114.45559357858895}]",
+        "[{\"x\":63.9167594909668,\"y\":114.45559692382812},{\"x\":64.07159423828125,\"y\":114.45559692382812},{\"x\":64.22643280029297,\"y\":114.45559692382812},{\"x\":64.38127136230469,\"y\":114.45559692382812},{\"x\":64.5361099243164,\"y\":114.45559692382812},{\"x\":64.69094848632812,\"y\":114.45559692382812},{\"x\":64.84577941894531,\"y\":114.45559692382812},{\"x\":65.00061798095703,\"y\":114.45559692382812},{\"x\":65.15545654296875,\"y\":114.45559692382812},{\"x\":65.31029510498047,\"y\":114.45559692382812},{\"x\":65.46513366699219,\"y\":114.45559692382812},{\"x\":65.61996459960938,\"y\":114.45559692382812},{\"x\":65.7748031616211,\"y\":114.45559692382812},{\"x\":65.92964172363281,\"y\":114.45559692382812},{\"x\":66.08448028564453,\"y\":114.45559692382812},{\"x\":66.23931884765625,\"y\":114.45559692382812},{\"x\":66.39414978027344,\"y\":114.45559692382812},{\"x\":66.54898834228516,\"y\":114.45559692382812},{\"x\":66.70382690429688,\"y\":114.45559692382812},{\"x\":66.8586654663086,\"y\":114.45559692382812},{\"x\":67.01350402832031,\"y\":114.45559692382812},{\"x\":67.1683349609375,\"y\":114.45559692382812},{\"x\":67.32317352294922,\"y\":114.45559692382812},{\"x\":67.47801208496094,\"y\":114.45559692382812},{\"x\":67.63285064697266,\"y\":114.45559692382812},{\"x\":67.78768920898438,\"y\":114.45559692382812},{\"x\":67.94252014160156,\"y\":114.45559692382812},{\"x\":68.09735870361328,\"y\":114.45559692382812},{\"x\":68.252197265625,\"y\":114.45559692382812},{\"x\":68.40703582763672,\"y\":114.45559692382812},{\"x\":68.56187438964844,\"y\":114.45559692382812},{\"x\":68.71670532226562,\"y\":114.45559692382812},{\"x\":68.87154388427734,\"y\":114.45559692382812},{\"x\":69.02638244628906,\"y\":114.45559692382812},{\"x\":69.18122100830078,\"y\":114.45559692382812},{\"x\":69.3360595703125,\"y\":114.45559692382812},{\"x\":69.49089050292969,\"y\":114.45559692382812},{\"x\":69.6457290649414,\"y\":114.45559692382812},{\"x\":69.80056762695312,\"y\":114.45559692382812},{\"x\":69.95540618896484,\"y\":114.45559692382812},{\"x\":70.11024475097656,\"y\":114.45559692382812},{\"x\":70.26507568359375,\"y\":114.45559692382812},{\"x\":70.41991424560547,\"y\":114.45559692382812},{\"x\":70.57475280761719,\"y\":114.45559692382812},{\"x\":70.7295913696289,\"y\":114.45559692382812},{\"x\":70.88442993164062,\"y\":114.45559692382812},{\"x\":71.03926086425781,\"y\":114.45559692382812},{\"x\":71.19409942626953,\"y\":114.45559692382812},{\"x\":71.34893798828125,\"y\":114.45559692382812}]",
+        600,
+        382,
+        49,
+        "path",
+        "cardinal",
+        0.5,
+        1,
+        "list",
+        0,
+        1,
+        null,
+        null,
+        null
+      ]
+    }
+  ],
+  "links": [
+    [
+      237,
+      95,
+      0,
+      44,
+      0,
+      "IMAGE"
+    ],
+    [
+      249,
+      97,
+      0,
+      95,
+      0,
+      "MASK"
+    ],
+    [
+      256,
+      99,
+      0,
+      111,
+      0,
+      "EASYANIMATESMODEL"
+    ],
+    [
+      257,
+      104,
+      0,
+      111,
+      1,
+      "STRING_PROMPT"
+    ],
+    [
+      258,
+      105,
+      0,
+      111,
+      2,
+      "STRING_PROMPT"
+    ],
+    [
+      259,
+      95,
+      0,
+      111,
+      4,
+      "IMAGE"
+    ],
+    [
+      260,
+      100,
+      0,
+      111,
+      5,
+      "IMAGE"
+    ],
+    [
+      261,
+      111,
+      0,
+      106,
+      0,
+      "IMAGE"
+    ],
+    [
+      262,
+      95,
+      0,
+      114,
+      1,
+      "IMAGE"
+    ],
+    [
+      263,
+      111,
+      0,
+      114,
+      0,
+      "IMAGE"
+    ],
+    [
+      264,
+      114,
+      0,
+      115,
+      0,
+      "IMAGE"
+    ],
+    [
+      265,
+      97,
+      1,
+      118,
+      0,
+      "STRING"
+    ],
+    [
+      266,
+      119,
+      1,
+      118,
+      1,
+      "STRING"
+    ],
+    [
+      267,
+      118,
+      0,
+      95,
+      1,
+      "STRING"
+    ]
+  ],
+  "groups": [
+    {
+      "title": "Generate Control Video",
+      "bounding": [
+        786,
+        841,
+        2616,
+        1056
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "title": "First Image of Trajectory",
+      "bounding": [
+        191,
+        1068,
+        475,
+        456
+      ],
+      "color": "#a1309b",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "title": "Prompts",
+      "bounding": [
+        191,
+        456,
+        475,
+        587
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "title": "Load EasyAnimate",
+      "bounding": [
+        189,
+        160,
+        475,
+        269
+      ],
+      "color": "#b06634",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.5054470284993016,
+      "offset": [
+        -239.62344289721364,
+        114.98345539297088
+      ]
+    }
+  },
+  "version": 0.4
+}

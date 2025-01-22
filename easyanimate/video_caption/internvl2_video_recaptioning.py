@@ -181,6 +181,7 @@ def main():
 
     video_dataset = VideoDataset(
         dataset_inputs={args.video_path_column: video_path_list},
+        video_path_column=args.video_path_column,
         video_folder=args.video_folder,
         sample_method=args.frame_sample_method,
         num_sampled_frames=args.num_sampled_frames
@@ -192,6 +193,12 @@ def main():
     tensor_parallel_size = torch.cuda.device_count() if CUDA_VISIBLE_DEVICES is None else len(CUDA_VISIBLE_DEVICES.split(","))
     logger.info(f"Automatically set tensor_parallel_size={tensor_parallel_size} based on the available devices.")
 
+    max_dynamic_patch = 1
+    if args.frame_sample_method == "image":
+        max_dynamic_patch = 12
+    quantization = None
+    if "awq" in args.model_path.lower():
+        quantization="awq"
     llm = LLM(
         model=args.model_path,
         trust_remote_code=True,
@@ -199,14 +206,17 @@ def main():
         limit_mm_per_prompt={"image": args.num_sampled_frames},
         gpu_memory_utilization=0.9,
         tensor_parallel_size=tensor_parallel_size,
-        quantization="awq",
+        quantization=quantization,
         dtype="float16",
-        mm_processor_kwargs={"max_dynamic_patch": 1}
+        mm_processor_kwargs={"max_dynamic_patch": max_dynamic_patch}
     )
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
 
-    placeholders = "".join(f"Frame{i}: <image>\n" for i in range(1, args.num_sampled_frames + 1))
-    messages = [{'role': 'user', 'content': f"{placeholders}{args.input_prompt}"}]
+    if args.frame_sample_method == "image":
+        placeholders = "<image>\n"
+    else:
+        placeholders = "".join(f"Frame{i}: <image>\n" for i in range(1, args.num_sampled_frames + 1))
+    messages = [{"role": "user", "content": f"{placeholders}{args.input_prompt}"}]
     prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
     # Stop tokens for InternVL

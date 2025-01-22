@@ -44,13 +44,16 @@ def get_keyframe_index(video_path):
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 
     keyframe_index_list = []
-    for index, line in enumerate(result.stdout.split("\n")):
+    frame_index = 0
+    for line in result.stdout.split("\n"):
         line = line.strip(",")
         pict_type = line.strip()
         if pict_type == "I":
-            keyframe_index_list.append(index)
+            keyframe_index_list.append(frame_index)
+        if pict_type == "I" or pict_type == "B" or pict_type == "P":
+            frame_index += 1
 
-    return keyframe_index_list
+    return keyframe_index_list, frame_index
 
 def extract_frames(
     video_path: str,
@@ -81,17 +84,22 @@ def extract_frames(
         elif sample_method == "last":
             sampled_frame_idx_list = [len(vr) - 1]
         elif sample_method == "keyframe":
-            sampled_frame_idx_list = get_keyframe_index(video_path)
-        elif sample_method == "keyframe+first":
-            sampled_frame_idx_list = get_keyframe_index(video_path)
+            sampled_frame_idx_list, final_frame_index = get_keyframe_index(video_path)
+        elif sample_method == "keyframe+first":  # keyframe + the first second
+            sampled_frame_idx_list, final_frame_index = get_keyframe_index(video_path)
             if len(sampled_frame_idx_list) == 1 or sampled_frame_idx_list[1] > 1 * vr.get_avg_fps():
+                if int(1 * vr.get_avg_fps()) > len(vr):
+                    raise ValueError(f"The duration of {video_path} is less than 1s.")
                 sampled_frame_idx_list.insert(1, int(1 * vr.get_avg_fps()))
-        elif sample_method == "keyframe+last":
-            sampled_frame_idx_list = get_keyframe_index(video_path)
+        elif sample_method == "keyframe+last":  # keyframe + the last frame
+            sampled_frame_idx_list, final_frame_index = get_keyframe_index(video_path)
             if sampled_frame_idx_list[-1] != (len(vr) - 1):
                 sampled_frame_idx_list.append(len(vr) - 1)
         else:
             raise ValueError(f"The sample_method must be within {ALL_FRAME_SAMPLE_METHODS}.")
+        if "keyframe" in sample_method:
+            if final_frame_index != len(vr):
+                raise ValueError(f"The keyframe index list is not accurate. Please check the video {video_path}.")
         sampled_frame_list = vr.get_batch(sampled_frame_idx_list).asnumpy()
         sampled_frame_list = [Image.fromarray(frame) for frame in sampled_frame_list]
 

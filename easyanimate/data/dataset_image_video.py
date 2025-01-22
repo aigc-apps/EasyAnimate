@@ -12,9 +12,12 @@ import albumentations
 import cv2
 import numpy as np
 import torch
+import torch.nn.functional as F
 import torchvision.transforms as transforms
 from decord import VideoReader
+from einops import rearrange
 from func_timeout import FunctionTimedOut, func_timeout
+from packaging import version as pver
 from PIL import Image
 from torch.utils.data import BatchSampler, Sampler
 from torch.utils.data.dataset import Dataset
@@ -100,6 +103,152 @@ def get_random_mask(shape):
     else:
         raise ValueError(f"The mask_index {mask_index} is not define")
     return mask
+ 
+class Camera(object):
+    """Copied from https://github.com/hehao13/CameraCtrl/blob/main/inference.py
+    """
+    def __init__(self, entry):
+        fx, fy, cx, cy = entry[1:5]
+        self.fx = fx
+        self.fy = fy
+        self.cx = cx
+        self.cy = cy
+        w2c_mat = np.array(entry[7:]).reshape(3, 4)
+        w2c_mat_4x4 = np.eye(4)
+        w2c_mat_4x4[:3, :] = w2c_mat
+        self.w2c_mat = w2c_mat_4x4
+        self.c2w_mat = np.linalg.inv(w2c_mat_4x4)
+
+def custom_meshgrid(*args):
+    """Copied from https://github.com/hehao13/CameraCtrl/blob/main/inference.py
+    """
+    # ref: https://pytorch.org/docs/stable/generated/torch.meshgrid.html?highlight=meshgrid#torch.meshgrid
+    if pver.parse(torch.__version__) < pver.parse('1.10'):
+        return torch.meshgrid(*args)
+    else:
+        return torch.meshgrid(*args, indexing='ij')
+
+def get_relative_pose(cam_params):
+    """Copied from https://github.com/hehao13/CameraCtrl/blob/main/inference.py
+    """
+    abs_w2cs = [cam_param.w2c_mat for cam_param in cam_params]
+    abs_c2ws = [cam_param.c2w_mat for cam_param in cam_params]
+    cam_to_origin = 0
+    target_cam_c2w = np.array([
+        [1, 0, 0, 0],
+        [0, 1, 0, -cam_to_origin],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1]
+    ])
+    abs2rel = target_cam_c2w @ abs_w2cs[0]
+    ret_poses = [target_cam_c2w, ] + [abs2rel @ abs_c2w for abs_c2w in abs_c2ws[1:]]
+    ret_poses = np.array(ret_poses, dtype=np.float32)
+    return ret_poses
+
+def ray_condition(K, c2w, H, W, device):
+    """Copied from https://github.com/hehao13/CameraCtrl/blob/main/inference.py
+    """
+    # c2w: B, V, 4, 4
+    # K: B, V, 4
+
+    B = K.shape[0]
+
+    j, i = custom_meshgrid(
+        torch.linspace(0, H - 1, H, device=device, dtype=c2w.dtype),
+        torch.linspace(0, W - 1, W, device=device, dtype=c2w.dtype),
+    )
+    i = i.reshape([1, 1, H * W]).expand([B, 1, H * W]) + 0.5  # [B, HxW]
+    j = j.reshape([1, 1, H * W]).expand([B, 1, H * W]) + 0.5  # [B, HxW]
+
+    fx, fy, cx, cy = K.chunk(4, dim=-1)  # B,V, 1
+
+    zs = torch.ones_like(i)  # [B, HxW]
+    xs = (i - cx) / fx * zs
+    ys = (j - cy) / fy * zs
+    zs = zs.expand_as(ys)
+
+    directions = torch.stack((xs, ys, zs), dim=-1)  # B, V, HW, 3
+    directions = directions / directions.norm(dim=-1, keepdim=True)  # B, V, HW, 3
+
+    rays_d = directions @ c2w[..., :3, :3].transpose(-1, -2)  # B, V, 3, HW
+    rays_o = c2w[..., :3, 3]  # B, V, 3
+    rays_o = rays_o[:, :, None].expand_as(rays_d)  # B, V, 3, HW
+    # c2w @ dirctions
+    rays_dxo = torch.cross(rays_o, rays_d)
+    plucker = torch.cat([rays_dxo, rays_d], dim=-1)
+    plucker = plucker.reshape(B, c2w.shape[1], H, W, 6)  # B, V, H, W, 6
+    # plucker = plucker.permute(0, 1, 4, 2, 3)
+    return plucker
+
+def process_pose_file(pose_file_path, width=672, height=384, original_pose_width=1280, original_pose_height=720, device='cpu', return_poses=False):
+    """Modified from https://github.com/hehao13/CameraCtrl/blob/main/inference.py
+    """
+    with open(pose_file_path, 'r') as f:
+        poses = f.readlines()
+
+    poses = [pose.strip().split(' ') for pose in poses[1:]]
+    cam_params = [[float(x) for x in pose] for pose in poses]
+    if return_poses:
+        return cam_params
+    else:
+        cam_params = [Camera(cam_param) for cam_param in cam_params]
+
+        sample_wh_ratio = width / height
+        pose_wh_ratio = original_pose_width / original_pose_height  # Assuming placeholder ratios, change as needed
+
+        if pose_wh_ratio > sample_wh_ratio:
+            resized_ori_w = height * pose_wh_ratio
+            for cam_param in cam_params:
+                cam_param.fx = resized_ori_w * cam_param.fx / width
+        else:
+            resized_ori_h = width / pose_wh_ratio
+            for cam_param in cam_params:
+                cam_param.fy = resized_ori_h * cam_param.fy / height
+
+        intrinsic = np.asarray([[cam_param.fx * width,
+                                cam_param.fy * height,
+                                cam_param.cx * width,
+                                cam_param.cy * height]
+                                for cam_param in cam_params], dtype=np.float32)
+
+        K = torch.as_tensor(intrinsic)[None]  # [1, 1, 4]
+        c2ws = get_relative_pose(cam_params)  # Assuming this function is defined elsewhere
+        c2ws = torch.as_tensor(c2ws)[None]  # [1, n_frame, 4, 4]
+        plucker_embedding = ray_condition(K, c2ws, height, width, device=device)[0].permute(0, 3, 1, 2).contiguous()  # V, 6, H, W
+        plucker_embedding = plucker_embedding[None]
+        plucker_embedding = rearrange(plucker_embedding, "b f c h w -> b f h w c")[0]
+        return plucker_embedding
+
+def process_pose_params(cam_params, width=672, height=384, original_pose_width=1280, original_pose_height=720, device='cpu'):
+    """Modified from https://github.com/hehao13/CameraCtrl/blob/main/inference.py
+    """
+    cam_params = [Camera(cam_param) for cam_param in cam_params]
+
+    sample_wh_ratio = width / height
+    pose_wh_ratio = original_pose_width / original_pose_height  # Assuming placeholder ratios, change as needed
+
+    if pose_wh_ratio > sample_wh_ratio:
+        resized_ori_w = height * pose_wh_ratio
+        for cam_param in cam_params:
+            cam_param.fx = resized_ori_w * cam_param.fx / width
+    else:
+        resized_ori_h = width / pose_wh_ratio
+        for cam_param in cam_params:
+            cam_param.fy = resized_ori_h * cam_param.fy / height
+
+    intrinsic = np.asarray([[cam_param.fx * width,
+                            cam_param.fy * height,
+                            cam_param.cx * width,
+                            cam_param.cy * height]
+                            for cam_param in cam_params], dtype=np.float32)
+
+    K = torch.as_tensor(intrinsic)[None]  # [1, 1, 4]
+    c2ws = get_relative_pose(cam_params)  # Assuming this function is defined elsewhere
+    c2ws = torch.as_tensor(c2ws)[None]  # [1, n_frame, 4, 4]
+    plucker_embedding = ray_condition(K, c2ws, height, width, device=device)[0].permute(0, 3, 1, 2).contiguous()  # V, 6, H, W
+    plucker_embedding = plucker_embedding[None]
+    plucker_embedding = rearrange(plucker_embedding, "b f c h w -> b f h w c")[0]
+    return plucker_embedding
 
 class ImageVideoSampler(BatchSampler):
     """A sampler wrapper for grouping images with similar aspect ratio into a same batch.
@@ -184,7 +333,7 @@ class ImageVideoDataset(Dataset):
         video_sample_size=512, video_sample_stride=4, video_sample_n_frames=16,
         image_sample_size=512,
         video_repeat=0,
-        text_drop_ratio=-1,
+        text_drop_ratio=0.1,
         enable_bucket=False,
         video_length_drop_start=0.1, 
         video_length_drop_end=0.9,
@@ -355,7 +504,6 @@ class ImageVideoDataset(Dataset):
 
         return sample
 
-
 class ImageVideoControlDataset(Dataset):
     def __init__(
         self,
@@ -363,11 +511,12 @@ class ImageVideoControlDataset(Dataset):
         video_sample_size=512, video_sample_stride=4, video_sample_n_frames=16,
         image_sample_size=512,
         video_repeat=0,
-        text_drop_ratio=-1,
+        text_drop_ratio=0.1,
         enable_bucket=False,
         video_length_drop_start=0.1, 
         video_length_drop_end=0.9,
         enable_inpaint=False,
+        enable_camera_info=False,
     ):
         # Loading annotations from files
         print(f"loading annotations from {ann_path} ...")
@@ -397,6 +546,7 @@ class ImageVideoControlDataset(Dataset):
         self.enable_bucket = enable_bucket
         self.text_drop_ratio = text_drop_ratio
         self.enable_inpaint  = enable_inpaint
+        self.enable_camera_info = enable_camera_info
 
         self.video_length_drop_start = video_length_drop_start
         self.video_length_drop_end = video_length_drop_end
@@ -412,6 +562,13 @@ class ImageVideoControlDataset(Dataset):
                 transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True),
             ]
         )
+        if self.enable_camera_info:
+            self.video_transforms_camera = transforms.Compose(
+                [
+                    transforms.Resize(min(self.video_sample_size)),
+                    transforms.CenterCrop(self.video_sample_size)
+                ]
+            )
 
         # Image params
         self.image_sample_size  = tuple(image_sample_size) if not isinstance(image_sample_size, int) else (image_sample_size, image_sample_size)
@@ -484,33 +641,59 @@ class ImageVideoControlDataset(Dataset):
             else:
                 control_video_id = os.path.join(self.data_root, control_video_id)
             
-            with VideoReader_contextmanager(control_video_id, num_threads=2) as control_video_reader:
-                try:
-                    sample_args = (control_video_reader, batch_index)
-                    control_pixel_values = func_timeout(
-                        VIDEO_READER_TIMEOUT, get_video_reader_batch, args=sample_args
-                    )
-                    resized_frames = []
-                    for i in range(len(control_pixel_values)):
-                        frame = control_pixel_values[i]
-                        resized_frame = resize_frame(frame, self.larger_side_of_image_and_video)
-                        resized_frames.append(resized_frame)
-                    control_pixel_values = np.array(resized_frames)
-                except FunctionTimedOut:
-                    raise ValueError(f"Read {idx} timeout.")
-                except Exception as e:
-                    raise ValueError(f"Failed to extract frames from video. Error is {e}.")
+            if self.enable_camera_info:
+                if control_video_id.lower().endswith('.txt'):
+                    if not self.enable_bucket:
+                        control_pixel_values = torch.zeros_like(pixel_values)
 
-                if not self.enable_bucket:
-                    control_pixel_values = torch.from_numpy(control_pixel_values).permute(0, 3, 1, 2).contiguous()
-                    control_pixel_values = control_pixel_values / 255.
-                    del control_video_reader
+                        control_camera_values = process_pose_file(control_video_id, width=self.video_sample_size[1], height=self.video_sample_size[0])
+                        control_camera_values = torch.from_numpy(control_camera_values).permute(0, 3, 1, 2).contiguous()
+                        control_camera_values = F.interpolate(control_camera_values, size=(len(video_reader), control_camera_values.size(3)), mode='bilinear', align_corners=True)
+                        control_camera_values = self.video_transforms_camera(control_camera_values)
+                    else:
+                        control_pixel_values = np.zeros_like(pixel_values)
+
+                        control_camera_values = process_pose_file(control_video_id, width=self.video_sample_size[1], height=self.video_sample_size[0], return_poses=True)
+                        control_camera_values = torch.from_numpy(np.array(control_camera_values)).unsqueeze(0).unsqueeze(0)
+                        control_camera_values = F.interpolate(control_camera_values, size=(len(video_reader), control_camera_values.size(3)), mode='bilinear', align_corners=True)[0][0]
+                        control_camera_values = np.array([control_camera_values[index] for index in batch_index])
                 else:
-                    control_pixel_values = control_pixel_values
+                    if not self.enable_bucket:
+                        control_pixel_values = torch.zeros_like(pixel_values)
+                        control_camera_values = None
+                    else:
+                        control_pixel_values = np.zeros_like(pixel_values)
+                        control_camera_values = None
+            else:
+                with VideoReader_contextmanager(control_video_id, num_threads=2) as control_video_reader:
+                    try:
+                        sample_args = (control_video_reader, batch_index)
+                        control_pixel_values = func_timeout(
+                            VIDEO_READER_TIMEOUT, get_video_reader_batch, args=sample_args
+                        )
+                        resized_frames = []
+                        for i in range(len(control_pixel_values)):
+                            frame = control_pixel_values[i]
+                            resized_frame = resize_frame(frame, self.larger_side_of_image_and_video)
+                            resized_frames.append(resized_frame)
+                        control_pixel_values = np.array(resized_frames)
+                    except FunctionTimedOut:
+                        raise ValueError(f"Read {idx} timeout.")
+                    except Exception as e:
+                        raise ValueError(f"Failed to extract frames from video. Error is {e}.")
 
-                if not self.enable_bucket:
-                    control_pixel_values = self.video_transforms(control_pixel_values)
-            return pixel_values, control_pixel_values, text, "video"
+                    if not self.enable_bucket:
+                        control_pixel_values = torch.from_numpy(control_pixel_values).permute(0, 3, 1, 2).contiguous()
+                        control_pixel_values = control_pixel_values / 255.
+                        del control_video_reader
+                    else:
+                        control_pixel_values = control_pixel_values
+
+                    if not self.enable_bucket:
+                        control_pixel_values = self.video_transforms(control_pixel_values)
+                control_camera_values = None
+
+            return pixel_values, control_pixel_values, control_camera_values, text, "video"
         else:
             image_path, text = data_info['file_path'], data_info['text']
             if self.data_root is not None:
@@ -536,7 +719,8 @@ class ImageVideoControlDataset(Dataset):
                 control_image = self.image_transforms(control_image).unsqueeze(0)
             else:
                 control_image = np.expand_dims(np.array(control_image), 0)
-            return image, control_image, text, 'image'
+
+            return image, control_image, None, text, 'image'
 
     def __len__(self):
         return self.length
@@ -552,13 +736,17 @@ class ImageVideoControlDataset(Dataset):
                 if data_type_local != data_type:
                     raise ValueError("data_type_local != data_type")
 
-                pixel_values, control_pixel_values, name, data_type = self.get_batch(idx)
+                pixel_values, control_pixel_values, control_camera_values, name, data_type = self.get_batch(idx)
+
                 sample["pixel_values"] = pixel_values
                 sample["control_pixel_values"] = control_pixel_values
                 sample["text"] = name
                 sample["data_type"] = data_type
                 sample["idx"] = idx
-                
+
+                if self.enable_camera_info:
+                    sample["control_camera_values"] = control_camera_values
+
                 if len(sample) > 0:
                     break
             except Exception as e:

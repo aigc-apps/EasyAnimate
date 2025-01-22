@@ -2,6 +2,9 @@
 We explore the Reward Backpropagation technique <sup>[1](#ref1) [2](#ref2)</sup> to optimized the generated videos by [EasyAnimateV5](https://github.com/aigc-apps/EasyAnimate/tree/main/easyanimate) for better alignment with human preferences.
 We provide pre-trained models (i.e. LoRAs) along with the training script. You can use these LoRAs to enhance the corresponding base model as a plug-in or train your own reward LoRA.
 
+> [!NOTE]
+> For EasyAnimateV5.1, we have merged the reward LoRAs into the base model. Please use the base model directly.
+
 - [Enhance EasyAnimate with Reward Backpropagation (Preference Optimization)](#enhance-easyanimate-with-reward-backpropagation-preference-optimization)
   - [Demo](#demo)
     - [EasyAnimateV5-12b-zh-InP](#easyanimatev5-12b-zh-inp)
@@ -175,7 +178,7 @@ from omegaconf import OmegaConf
 from transformers import BertModel, BertTokenizer, T5EncoderModel, T5Tokenizer
 
 from easyanimate.models import AutoencoderKLMagvit, EasyAnimateTransformer3DModel
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import EasyAnimatePipeline_Multi_Text_Encoder_Inpaint
+from easyanimate.pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaintPipeline
 from easyanimate.utils.lora_utils import merge_lora
 from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 from easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
@@ -210,7 +213,7 @@ vae = AutoencoderKLMagvit.from_pretrained(
 if config['vae_kwargs'].get('vae_type', 'AutoencoderKL') == 'AutoencoderKLMagvit' and weight_dtype == torch.float16:
     vae.upcast_vae = True
 
-pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
+pipeline = EasyAnimateInpaintPipeline.from_pretrained(
     model_path,
     text_encoder=BertModel.from_pretrained(model_path, subfolder="text_encoder").to(weight_dtype),
     text_encoder_2=T5EncoderModel.from_pretrained(model_path, subfolder="text_encoder_2").to(weight_dtype),
@@ -243,7 +246,7 @@ sample = pipeline(
     num_inference_steps = 50,
     video = input_video,
     mask_video = input_video_mask,
-).videos
+).frames
 
 save_videos_grid(sample, "samples/output.mp4", fps=8)
 ```
@@ -282,18 +285,22 @@ Due to the resize and crop preprocessing operations, we suggest using a 1:1 aspe
 can be found in [reward_fn.py](../cogvideox/reward/reward_fn.py). 
 You can also customize your own reward model (e.g., combining aesthetic predictor with HPS).
 + `num_decoded_latents` and `num_sampled_frames`: The number of decoded latents (for VAE) and sampled frames (for the reward model). 
-Since CogVideoX-Fun adopts the 3D casual VAE, we found decoding only the first latent to obtain the first frame for computing the reward 
-not only reduces training memory usage but also prevents excessive reward optimization and maintains the dynamics of generated videos.
+Since EasyAnimate adopts the 3D casual VAE, we found decoding only the first latent to obtain the first frame for computing the reward 
+not only reduces training GPU memory usage but also prevents excessive reward optimization and maintains the dynamics of generated videos.
+
+> [!NOTE]
+> In EasyAnimateV5, we only retained the gradient of the last step in the denoising process to reduce GPU memory usage. However, for V5.1, we found that if we only perform reward backpropagation on the last step, the gradient norm becomes very small (usually below 0.001), making it difficult for reward training to converge. This might be due to V5.1 adopts the flow-matching sampling in the training and inference. Therefore, in pratice, we retain the gradients of the last several steps for V5.1.
 
 ## Limitations
 1. We observe after training to a certain extent, the reward continues to increase, but the quality of the generated videos does not further improve. 
-   The model trickly learns some shortcuts (by adding artifacts in the background, i.e., adversarial patches) to increase the reward.
+   The model trickly learns some shortcuts (by adding artifacts in the background, i.e., reward hacking) to increase the reward.
 2. Currently, there is still a lack of suitable preference models for video generation. Directly using image preference models cannot 
    evaluate preferences along the temporal dimension (such as dynamism and consistency). Further more, We find using image preference models leads to a decrease 
    in the dynamism of generated videos. Although this can be mitigated by computing the reward using only the first frame of the decoded video, the impact still persists.
 
 ## References
 <ol>
-  <li id="ref1">Clark, Kevin, et al. "Directly fine-tuning diffusion models on differentiable rewards.". In ICLR 2024.</li>
-  <li id="ref2">Prabhudesai, Mihir, et al. "Aligning text-to-image diffusion models with reward backpropagation." arXiv preprint arXiv:2310.03739 (2023).</li>
+  <li id="ref1">Wu, Xiaoshi, et al. "Deep reward supervisions for tuning text-to-image diffusion models." In ECCV 2025.</li>
+  <li id="ref2">Clark, Kevin, et al. "Directly fine-tuning diffusion models on differentiable rewards.". In ICLR 2024.</li>
+  <li id="ref3">Prabhudesai, Mihir, et al. "Aligning text-to-image diffusion models with reward backpropagation." arXiv preprint arXiv:2310.03739 (2023).</li>
 </ol>

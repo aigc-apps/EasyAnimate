@@ -20,7 +20,6 @@ import gc
 import logging
 import math
 import os
-import pickle
 import shutil
 import sys
 import json
@@ -40,17 +39,16 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.state import AcceleratorState
 from accelerate.utils import ProjectConfiguration, set_seed
-from diffusers import DDIMScheduler
+from diffusers import DDIMScheduler, FlowMatchEulerDiscreteScheduler
 from diffusers.optimization import get_scheduler
-from diffusers.utils import check_min_version, deprecate, is_wandb_available
+from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
-from diffusers.utils.torch_utils import is_compiled_module
 from decord import VideoReader
 from einops import rearrange
 from omegaconf import OmegaConf
 from packaging import version
 from tqdm.auto import tqdm
-from transformers import BertModel, BertTokenizer, T5EncoderModel, T5Tokenizer
+from transformers import BertModel, BertTokenizer, Qwen2Tokenizer, Qwen2VLForConditionalGeneration, T5EncoderModel, T5Tokenizer
 from transformers.utils import ContextManagers
 
 import datasets
@@ -66,11 +64,9 @@ from transformers.utils import ContextManagers
 import easyanimate.reward.reward_fn as reward_fn
 from easyanimate.models import (name_to_autoencoder_magvit,
                                 name_to_transformer3d)
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder import get_3d_rotary_pos_embed, get_resize_crop_region_for_grid
-from easyanimate.pipeline.pipeline_easyanimate_multi_text_encoder_inpaint import EasyAnimatePipeline_Multi_Text_Encoder_Inpaint
-from easyanimate.utils import gaussian_diffusion as gd
+from easyanimate.pipeline.pipeline_easyanimate_inpaint import get_3d_rotary_pos_embed, get_resize_crop_region_for_grid
+from easyanimate.pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaintPipeline
 from easyanimate.utils.lora_utils import create_network, merge_lora
-from easyanimate.utils.respace import SpacedDiffusion, space_timesteps
 from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 
 if is_wandb_available():
@@ -98,99 +94,122 @@ def log_validation(
     vae, text_encoder, text_encoder_2, tokenizer, tokenizer_2, transformer3d, network, 
     loss_fn, config, args, accelerator, weight_dtype, global_step, validation_prompts_idx
 ):
-    logger.info("Running validation... ")
+    try:
+        logger.info("Running validation... ")
 
-    # Get New Transformer
-    Choosen_Transformer3DModel = name_to_transformer3d[
-        config['transformer_additional_kwargs'].get('transformer_type', 'Transformer3DModel')
-    ]
+        # Get New Transformer
+        Choosen_Transformer3DModel = name_to_transformer3d[
+            config['transformer_additional_kwargs'].get('transformer_type', 'Transformer3DModel')
+        ]
 
-    transformer3d_val = Choosen_Transformer3DModel.from_pretrained_2d(
-        args.pretrained_model_name_or_path, subfolder="transformer",
-        transformer_additional_kwargs=OmegaConf.to_container(config['transformer_additional_kwargs'])
-    ).to(weight_dtype)
-    transformer3d_val.load_state_dict(accelerator.unwrap_model(transformer3d).state_dict())
+        transformer3d_val = Choosen_Transformer3DModel.from_pretrained_2d(
+            args.pretrained_model_name_or_path, subfolder="transformer",
+            transformer_additional_kwargs=OmegaConf.to_container(config['transformer_additional_kwargs'])
+        ).to(weight_dtype)
+        transformer3d_val.load_state_dict(accelerator.unwrap_model(transformer3d).state_dict())
 
-    scheduler = DDIMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
-    pipeline = EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.from_pretrained(
-        args.pretrained_model_name_or_path, 
-        vae=accelerator.unwrap_model(vae).to(weight_dtype), 
-        text_encoder=accelerator.unwrap_model(text_encoder),
-        text_encoder_2=accelerator.unwrap_model(text_encoder_2),
-        tokenizer=tokenizer,
-        tokenizer_2=tokenizer_2,
-        transformer=transformer3d_val,
-        scheduler=scheduler,
-        torch_dtype=weight_dtype,
-    )
-    pipeline = pipeline.to(accelerator.device)
-    pipeline = merge_lora(
-        pipeline, None, 1, accelerator.device, state_dict=accelerator.unwrap_model(network).state_dict(), transformer_only=True
-    )
-    to_tensor = transforms.ToTensor()
-    validation_loss, validation_reward = 0, 0
+        if "EasyAnimateV5.1" in args.pretrained_model_name_or_path:
+            scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+        else:
+            scheduler = DDIMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+        
+        # Initialize a new vae if gradient checkpointing is enabled.
+        if args.vae_gradient_checkpointing:
+            # Get Vae
+            Choosen_AutoencoderKL = name_to_autoencoder_magvit[
+                config['vae_kwargs'].get('vae_type', 'AutoencoderKL')
+            ]
+            vae = Choosen_AutoencoderKL.from_pretrained(
+                args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision, variant=args.variant
+            ).to(weight_dtype)
 
-    if args.enable_xformers_memory_efficient_attention \
-        and config['transformer_additional_kwargs'].get('transformer_type', 'Transformer3DModel') == 'Transformer3DModel':
-        pipeline.enable_xformers_memory_efficient_attention()
+        pipeline = EasyAnimateInpaintPipeline(
+            vae=vae if args.vae_gradient_checkpointing else accelerator.unwrap_model(vae).to(weight_dtype),
+            text_encoder=accelerator.unwrap_model(text_encoder),
+            text_encoder_2=accelerator.unwrap_model(text_encoder_2),
+            tokenizer=tokenizer,
+            tokenizer_2=tokenizer_2,
+            transformer=transformer3d_val,
+            scheduler=scheduler,
+        )
+        pipeline = pipeline.to(dtype=weight_dtype)
+        if args.low_vram:
+            pipeline.enable_model_cpu_offload()
+        else:
+            pipeline = pipeline.to(device=accelerator.device)
+        pipeline = merge_lora(
+            pipeline, None, 1, accelerator.device, state_dict=accelerator.unwrap_model(network).state_dict(), transformer_only=True
+        )
+        to_tensor = transforms.ToTensor()
+        validation_loss, validation_reward = 0, 0
 
-    for i in range(len(validation_prompts_idx)):
-        validation_idx, validation_prompt = validation_prompts_idx[i]
-        with torch.no_grad():
-            with torch.autocast("cuda", dtype=weight_dtype):
-                if vae.cache_mag_vae:
-                    video_length = int((args.video_length - 1) // vae.mini_batch_encoder * vae.mini_batch_encoder) + 1 if args.video_length != 1 else 1
-                else:
-                    video_length = int(args.video_length // vae.mini_batch_encoder * vae.mini_batch_encoder) if args.video_length != 1 else 1
-                sample_size = [args.validation_sample_height, args.validation_sample_width]
-                input_video, input_video_mask, clip_image = get_image_to_video_latent(
-                    None, None, video_length=args.video_length, sample_size=sample_size
-                )
+        if args.enable_xformers_memory_efficient_attention \
+            and config['transformer_additional_kwargs'].get('transformer_type', 'Transformer3DModel') == 'Transformer3DModel':
+            pipeline.enable_xformers_memory_efficient_attention()
 
-                if args.seed is None:
-                    generator = None
-                else:
-                    generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
+        for i in range(len(validation_prompts_idx)):
+            validation_idx, validation_prompt = validation_prompts_idx[i]
+            with torch.no_grad():
+                with torch.autocast("cuda", dtype=weight_dtype):
+                    if vae.cache_mag_vae:
+                        video_length = int((args.video_length - 1) // vae.mini_batch_encoder * vae.mini_batch_encoder) + 1 if args.video_length != 1 else 1
+                    else:
+                        video_length = int(args.video_length // vae.mini_batch_encoder * vae.mini_batch_encoder) if args.video_length != 1 else 1
+                    sample_size = [args.validation_sample_height, args.validation_sample_width]
+                    input_video, input_video_mask, clip_image = get_image_to_video_latent(
+                        None, None, video_length=args.video_length, sample_size=sample_size
+                    )
 
-                sample = pipeline(
-                    validation_prompt,
-                    video_length = video_length,
-                    negative_prompt = "bad detailed",
-                    height      = args.validation_sample_height,
-                    width       = args.validation_sample_width,
-                    guidance_scale = 7,
-                    generator   = generator,
+                    if args.seed is None:
+                        generator = None
+                    else:
+                        generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
 
-                    video        = input_video,
-                    mask_video   = input_video_mask,
-                    clip_image   = clip_image,
-                ).videos
-                sample_saved_path = os.path.join(args.output_dir, f"validation_sample/sample-{global_step}-{validation_idx}.mp4")
-                save_videos_grid(sample, sample_saved_path, fps=8)
+                    sample = pipeline(
+                        validation_prompt,
+                        video_length = video_length,
+                        negative_prompt = "bad detailed",
+                        height      = args.validation_sample_height,
+                        width       = args.validation_sample_width,
+                        guidance_scale = 7,
+                        generator   = generator,
 
-                num_sampled_frames = 4
-                sampled_frames_list = []
-                with video_reader(sample_saved_path) as vr:
-                    sampled_frame_idx_list = np.linspace(0, len(vr), num_sampled_frames, endpoint=False, dtype=int)
-                    sampled_frame_list = vr.get_batch(sampled_frame_idx_list).asnumpy()
-                    sampled_frames = torch.stack([to_tensor(frame) for frame in sampled_frame_list], dim=0)
-                    sampled_frames_list.append(sampled_frames)
-                
-                sampled_frames = torch.stack(sampled_frames_list)
-                sampled_frames = rearrange(sampled_frames, "b t c h w -> b c t h w")
-                loss, reward = loss_fn(sampled_frames, [validation_prompt])
-                validation_loss, validation_reward = validation_loss + loss, validation_reward + reward
-    
-    validation_loss = validation_loss / len(validation_prompts_idx)
-    validation_reward = validation_reward / len(validation_prompts_idx)
+                        video        = input_video,
+                        mask_video   = input_video_mask,
+                        clip_image   = clip_image,
+                    ).frames
+                    sample_saved_path = os.path.join(args.output_dir, f"validation_sample/sample-{global_step}-{validation_idx}.mp4")
+                    save_videos_grid(sample, sample_saved_path, fps=8)
 
-    del pipeline
-    del transformer3d_val
-    gc.collect()
-    torch.cuda.empty_cache()
-    torch.cuda.ipc_collect()
+                    num_sampled_frames = 4
+                    sampled_frames_list = []
+                    with video_reader(sample_saved_path) as vr:
+                        sampled_frame_idx_list = np.linspace(0, len(vr), num_sampled_frames, endpoint=False, dtype=int)
+                        sampled_frame_list = vr.get_batch(sampled_frame_idx_list).asnumpy()
+                        sampled_frames = torch.stack([to_tensor(frame) for frame in sampled_frame_list], dim=0)
+                        sampled_frames_list.append(sampled_frames)
+                    
+                    sampled_frames = torch.stack(sampled_frames_list)
+                    sampled_frames = rearrange(sampled_frames, "b t c h w -> b c t h w")
+                    loss, reward = loss_fn(sampled_frames, [validation_prompt])
+                    validation_loss, validation_reward = validation_loss + loss, validation_reward + reward
+        
+        validation_loss = validation_loss / len(validation_prompts_idx)
+        validation_reward = validation_reward / len(validation_prompts_idx)
 
-    return validation_loss, validation_reward
+        del pipeline
+        del transformer3d_val
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+
+        return validation_loss, validation_reward
+    except Exception as e:
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+        print(f"Eval error with info {e}")
+        return None, None
 
 
 def load_prompts(prompt_path, prompt_column="prompt", start_idx=None, end_idx=None):
@@ -211,7 +230,7 @@ def load_prompts(prompt_path, prompt_column="prompt", start_idx=None, end_idx=No
     return prompt_list
 
 
-# Modified from EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.encode_prompt
+# Modified from EasyAnimateInpaintPipeline.encode_prompt
 def encode_prompt(
     tokenizer,
     tokenizer_2,
@@ -254,19 +273,9 @@ def encode_prompt(
         batch_size = prompt_embeds.shape[0]
 
     if prompt_embeds is None:
-        text_inputs = tokenizer(
-            prompt,
-            padding="max_length",
-            max_length=max_length,
-            truncation=True,
-            return_attention_mask=True,
-            return_tensors="pt",
-        )
-        text_input_ids = text_inputs.input_ids
-        if text_input_ids.shape[-1] > actual_max_sequence_length:
-            reprompt = tokenizer.batch_decode(text_input_ids[:, :actual_max_sequence_length], skip_special_tokens=True)
+        if type(tokenizer) in [BertTokenizer, T5Tokenizer]:
             text_inputs = tokenizer(
-                reprompt,
+                prompt,
                 padding="max_length",
                 max_length=max_length,
                 truncation=True,
@@ -274,29 +283,81 @@ def encode_prompt(
                 return_tensors="pt",
             )
             text_input_ids = text_inputs.input_ids
-        untruncated_ids = tokenizer(prompt, padding="longest", return_tensors="pt").input_ids
+            if text_input_ids.shape[-1] > actual_max_sequence_length:
+                reprompt = tokenizer.batch_decode(text_input_ids[:, :actual_max_sequence_length], skip_special_tokens=True)
+                text_inputs = tokenizer(
+                    reprompt,
+                    padding="max_length",
+                    max_length=max_length,
+                    truncation=True,
+                    return_attention_mask=True,
+                    return_tensors="pt",
+                )
+                text_input_ids = text_inputs.input_ids
+            untruncated_ids = tokenizer(prompt, padding="longest", return_tensors="pt").input_ids
 
-        if untruncated_ids.shape[-1] >= text_input_ids.shape[-1] and not torch.equal(
-            text_input_ids, untruncated_ids
-        ):
-            _actual_max_sequence_length = min(tokenizer.model_max_length, actual_max_sequence_length)
-            removed_text = tokenizer.batch_decode(untruncated_ids[:, _actual_max_sequence_length - 1 : -1])
-            logger.warning(
-                "The following part of your input was truncated because CLIP can only handle sequences up to"
-                f" {_actual_max_sequence_length} tokens: {removed_text}"
-            )
-        prompt_attention_mask = text_inputs.attention_mask.to(device)
-        if enable_text_attention_mask:
-            prompt_embeds = text_encoder(
-                text_input_ids.to(device),
-                attention_mask=prompt_attention_mask,
-            )
+            if untruncated_ids.shape[-1] >= text_input_ids.shape[-1] and not torch.equal(
+                text_input_ids, untruncated_ids
+            ):
+                _actual_max_sequence_length = min(tokenizer.model_max_length, actual_max_sequence_length)
+                removed_text = tokenizer.batch_decode(untruncated_ids[:, _actual_max_sequence_length - 1 : -1])
+                logger.warning(
+                    "The following part of your input was truncated because CLIP can only handle sequences up to"
+                    f" {_actual_max_sequence_length} tokens: {removed_text}"
+                )
+            prompt_attention_mask = text_inputs.attention_mask.to(device)
+            if enable_text_attention_mask:
+                prompt_embeds = text_encoder(
+                    text_input_ids.to(device),
+                    attention_mask=prompt_attention_mask,
+                )
+            else:
+                prompt_embeds = text_encoder(
+                    text_input_ids.to(device)
+                )
+            prompt_embeds = prompt_embeds[0]
+            prompt_attention_mask = prompt_attention_mask.repeat(num_images_per_prompt, 1)
         else:
-            prompt_embeds = text_encoder(
-                text_input_ids.to(device)
+            if prompt is not None and isinstance(prompt, str):
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": prompt}],
+                    }
+                ]
+            else:
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": _prompt}],
+                    } for _prompt in prompt
+                ]
+            text = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
             )
-        prompt_embeds = prompt_embeds[0]
-        prompt_attention_mask = prompt_attention_mask.repeat(num_images_per_prompt, 1)
+
+            text_inputs = tokenizer(
+                text=[text],
+                padding="max_length",
+                max_length=max_length,
+                truncation=True,
+                return_attention_mask=True,
+                padding_side="right",
+                return_tensors="pt",
+            )
+            text_inputs = text_inputs.to(text_encoder.device)
+
+            text_input_ids = text_inputs.input_ids
+            prompt_attention_mask = text_inputs.attention_mask
+            if enable_text_attention_mask:
+                # Inference: Generation of the output
+                prompt_embeds = text_encoder(
+                    input_ids=text_input_ids,
+                    attention_mask=prompt_attention_mask,
+                    output_hidden_states=True).hidden_states[-2]
+            else:
+                raise ValueError("LLM needs attention_mask")
+            prompt_attention_mask = prompt_attention_mask.repeat(num_images_per_prompt, 1)
 
     prompt_embeds = prompt_embeds.to(dtype=dtype, device=device)
 
@@ -304,61 +365,104 @@ def encode_prompt(
     # duplicate text embeddings for each generation per prompt, using mps friendly method
     prompt_embeds = prompt_embeds.repeat(1, num_images_per_prompt, 1)
     prompt_embeds = prompt_embeds.view(bs_embed * num_images_per_prompt, seq_len, -1)
+    prompt_attention_mask = prompt_attention_mask.to(device=device)
 
     # get unconditional embeddings for classifier free guidance
     if do_classifier_free_guidance and negative_prompt_embeds is None:
-        uncond_tokens: List[str]
-        if negative_prompt is None:
-            uncond_tokens = [""] * batch_size
-        elif prompt is not None and type(prompt) is not type(negative_prompt):
-            raise TypeError(
-                f"`negative_prompt` should be the same type to `prompt`, but got {type(negative_prompt)} !="
-                f" {type(prompt)}."
-            )
-        elif isinstance(negative_prompt, str):
-            uncond_tokens = [negative_prompt]
-        elif batch_size != len(negative_prompt):
-            raise ValueError(
-                f"`negative_prompt`: {negative_prompt} has batch size {len(negative_prompt)}, but `prompt`:"
-                f" {prompt} has batch size {batch_size}. Please make sure that passed `negative_prompt` matches"
-                " the batch size of `prompt`."
-            )
-        else:
-            uncond_tokens = negative_prompt
+        if type(tokenizer) in [BertTokenizer, T5Tokenizer]:
+            uncond_tokens: List[str]
+            if negative_prompt is None:
+                uncond_tokens = [""] * batch_size
+            elif prompt is not None and type(prompt) is not type(negative_prompt):
+                raise TypeError(
+                    f"`negative_prompt` should be the same type to `prompt`, but got {type(negative_prompt)} !="
+                    f" {type(prompt)}."
+                )
+            elif isinstance(negative_prompt, str):
+                uncond_tokens = [negative_prompt]
+            elif batch_size != len(negative_prompt):
+                raise ValueError(
+                    f"`negative_prompt`: {negative_prompt} has batch size {len(negative_prompt)}, but `prompt`:"
+                    f" {prompt} has batch size {batch_size}. Please make sure that passed `negative_prompt` matches"
+                    " the batch size of `prompt`."
+                )
+            else:
+                uncond_tokens = negative_prompt
 
-        max_length = prompt_embeds.shape[1]
-        uncond_input = tokenizer(
-            uncond_tokens,
-            padding="max_length",
-            max_length=max_length,
-            truncation=True,
-            return_tensors="pt",
-        )
-        uncond_input_ids = uncond_input.input_ids
-        if uncond_input_ids.shape[-1] > actual_max_sequence_length:
-            reuncond_tokens = tokenizer.batch_decode(uncond_input_ids[:, :actual_max_sequence_length], skip_special_tokens=True)
+            max_length = prompt_embeds.shape[1]
             uncond_input = tokenizer(
-                reuncond_tokens,
+                uncond_tokens,
+                padding="max_length",
+                max_length=max_length,
+                truncation=True,
+                return_tensors="pt",
+            )
+            uncond_input_ids = uncond_input.input_ids
+            if uncond_input_ids.shape[-1] > actual_max_sequence_length:
+                reuncond_tokens = tokenizer.batch_decode(uncond_input_ids[:, :actual_max_sequence_length], skip_special_tokens=True)
+                uncond_input = tokenizer(
+                    reuncond_tokens,
+                    padding="max_length",
+                    max_length=max_length,
+                    truncation=True,
+                    return_attention_mask=True,
+                    return_tensors="pt",
+                )
+                uncond_input_ids = uncond_input.input_ids
+
+            negative_prompt_attention_mask = uncond_input.attention_mask.to(device)
+            if enable_text_attention_mask:
+                negative_prompt_embeds = text_encoder(
+                    uncond_input.input_ids.to(device),
+                    attention_mask=negative_prompt_attention_mask,
+                )
+            else:
+                negative_prompt_embeds = text_encoder(
+                    uncond_input.input_ids.to(device)
+                )
+            negative_prompt_embeds = negative_prompt_embeds[0]
+            negative_prompt_attention_mask = negative_prompt_attention_mask.repeat(num_images_per_prompt, 1)
+        else:
+            if negative_prompt is not None and isinstance(negative_prompt, str):
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": negative_prompt}],
+                    }
+                ]
+            else:
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": _negative_prompt}],
+                    } for _negative_prompt in negative_prompt
+                ]
+            text = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+
+            text_inputs = tokenizer(
+                text=[text],
                 padding="max_length",
                 max_length=max_length,
                 truncation=True,
                 return_attention_mask=True,
+                padding_side="right",
                 return_tensors="pt",
             )
-            uncond_input_ids = uncond_input.input_ids
+            text_inputs = text_inputs.to(text_encoder.device)
 
-        negative_prompt_attention_mask = uncond_input.attention_mask.to(device)
-        if enable_text_attention_mask:
-            negative_prompt_embeds = text_encoder(
-                uncond_input.input_ids.to(device),
-                attention_mask=negative_prompt_attention_mask,
-            )
-        else:
-            negative_prompt_embeds = text_encoder(
-                uncond_input.input_ids.to(device)
-            )
-        negative_prompt_embeds = negative_prompt_embeds[0]
-        negative_prompt_attention_mask = negative_prompt_attention_mask.repeat(num_images_per_prompt, 1)
+            text_input_ids = text_inputs.input_ids
+            negative_prompt_attention_mask = text_inputs.attention_mask
+            if enable_text_attention_mask:
+                # Inference: Generation of the output
+                negative_prompt_embeds = text_encoder(
+                    input_ids=text_input_ids,
+                    attention_mask=negative_prompt_attention_mask,
+                    output_hidden_states=True).hidden_states[-2]
+            else:
+                raise ValueError("LLM needs attention_mask")
+            negative_prompt_attention_mask = negative_prompt_attention_mask.repeat(num_images_per_prompt, 1)
 
     if do_classifier_free_guidance:
         # duplicate unconditional embeddings for each generation per prompt, using mps friendly method
@@ -368,11 +472,12 @@ def encode_prompt(
 
         negative_prompt_embeds = negative_prompt_embeds.repeat(1, num_images_per_prompt, 1)
         negative_prompt_embeds = negative_prompt_embeds.view(batch_size * num_images_per_prompt, seq_len, -1)
+        negative_prompt_attention_mask = negative_prompt_attention_mask.to(device=device)
 
     return prompt_embeds, negative_prompt_embeds, prompt_attention_mask, negative_prompt_attention_mask
 
 
-# Modified from EasyAnimatePipeline_Multi_Text_Encoder_Inpaint.prepare_extra_step_kwargs
+# Modified from EasyAnimateInpaintPipeline.prepare_extra_step_kwargs
 def prepare_extra_step_kwargs(scheduler, generator, eta):
     # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
     # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
@@ -476,7 +581,12 @@ def parse_args():
     parser.add_argument(
         "--gradient_checkpointing",
         action="store_true",
-        help="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.",
+        help="Whether or not to use gradient checkpointing (for DiT) to save memory at the expense of slower backward pass.",
+    )
+    parser.add_argument(
+        "--vae_gradient_checkpointing",
+        action="store_true",
+        help="Whether or not to use gradient checkpointing (for VAE) to save memory at the expense of slower backward pass.",
     )
     parser.add_argument(
         "--learning_rate",
@@ -513,17 +623,6 @@ def parse_args():
             " https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices"
         ),
     )
-    parser.add_argument("--use_ema", action="store_true", help="Whether to use EMA model.")
-    parser.add_argument(
-        "--non_ema_revision",
-        type=str,
-        default=None,
-        required=False,
-        help=(
-            "Revision of pretrained non-ema model identifier. Must be a branch, tag or git identifier of the local or"
-            " remote repository specified with --pretrained_model_name_or_path."
-        ),
-    )
     parser.add_argument(
         "--dataloader_num_workers",
         type=int,
@@ -539,12 +638,6 @@ def parse_args():
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
     parser.add_argument("--hub_token", type=str, default=None, help="The token to use to push to the Model Hub.")
-    parser.add_argument(
-        "--prediction_type",
-        type=str,
-        default=None,
-        help="The prediction_type that shall be used for training. Choose between 'epsilon' or 'v_prediction' or leave `None`. If left to `None` the default prediction type of the scheduler: `noise_scheduler.config.prediciton_type` is chosen.",
-    )
     parser.add_argument(
         "--hub_model_id",
         type=str,
@@ -611,7 +704,6 @@ def parse_args():
     parser.add_argument(
         "--enable_xformers_memory_efficient_attention", action="store_true", help="Whether or not to use xformers."
     )
-    parser.add_argument("--noise_offset", type=float, default=0, help="The scale of noise offset.")
     parser.add_argument(
         "--validation_epochs",
         type=int,
@@ -652,18 +744,6 @@ def parse_args():
         help="Whether to train the text encoder. If set, the text encoder should be float32 precision.",
     )
     parser.add_argument(
-        "--token_sample_size",
-        type=int,
-        default=512,
-        help="Sample size of the token.",
-    )
-    parser.add_argument(
-        "--video_sample_n_frames",
-        type=int,
-        default=17,
-        help="Num frame of video.",
-    )
-    parser.add_argument(
         "--config_path",
         type=str,
         default=None,
@@ -687,6 +767,9 @@ def parse_args():
 
     parser.add_argument(
         "--use_deepspeed", action="store_true", help="Whether or not to use deepspeed."
+    )
+    parser.add_argument(
+        "--low_vram", action="store_true", help="Whether enable low_vram mode."
     )
 
     parser.add_argument(
@@ -760,17 +843,50 @@ def parse_args():
         "--backprop",
         action="store_true",
         default=False,
-        help="Whether to use the backprop training mode.",
+        help="Whether to use the reward backprop training mode.",
+    )
+    parser.add_argument(
+        "--backprop_step_list",
+        nargs="+",
+        type=int,
+        default=None,
+        help="The preset step list for reward backprop. If provided, overrides `backprop_strategy`."
+    )
+    parser.add_argument(
+        "--backprop_strategy",
+        choices=["last", "tail", "uniform", "random"],
+        default="last",
+        help="The strategy for reward backprop."
+    )
+    parser.add_argument(
+        "--stop_latent_model_input_gradient",
+        action="store_true",
+        default=False,
+        help="Whether to stop the gradient of the latents during reward backprop.",
+    )
+    parser.add_argument(
+        "--backprop_random_start_step",
+        type=int,
+        default=0,
+        help="The random start step for reward backprop. Only used when `backprop_strategy` is random."
+    )
+    parser.add_argument(
+        "--backprop_random_end_step",
+        type=int,
+        default=50,
+        help="The random end step for reward backprop. Only used when `backprop_strategy` is random."
+    )
+    parser.add_argument(
+        "--backprop_num_steps",
+        type=int,
+        default=5,
+        help="The number of steps for backprop. Only used when `backprop_strategy` is tail/uniform/random."
     )
 
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
         args.local_rank = env_local_rank
-
-    # default to using the same revision for the non-ema model if not specified
-    if args.non_ema_revision is None:
-        args.non_ema_revision = args.revision
 
     return args
 
@@ -784,15 +900,6 @@ def main():
             " Please use `huggingface-cli login` to authenticate with the Hub."
         )
 
-    if args.non_ema_revision is not None:
-        deprecate(
-            "non_ema_revision!=None",
-            "0.15.0",
-            message=(
-                "Downloading 'non_ema' weights from revision branches of the Hub is deprecated. Please make sure to"
-                " use `--variant=non_ema` instead."
-            ),
-        )
     logging_dir = os.path.join(args.output_dir, args.logging_dir)
 
     config = OmegaConf.load(args.config_path)
@@ -804,14 +911,6 @@ def main():
         log_with=args.report_to,
         project_config=accelerator_project_config,
     )
-    
-    # Sanity check for validation
-    do_validation = (args.validation_prompt_path is not None or args.validation_prompts is not None)
-    if do_validation:
-        if not (os.path.exists(args.validation_prompt_path) or args.validation_prompt_path.endswith(".txt")):
-            raise ValueError("The `--validation_prompt_path` must be a txt file containing prompts.")
-        if args.validation_batch_size < accelerator.num_processes or args.validation_batch_size % accelerator.num_processes != 0:
-            raise ValueError("The `--validation_batch_size` must be divisible by the number of processes.")
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
@@ -828,6 +927,29 @@ def main():
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
         diffusers.utils.logging.set_verbosity_error()
+    
+    # Sanity check for validation
+    do_validation = (args.validation_prompt_path is not None or args.validation_prompts is not None)
+    if do_validation:
+        if not (os.path.exists(args.validation_prompt_path) or args.validation_prompt_path.endswith(".txt")):
+            raise ValueError("The `--validation_prompt_path` must be a txt file containing prompts.")
+        if args.validation_batch_size < accelerator.num_processes or args.validation_batch_size % accelerator.num_processes != 0:
+            raise ValueError("The `--validation_batch_size` must be divisible by the number of processes.")
+    
+    # Sanity check for validation
+    if args.backprop:
+        if args.backprop_step_list is not None:
+            logger.warning(
+                f"The backprop_strategy {args.backprop_strategy} will be ignored "
+                f"when using backprop_step_list {args.backprop_step_list}."
+            )
+            assert any(step <= args.num_inference_steps - 1 for step in args.backprop_step_list)
+        else:
+            if args.backprop_strategy in set(["tail", "uniform", "random"]):
+                assert args.backprop_num_steps <= args.num_inference_steps - 1
+            if args.backprop_strategy == "random":
+                assert args.backprop_random_start_step <= args.backprop_random_end_step
+                assert args.backprop_random_end_step <= args.num_inference_steps - 1
 
     # If passed along, set the training seed now.
     if args.seed is not None:
@@ -849,24 +971,38 @@ def main():
         args.mixed_precision = accelerator.mixed_precision
 
     # Load scheduler, tokenizer and models.
-    # Use DDIM instead of DDPM to sample training videos.
-    noise_scheduler = DDIMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
-    noise_scheduler.set_timesteps(args.num_inference_steps, device=accelerator.device)
+    if "EasyAnimateV5.1" in args.pretrained_model_name_or_path:
+        noise_scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+    else:
+        # Use DDIM instead of DDPM to sample training videos.
+        noise_scheduler = DDIMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
 
     if config['text_encoder_kwargs'].get('enable_multi_text_encoder', False):
         print("Init BertTokenizer")
         tokenizer = BertTokenizer.from_pretrained(
             args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
         )
-        print("Init T5Tokenizer")
-        tokenizer_2 = T5Tokenizer.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="tokenizer_2", revision=args.revision
-        )
+        if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+            print("Init LLM Processor")
+            tokenizer_2 = Qwen2Tokenizer.from_pretrained(
+                os.path.join(args.pretrained_model_name_or_path, "tokenizer_2"), revision=args.revision
+            )
+        else:
+            print("Init T5Tokenizer")
+            tokenizer_2 = T5Tokenizer.from_pretrained(
+                args.pretrained_model_name_or_path, subfolder="tokenizer_2", revision=args.revision
+            )
     else:
-        print("Init T5Tokenizer")
-        tokenizer = T5Tokenizer.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
-        )
+        if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+            print("Init LLM Processor")
+            tokenizer = Qwen2Tokenizer.from_pretrained(
+                os.path.join(args.pretrained_model_name_or_path, "tokenizer"), revision=args.revision
+            )
+        else:
+            print("Init T5Tokenizer")
+            tokenizer = T5Tokenizer.from_pretrained(
+                args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
+            )
         tokenizer_2 = None
 
     def deepspeed_zero_init_disabled_context_manager():
@@ -894,15 +1030,27 @@ def main():
                 args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision, variant=args.variant,
                 torch_dtype=weight_dtype
             )
-            text_encoder_2 = T5EncoderModel.from_pretrained(
-                args.pretrained_model_name_or_path, subfolder="text_encoder_2", revision=args.revision, variant=args.variant,
-                torch_dtype=weight_dtype
-            )
+            if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                text_encoder_2 = Qwen2VLForConditionalGeneration.from_pretrained(
+                    os.path.join(args.pretrained_model_name_or_path, "text_encoder_2"), revision=args.revision, variant=args.variant,
+                    torch_dtype=weight_dtype,
+                )
+            else:
+                text_encoder_2 = T5EncoderModel.from_pretrained(
+                    args.pretrained_model_name_or_path, subfolder="text_encoder_2", revision=args.revision, variant=args.variant,
+                    torch_dtype=weight_dtype,
+                )
         else:
-            text_encoder = T5EncoderModel.from_pretrained(
-                args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision, variant=args.variant,
-                torch_dtype=weight_dtype
-            )
+            if config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
+                text_encoder = Qwen2VLForConditionalGeneration.from_pretrained(
+                    os.path.join(args.pretrained_model_name_or_path, "text_encoder"), revision=args.revision, variant=args.variant,
+                    torch_dtype=weight_dtype,
+                )
+            else:
+                text_encoder = T5EncoderModel.from_pretrained(
+                    args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision, variant=args.variant,
+                    torch_dtype=weight_dtype
+                )
             text_encoder_2 = None
 
         # Get Vae
@@ -989,15 +1137,20 @@ def main():
             if accelerator.is_main_process:
                 safetensor_save_path = os.path.join(output_dir, f"lora_diffusion_pytorch_model.safetensors")
                 save_model(safetensor_save_path, accelerator.unwrap_model(models[-1]))
-                if not args.use_deepspeed:
-                    for _ in range(len(weights)):
-                        weights.pop()
 
         accelerator.register_save_state_pre_hook(save_model_hook)
+        # Save the model weights directly before save_state instead of using a hook.
         # accelerator.register_load_state_pre_hook(load_model_hook)
 
     if args.gradient_checkpointing:
         transformer3d.enable_gradient_checkpointing()
+    
+    if args.vae_gradient_checkpointing:
+        # Since 3D casual VAE need a cache to decode all latents autoregressively, .Thus, gradient checkpointing can only be 
+        # enabled when decoding the first batch (i.e. the first three) of latents, in which case the cache is not being used.
+        if args.num_decoded_latents > 3:
+            raise ValueError("The vae_gradient_checkpointing is not supported for num_decoded_latents > 3.")
+        vae.enable_gradient_checkpointing()
 
     # Enable TF32 for faster training on Ampere GPUs,
     # cf https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices
@@ -1101,13 +1254,8 @@ def main():
     if accelerator.is_main_process:
         tracker_config = dict(vars(args))
         tracker_config.pop("validation_prompts")
+        tracker_config.pop("backprop_step_list", None)
         accelerator.init_trackers(args.tracker_project_name, tracker_config)
-
-    # Function for unwrapping if model was compiled with `torch.compile`.
-    def unwrap_model(model):
-        model = accelerator.unwrap_model(model)
-        model = model._orig_mod if is_compiled_module(model) else model
-        return model
 
     # Train!
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -1144,14 +1292,6 @@ def main():
 
             initial_global_step = global_step
 
-            pkl_path = os.path.join(os.path.join(args.output_dir, path), "sampler_pos_start.pkl")
-            if os.path.exists(pkl_path):
-                with open(pkl_path, 'rb') as file:
-                    _, first_epoch = pickle.load(file)
-            else:
-                first_epoch = global_step // num_update_steps_per_epoch
-            print(f"Load pkl from {pkl_path}. Get first_epoch = {first_epoch}.")
-
             from safetensors.torch import load_file, safe_open
             state_dict = load_file(os.path.join(os.path.join(args.output_dir, path), "lora_diffusion_pytorch_model.safetensors"))
             m, u = accelerator.unwrap_model(network).load_state_dict(state_dict, strict=False)
@@ -1181,7 +1321,7 @@ def main():
         train_reward = 0.0
 
         # In the following training loop, randomly select training prompts and use the 
-        # `EasyAnimatePipeline_Multi_Text_Encoder_Inpaint` to sample videos, calculate rewards, and update the network.
+        # `EasyAnimatePipelineInpaint` to sample videos, calculate rewards, and update the network.
         for _ in range(num_update_steps_per_epoch):
             # train_prompt = random.sample(prompt_list, args.train_batch_size)
             train_prompt = random.choices(prompt_list, k=args.train_batch_size)
@@ -1196,6 +1336,13 @@ def main():
             # corresponds to doing no classifier free guidance.
             do_classifier_free_guidance = args.guidance_scale > 1.0
             
+            # Reduce the vram by offload text encoders
+            if args.low_vram:
+                torch.cuda.empty_cache()
+                text_encoder.to(accelerator.device)
+                if text_encoder_2 is not None:
+                    text_encoder_2.to(accelerator.device)
+
             # Encode input prompt
             (
                 prompt_embeds,
@@ -1215,26 +1362,43 @@ def main():
                 text_encoder_index=0,
                 enable_text_attention_mask=transformer3d.config.enable_text_attention_mask,
             )
-            (
-                prompt_embeds_2,
-                negative_prompt_embeds_2,
-                prompt_attention_mask_2,
-                negative_prompt_attention_mask_2,
-            ) = encode_prompt(
-                tokenizer,
-                tokenizer_2,
-                text_encoder,
-                text_encoder_2,
-                train_prompt,
-                device=accelerator.device,
-                dtype=weight_dtype,
-                do_classifier_free_guidance=do_classifier_free_guidance,
-                negative_prompt=[""] * len(train_prompt),
-                text_encoder_index=1,
-                enable_text_attention_mask=transformer3d.config.enable_text_attention_mask,
-            )
+            if tokenizer_2 is not None:
+                (
+                    prompt_embeds_2,
+                    negative_prompt_embeds_2,
+                    prompt_attention_mask_2,
+                    negative_prompt_attention_mask_2,
+                ) = encode_prompt(
+                    tokenizer,
+                    tokenizer_2,
+                    text_encoder,
+                    text_encoder_2,
+                    train_prompt,
+                    device=accelerator.device,
+                    dtype=weight_dtype,
+                    do_classifier_free_guidance=do_classifier_free_guidance,
+                    negative_prompt=[""] * len(train_prompt),
+                    text_encoder_index=1,
+                    enable_text_attention_mask=transformer3d.config.enable_text_attention_mask,
+                )
+            else:
+                prompt_embeds_2 = None
+                negative_prompt_embeds_2 = None
+                prompt_attention_mask_2 = None
+                negative_prompt_attention_mask_2 = None
+
+            # Reduce the vram by offload text encoders
+            if args.low_vram:
+                text_encoder.to("cpu")
+                if text_encoder_2 is not None:
+                    text_encoder_2.to("cpu")
+                torch.cuda.empty_cache()
 
             # Prepare timesteps
+            if hasattr(noise_scheduler, "use_dynamic_shifting") and noise_scheduler.use_dynamic_shifting:
+                noise_scheduler.set_timesteps(args.num_inference_steps, device=accelerator.device, mu=1)
+            else:
+                noise_scheduler.set_timesteps(args.num_inference_steps, device=accelerator.device)
             timesteps = noise_scheduler.timesteps
 
             # Prepare latent variables
@@ -1252,7 +1416,9 @@ def main():
             with accelerator.accumulate(transformer3d):
                 with accelerator.autocast():
                     latents = torch.randn(*latent_shape, device=accelerator.device, dtype=weight_dtype)
-                    latents = latents * noise_scheduler.init_noise_sigma
+
+                    if hasattr(noise_scheduler, "init_noise_sigma"):
+                        latents = latents * noise_scheduler.init_noise_sigma
 
                     # Prepare inpaint latents if it needs.
                     # Use zero latents if we want to t2v.
@@ -1307,36 +1473,47 @@ def main():
                     if do_classifier_free_guidance:
                         prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
                         prompt_attention_mask = torch.cat([negative_prompt_attention_mask, prompt_attention_mask])
-                        prompt_embeds_2 = torch.cat([negative_prompt_embeds_2, prompt_embeds_2])
-                        prompt_attention_mask_2 = torch.cat([negative_prompt_attention_mask_2, prompt_attention_mask_2])
+                        if prompt_embeds_2 is not None:
+                            prompt_embeds_2 = torch.cat([negative_prompt_embeds_2, prompt_embeds_2])
+                            prompt_attention_mask_2 = torch.cat([negative_prompt_attention_mask_2, prompt_attention_mask_2])
                         add_time_ids = torch.cat([add_time_ids] * 2, dim=0)
                         style = torch.cat([style] * 2, dim=0)
                     
                     prompt_embeds = prompt_embeds.to(device=accelerator.device)
                     prompt_attention_mask = prompt_attention_mask.to(device=accelerator.device)
-                    prompt_embeds_2 = prompt_embeds_2.to(device=accelerator.device)
-                    prompt_attention_mask_2 = prompt_attention_mask_2.to(device=accelerator.device)
+                    if prompt_embeds_2 is not None:
+                        prompt_embeds_2 = prompt_embeds_2.to(device=accelerator.device)
+                        prompt_attention_mask_2 = prompt_attention_mask_2.to(device=accelerator.device)
                     add_time_ids = add_time_ids.to(dtype=prompt_embeds.dtype, device=accelerator.device).repeat(
                         args.train_batch_size, 1
                     )
                     style = style.to(device=accelerator.device).repeat(args.train_batch_size)
 
                     # Denoising loop
-                    for i, t in enumerate(tqdm(timesteps)):
-                        # the reward gradient is back propagated only for the last K steps.
-                        if args.backprop:
-                            # backprop_cutoff_idx = random.randint(0, args.num_sampling_steps - 1)  # random
-                            backprop_cutoff_idx = args.num_inference_steps - 1  # last
-                            if i >= backprop_cutoff_idx:
-                                for param in network.parameters():
-                                    param.requires_grad = True
+                    if args.backprop:
+                        if args.backprop_step_list is None:
+                            if args.backprop_strategy == "last":
+                                backprop_step_list = [args.num_inference_steps - 1]
+                            elif args.backprop_strategy == "tail":
+                                backprop_step_list = list(range(args.num_inference_steps))[-args.backprop_num_steps:]
+                            elif args.backprop_strategy == "uniform":
+                                interval = args.num_inference_steps // args.backprop_num_steps
+                                random_start = random.randint(0, interval)
+                                backprop_step_list = [random_start + i * interval for i in range(args.backprop_num_steps)]
+                            elif args.backprop_strategy == "random":
+                                backprop_step_list = random.sample(
+                                    range(args.backprop_random_start_step, args.backprop_random_end_step + 1), args.backprop_num_steps
+                                )
                             else:
-                                for param in network.parameters():
-                                    param.requires_grad = False
-                        
+                                raise ValueError(f"Invalid backprop strategy: {args.backprop_strategy}.")
+                        else:
+                            backprop_step_list = args.backprop_step_list
+                    
+                    for i, t in enumerate(tqdm(timesteps)):
                         # expand the latents if we are doing classifier free guidance
                         latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-                        latent_model_input = noise_scheduler.scale_model_input(latent_model_input, t)
+                        if hasattr(noise_scheduler, "scale_model_input"):
+                            latent_model_input = noise_scheduler.scale_model_input(latent_model_input, t)
                         
                         # expand scalar t to 1-D tensor to match the 1st dim of latent_model_input
                         t_expand = torch.tensor([t] * latent_model_input.shape[0], device=accelerator.device).to(
@@ -1344,6 +1521,9 @@ def main():
                         )
 
                         # predict the noise residual
+                        if args.stop_latent_model_input_gradient:
+                            # See https://arxiv.org/abs/2405.00760
+                            latent_model_input = latent_model_input.detach()
                         noise_pred = transformer3d(
                             latent_model_input,
                             t_expand,
@@ -1359,6 +1539,12 @@ def main():
                             clip_attention_mask=None,
                             return_dict=False,
                         )[0]
+
+                        # Optimize the denoising results only for the specified steps.
+                        if i in backprop_step_list:
+                            noise_pred = noise_pred
+                        else:
+                            noise_pred = noise_pred.detach()
 
                         # perform guidance
                         if do_classifier_free_guidance:
@@ -1406,9 +1592,12 @@ def main():
                     accelerator.backward(loss)
                     if accelerator.sync_gradients:
                         total_norm = accelerator.clip_grad_norm_(trainable_params, args.max_grad_norm)
-                        # If `args.use_deepspeed` is enabled, `total_norm` cannot be logged by accelerator.
+                        # If use_deepspeed, `total_norm` cannot be logged by accelerator.
                         if not args.use_deepspeed:
                             accelerator.log({"total_norm": total_norm}, step=global_step)
+                        else:
+                            if hasattr(optimizer, "optimizer") and hasattr(optimizer.optimizer, "_global_grad_norm"):
+                                accelerator.log({"total_norm":  optimizer.optimizer._global_grad_norm}, step=global_step)
                     optimizer.step()
                     lr_scheduler.step()
                     optimizer.zero_grad()
@@ -1482,11 +1671,15 @@ def main():
                             global_step,
                             splitted_prompts_idx
                         )
-                        avg_validation_loss = accelerator.gather(validation_loss).mean()
-                        avg_validation_reward = accelerator.gather(validation_reward).mean()
-                        accelerator.print(avg_validation_loss, avg_validation_reward)
-                        if accelerator.is_main_process:
-                            accelerator.log({"validation_loss": avg_validation_loss, "validation_reward": avg_validation_reward}, step=global_step)
+                        if validation_loss is not None and validation_reward is not None:
+                            avg_validation_loss = accelerator.gather(validation_loss).mean()
+                            avg_validation_reward = accelerator.gather(validation_reward).mean()
+                            accelerator.print(avg_validation_loss, avg_validation_reward)
+                            if accelerator.is_main_process:
+                                accelerator.log(
+                                    {"validation_loss": avg_validation_loss, "validation_reward": avg_validation_reward},
+                                    step=global_step
+                                )
                     
                     accelerator.wait_for_everyone()
             
