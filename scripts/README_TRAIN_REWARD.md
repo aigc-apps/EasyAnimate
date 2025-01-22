@@ -231,7 +231,7 @@ elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
     convert_weight_dtype_wrapper(pipeline.transformer, weight_dtype)
 else:
     pipeline.enable_model_cpu_offload()
-pipeline = merge_lora(pipeline, lora_path, lora_weight)
+pipeline = merge_lora(pipeline, lora_path, lora_weight, device="cuda", dtype=weight_dtype)
 
 generator = torch.Generator(device="cuda").manual_seed(42)
 input_video, input_video_mask, _ = get_image_to_video_latent(None, None, video_length=video_length, sample_size=sample_size)

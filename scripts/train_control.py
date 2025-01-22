@@ -1082,9 +1082,9 @@ def main():
         def save_model_hook(models, weights, output_dir):
             if accelerator.is_main_process:
                 if args.use_ema:
-                    ema_transformer3d.save_pretrained(os.path.join(output_dir, "transformer_ema"))
+                    ema_transformer3d.save_pretrained(os.path.join(output_dir, "transformer_ema"), max_shard_size="30GB")
 
-                models[0].save_pretrained(os.path.join(output_dir, "transformer"))
+                models[0].save_pretrained(os.path.join(output_dir, "transformer"), max_shard_size="30GB")
                 if not args.use_deepspeed:
                     weights.pop()
 

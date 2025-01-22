@@ -332,12 +332,16 @@ class EasyAnimateController:
             return gr.update(value=None)
         else:
             base_model_dropdown = os.path.join(self.personalized_model_dir, base_model_dropdown)
-            base_model_state_dict = {}
-            with safe_open(base_model_dropdown, framework="pt", device="cpu") as f:
-                for key in f.keys():
-                    base_model_state_dict[key] = f.get_tensor(key)
-            self.transformer.load_state_dict(base_model_state_dict, strict=False)
-            print("Update base done")
+            print(f"From checkpoint: {base_model_dropdown}")
+            if base_model_dropdown.endswith("safetensors"):
+                from safetensors.torch import load_file, safe_open
+                state_dict = load_file(base_model_dropdown)
+            else:
+                state_dict = torch.load(base_model_dropdown, map_location="cpu")
+            state_dict = state_dict["state_dict"] if "state_dict" in state_dict else state_dict
+
+            m, u = self.transformer.load_state_dict(state_dict, strict=False)
+            print(f"Update base done. Missing keys: {len(m)}, unexpected keys: {len(u)}")
             return gr.update()
 
     def update_lora_model(self, lora_model_dropdown):
@@ -590,7 +594,7 @@ class EasyAnimateController:
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
             if self.lora_model_path != "none":
-                self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
+                self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider, device="cuda", dtype=self.weight_dtype)
             if is_api:
                 return "", f"Error. error information is {str(e)}"
             else:
@@ -602,7 +606,7 @@ class EasyAnimateController:
 
         # lora part
         if self.lora_model_path != "none":
-            self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
+            self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider, device="cuda", dtype=self.weight_dtype)
 
         sample_config = {
             "prompt": prompt_textbox,
@@ -1320,7 +1324,7 @@ class EasyAnimateController_Modelscope:
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
             if self.lora_model_path != "none":
-                self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
+                self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider, device="cuda", dtype=self.weight_dtype)
             if is_api:
                 return "", f"Error. error information is {str(e)}"
             else:
@@ -1332,7 +1336,7 @@ class EasyAnimateController_Modelscope:
         
         # lora part
         if self.lora_model_path != "none":
-            self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
+            self.pipeline = unmerge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider, device="cuda", dtype=self.weight_dtype)
 
         if not os.path.exists(self.savedir_sample):
             os.makedirs(self.savedir_sample, exist_ok=True)

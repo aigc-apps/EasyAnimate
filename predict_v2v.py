@@ -246,7 +246,7 @@ else:
 generator = torch.Generator(device="cuda").manual_seed(seed)
 
 if lora_path is not None:
-    pipeline = merge_lora(pipeline, lora_path, lora_weight, "cuda")
+    pipeline = merge_lora(pipeline, lora_path, lora_weight, device="cuda", dtype=weight_dtype)
 
 if vae.cache_mag_vae:
     video_length = int((video_length - 1) // vae.mini_batch_encoder * vae.mini_batch_encoder) + 1 if video_length != 1 else 1
@@ -272,7 +272,7 @@ with torch.no_grad():
     ).frames
 
 if lora_path is not None:
-    pipeline = unmerge_lora(pipeline, lora_path, lora_weight, "cuda")
+    pipeline = unmerge_lora(pipeline, lora_path, lora_weight, device="cuda", dtype=weight_dtype)
     
 if not os.path.exists(save_path):
     os.makedirs(save_path, exist_ok=True)
