@@ -216,7 +216,8 @@ class EasyAnimateController:
             )
             if self.inference_config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
                 text_encoder_2 = Qwen2VLForConditionalGeneration.from_pretrained(
-                    os.path.join(diffusion_transformer_dropdown, "text_encoder_2")
+                    os.path.join(diffusion_transformer_dropdown, "text_encoder_2"),
+                    torch_dtype=self.weight_dtype,
                 )
             else:
                 text_encoder_2 = T5EncoderModel.from_pretrained(
@@ -225,7 +226,8 @@ class EasyAnimateController:
         else:  
             if self.inference_config['text_encoder_kwargs'].get('replace_t5_to_llm', False):
                 text_encoder = Qwen2VLForConditionalGeneration.from_pretrained(
-                    os.path.join(diffusion_transformer_dropdown, "text_encoder")
+                    os.path.join(diffusion_transformer_dropdown, "text_encoder"),
+                    torch_dtype=self.weight_dtype,
                 )
             else:
                 text_encoder = T5EncoderModel.from_pretrained(
