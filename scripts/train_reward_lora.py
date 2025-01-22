@@ -112,9 +112,19 @@ def log_validation(
             scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
         else:
             scheduler = DDIMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
+        
+        # Initialize a new vae if gradient checkpointing is enabled.
+        if args.vae_gradient_checkpointing:
+            # Get Vae
+            Choosen_AutoencoderKL = name_to_autoencoder_magvit[
+                config['vae_kwargs'].get('vae_type', 'AutoencoderKL')
+            ]
+            vae = Choosen_AutoencoderKL.from_pretrained(
+                args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision, variant=args.variant
+            ).to(weight_dtype)
 
         pipeline = EasyAnimateInpaintPipeline(
-            vae=accelerator.unwrap_model(vae).to(weight_dtype), 
+            vae=vae if args.vae_gradient_checkpointing else accelerator.unwrap_model(vae).to(weight_dtype),
             text_encoder=accelerator.unwrap_model(text_encoder),
             text_encoder_2=accelerator.unwrap_model(text_encoder_2),
             tokenizer=tokenizer,
@@ -571,7 +581,12 @@ def parse_args():
     parser.add_argument(
         "--gradient_checkpointing",
         action="store_true",
-        help="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.",
+        help="Whether or not to use gradient checkpointing (for DiT) to save memory at the expense of slower backward pass.",
+    )
+    parser.add_argument(
+        "--vae_gradient_checkpointing",
+        action="store_true",
+        help="Whether or not to use gradient checkpointing (for VAE) to save memory at the expense of slower backward pass.",
     )
     parser.add_argument(
         "--learning_rate",
@@ -1129,6 +1144,13 @@ def main():
 
     if args.gradient_checkpointing:
         transformer3d.enable_gradient_checkpointing()
+    
+    if args.vae_gradient_checkpointing:
+        # Since 3D casual VAE need a cache to decode all latents autoregressively, .Thus, gradient checkpointing can only be 
+        # enabled when decoding the first batch (i.e. the first three) of latents, in which case the cache is not being used.
+        if args.num_decoded_latents > 3:
+            raise ValueError("The vae_gradient_checkpointing is not supported for num_decoded_latents > 3.")
+        vae.enable_gradient_checkpointing()
 
     # Enable TF32 for faster training on Ampere GPUs,
     # cf https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices

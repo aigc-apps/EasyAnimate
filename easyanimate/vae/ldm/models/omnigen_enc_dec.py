@@ -51,6 +51,8 @@ class Encoder(nn.Module):
             Whether to double the number of output channels for the last block.
     """
 
+    _supports_gradient_checkpointing = True
+
     def __init__(
         self,
         in_channels: int = 3,
@@ -146,6 +148,8 @@ class Encoder(nn.Module):
         self.spatial_group_norm = spatial_group_norm
         self.verbose = verbose
 
+        self.gradient_checkpointing = False
+
     def set_padding_one_frame(self):
         def _set_padding_one_frame(name, module):
             if hasattr(module, 'padding_flag'):
@@ -225,7 +229,7 @@ class Encoder(nn.Module):
 
     def single_forward(self, x: torch.Tensor, previous_features: torch.Tensor, after_features: torch.Tensor) -> torch.Tensor:
         # x: (B, C, T, H, W)
-        if self.training:
+        if torch.is_grad_enabled() and self.gradient_checkpointing:
             ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
         if previous_features is not None and after_features is None:
             x = torch.concat([previous_features, x], 2)
@@ -234,7 +238,7 @@ class Encoder(nn.Module):
         elif previous_features is not None and after_features is not None:
             x = torch.concat([previous_features, x, after_features], 2)
 
-        if self.training:
+        if torch.is_grad_enabled() and self.gradient_checkpointing:
             x = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(self.conv_in),
                     x,
@@ -243,7 +247,7 @@ class Encoder(nn.Module):
         else:
             x = self.conv_in(x)
         for down_block in self.down_blocks:
-            if self.training:
+            if torch.is_grad_enabled() and self.gradient_checkpointing:
                 x = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(down_block),
                     x,
@@ -359,6 +363,8 @@ class Decoder(nn.Module):
             The number of attention heads to use.
     """
 
+    _supports_gradient_checkpointing = True
+
     def __init__(
         self,
         in_channels: int = 8,
@@ -456,6 +462,8 @@ class Decoder(nn.Module):
         self.spatial_group_norm = spatial_group_norm
         self.verbose = verbose
 
+        self.gradient_checkpointing = False
+
     def set_padding_one_frame(self):
         def _set_padding_one_frame(name, module):
             if hasattr(module, 'padding_flag'):
@@ -546,7 +554,7 @@ class Decoder(nn.Module):
             
     def single_forward(self, x: torch.Tensor, previous_features: torch.Tensor, after_features: torch.Tensor) -> torch.Tensor:
         # x: (B, C, T, H, W)
-        if self.training:
+        if torch.is_grad_enabled() and self.gradient_checkpointing:
             ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
         if previous_features is not None and after_features is None:
             b, c, t, h, w = x.size()
@@ -568,7 +576,7 @@ class Decoder(nn.Module):
             x = self.mid_block(x)
             x = x[:, :, t_1:(t_1 + t_2)]
         else:
-            if self.training:
+            if torch.is_grad_enabled() and self.gradient_checkpointing:
                 x = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(self.conv_in),
                     x,
@@ -584,7 +592,7 @@ class Decoder(nn.Module):
                 x = self.mid_block(x)
                 
         for up_block in self.up_blocks:
-            if self.training:
+            if torch.is_grad_enabled() and self.gradient_checkpointing:
                 x = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(up_block),
                     x,
@@ -613,9 +621,9 @@ class Decoder(nn.Module):
         if self.cache_mag_vae:
             self.set_magvit_padding_one_frame()
             first_frames = self.single_forward(x[:, :, 0:1, :, :], None, None)
-            self.set_magvit_padding_more_frame()
             new_pixel_values = [first_frames]
             for i in range(1, x.shape[2], self.mini_batch_decoder):
+                self.set_magvit_padding_more_frame()
                 next_frames = self.single_forward(x[:, :, i: i + self.mini_batch_decoder, :, :], None, None)
                 new_pixel_values.append(next_frames)
             new_pixel_values = torch.cat(new_pixel_values, dim=2)

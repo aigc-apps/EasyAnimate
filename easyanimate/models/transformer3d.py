@@ -544,7 +544,7 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
                 video_length = (video_length - 1) * 2 + 1
                 hidden_states = rearrange(hidden_states, "b c f h w -> b (f h w) c", f=video_length, h=height, w=width)
 
-            if self.training and self.gradient_checkpointing:
+            if torch.is_grad_enabled() and self.gradient_checkpointing:
 
                 def create_custom_forward(module, return_dict=None):
                     def custom_forward(*inputs):
@@ -1056,7 +1056,7 @@ class HunyuanTransformer3DModel(ModelMixin, ConfigMixin):
         for layer, block in enumerate(self.blocks):
             if layer > self.config.num_layers // 2:
                 skip = skips.pop()
-                if self.training and self.gradient_checkpointing:
+                if torch.is_grad_enabled() and self.gradient_checkpointing:
 
                     def create_custom_forward(module, return_dict=None):
                         def custom_forward(*inputs):
@@ -1098,7 +1098,7 @@ class HunyuanTransformer3DModel(ModelMixin, ConfigMixin):
                         **kwargs
                     )  # (N, L, D)
             else:
-                if self.training and self.gradient_checkpointing:
+                if torch.is_grad_enabled() and self.gradient_checkpointing:
 
                     def create_custom_forward(module, return_dict=None):
                         def custom_forward(*inputs):
@@ -1502,7 +1502,7 @@ class EasyAnimateTransformer3DModel(ModelMixin, ConfigMixin):
 
         # 4. Transformer blocks
         for i, block in enumerate(self.transformer_blocks):
-            if self.training and self.gradient_checkpointing:
+            if torch.is_grad_enabled() and self.gradient_checkpointing:
                 def create_custom_forward(module, return_dict=None):
                     def custom_forward(*inputs):
                         if return_dict is not None:

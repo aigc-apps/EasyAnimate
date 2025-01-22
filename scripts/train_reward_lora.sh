@@ -69,9 +69,6 @@ accelerate launch --num_processes=8 --mixed_precision="bf16" --use_deepspeed --d
 #   --train_sample_height=256 \
 #   --train_sample_width=256 \
 #   --video_length=49 \
-#   --validation_prompt_path=$VALIDATION_PROMPT_PATH \
-#   --validation_steps=100 \
-#   --validation_batch_size=8 \
 #   --num_decoded_latents=1 \
 #   --reward_fn="HPSReward" \
 #   --reward_fn_kwargs='{"version": "v2.1"}' \
