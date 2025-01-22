@@ -85,6 +85,9 @@ mkdir models/Personalized_Model
 # Please use the hugginface link or modelscope link to download the EasyAnimateV5.1 model.
 # https://huggingface.co/alibaba-pai/EasyAnimateV5.1-12b-zh-InP
 # https://modelscope.cn/models/PAI/EasyAnimateV5.1-12b-zh-InP
+
+# https://huggingface.co/alibaba-pai/EasyAnimateV5.1-12b-zh
+# https://modelscope.cn/models/PAI/EasyAnimateV5.1-12b-zh
 ```
 
 ### 2. 本地安装: 环境检查/下载/安装
@@ -116,6 +119,8 @@ EasyAnimateV5.1-12B的视频大小可以由不同的GPU Memory生成，包括：
 | 24GB | 🧡 | 🧡 | 🧡 | 🧡 | ❌ | ❌ | 
 | 40GB | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | 
 | 80GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 
+
+由于qwen2-vl-7b的float16的权重，无法在16GB显存下运行，如果您的显存是16GB，请前往[Huggingface](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct-GPTQ-Int8)或者[Modelscope](https://modelscope.cn/models/Qwen/Qwen2-VL-7B-Instruct-GPTQ-Int8)下载量化后的qwen2-vl-7b对原有的text encoder进行替换，并安装对应的依赖库（auto-gptq, optimum）。
 
 EasyAnimateV5-7B的视频大小可以由不同的GPU Memory生成，包括：
 | GPU memory |384x672x72|384x672x49|576x1008x25|576x1008x49|768x1344x25|768x1344x49|

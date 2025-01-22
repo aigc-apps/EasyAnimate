@@ -30,7 +30,8 @@ from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 # resulting in slower speeds but saving a large amount of GPU memory.
 # 
 # EasyAnimateV1, V2 and V3 support "model_cpu_offload" "sequential_cpu_offload"
-# EasyAnimateV4, V5 and V5.1 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" "sequential_cpu_offload"
+# EasyAnimateV4, V5 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" "sequential_cpu_offload"
+# EasyAnimateV5.1 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" 
 GPU_memory_mode     = "model_cpu_offload_and_qfloat8"
 
 # Config and model path
@@ -237,7 +238,7 @@ pipeline = EasyAnimateInpaintPipeline(
     scheduler=scheduler,
     clip_image_encoder=clip_image_encoder,
     clip_image_processor=clip_image_processor,
-).to(weight_dtype)
+)
 
 if GPU_memory_mode == "sequential_cpu_offload":
     pipeline.enable_sequential_cpu_offload()

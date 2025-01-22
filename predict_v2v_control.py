@@ -31,7 +31,8 @@ from diffusers import FlowMatchEulerDiscreteScheduler
 # sequential_cpu_offload means that each layer of the model will be moved to the CPU after use, 
 # resulting in slower speeds but saving a large amount of GPU memory.
 # 
-# EasyAnimateV5 and V5.1 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" "sequential_cpu_offload"
+# EasyAnimateV5 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" "sequential_cpu_offload"
+# EasyAnimateV5.1 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" 
 GPU_memory_mode     = "model_cpu_offload_and_qfloat8"
 
 # Config and model path
@@ -217,7 +218,7 @@ pipeline = EasyAnimateControlPipeline(
     vae=vae,
     transformer=transformer,
     scheduler=scheduler,
-).to(weight_dtype)
+)
 
 if GPU_memory_mode == "sequential_cpu_offload":
     pipeline.enable_sequential_cpu_offload()

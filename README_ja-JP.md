@@ -31,6 +31,7 @@ EasyAnimateは、トランスフォーマーアーキテクチャに基づいた
 異なるプラットフォームからのクイックプルアップをサポートします。詳細は[クイックスタート](#クイックスタート)を参照してください。
 
 **新機能:**
+- **バージョンv5.1に更新**、Qwen2 VLがテキストエンコーダーとして使用され、Flowがサンプリング方法として使用されます。中国語と英語の両方でバイリンガル予測をサポートしています。CannyやPoseといった一般的なコントロールに加えて、軌道制御やカメラ制御もサポートしています。[2025.01.21]
 - インセンティブ逆伝播を使用してLoraを訓練し、人間の好みに合うようにビデオを最適化します。詳細は、[ここ]（scripts/README _ train _ REVARD.md）を参照してください。EasyAnimateV 5-7 bがリリースされました。[2024.11.27]
 - **v5に更新**、1024x1024までの動画生成をサポート、49フレーム、6秒、8fps、モデルスケールを12Bに拡張、MMDIT構造を組み込み、さまざまな入力を持つ制御モデルをサポート。中国語と英語のバイリンガル予測をサポート。[2024.11.08]
 - **v4に更新**、1024x1024までの動画生成をサポート、144フレーム、6秒、24fps、テキスト、画像、動画からの動画生成をサポート、512から1280までの解像度を単一モデルで処理。中国語と英語のバイリンガル予測をサポート。[2024.08.15]
@@ -85,11 +86,11 @@ mkdir models/Personalized_Model
 
 # EasyAnimateV5モデルをダウンロードするには、hugginfaceリンクまたはmodelscopeリンクを使用してください。
 # I2Vモデル
-# https://huggingface.co/alibaba-pai/EasyAnimateV5-12b-zh-InP
-# https://modelscope.cn/models/PAI/EasyAnimateV5-12b-zh-InP
+# https://huggingface.co/alibaba-pai/EasyAnimateV5.1-12b-zh-InP
+# https://modelscope.cn/models/PAI/EasyAnimateV5.1-12b-zh-InP
 # T2Vモデル
-# https://huggingface.co/alibaba-pai/EasyAnimateV5-12b-zh
-# https://modelscope.cn/models/PAI/EasyAnimateV5-12b-zh
+# https://huggingface.co/alibaba-pai/EasyAnimateV5.1-12b-zh
+# https://modelscope.cn/models/PAI/EasyAnimateV5.1-12b-zh
 ```
 
 ### 2. ローカルインストール: 環境チェック/ダウンロード/インストール
@@ -114,13 +115,15 @@ Linuxの詳細：
 
 ディスクに約60GBの空き容量が必要です（重みを保存するため）、確認してください！
 
-EasyAnimateV5-12Bのビデオサイズは異なるGPUメモリにより生成できます。以下の表をご覧ください：
+EasyAnimateV5.1-12Bのビデオサイズは異なるGPUメモリにより生成できます。以下の表をご覧ください：
 | GPUメモリ |384x672x72|384x672x49|576x1008x25|576x1008x49|768x1344x25|768x1344x49|
 |----------|----------|----------|----------|----------|----------|----------|
 | 16GB | 🧡 | 🧡 | ❌ | ❌ | ❌ | ❌ | 
 | 24GB | 🧡 | 🧡 | 🧡 | 🧡 | ❌ | ❌ | 
 | 40GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 
 | 80GB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 
+
+qwen2-vl-7bのfloat16の重みのため、16GBのVRAMでは実行できません。もしお使いのVRAMが16GBである場合は、[Huggingface](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct-GPTQ-
 
 EasyAnimateV5-7Bのビデオサイズは異なるGPUメモリにより生成できます。以下の表をご覧ください：
 | GPUメモリ |384x672x72|384x672x49|576x1008x25|576x1008x49|768x1344x25|768x1344x49|
@@ -161,8 +164,8 @@ EasyAnimateV5:
 ```
 📦 models/
 ├── 📂 Diffusion_Transformer/
-│   ├── 📂 EasyAnimateV5-12b-zh-InP/
-│   └── 📂 EasyAnimateV5-12b-zh/
+│   ├── 📂 EasyAnimateV5.1-12b-zh-InP/
+│   └── 📂 EasyAnimateV5.1-12b-zh/
 ├── 📂 Personalized_Model/
 │   └── あなたのトレーニング済みのトランスフォーマーモデル / あなたのトレーニング済みのLoraモデル（UIロード用）
 ```

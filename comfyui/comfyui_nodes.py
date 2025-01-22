@@ -278,7 +278,7 @@ class LoadEasyAnimateModel:
                     scheduler=scheduler,
                     clip_image_encoder=clip_image_encoder,
                     clip_image_processor=clip_image_processor,
-                ).to(weight_dtype)
+                )
             else:
                 pipeline = EasyAnimatePipeline(
                     text_encoder=text_encoder,
@@ -288,7 +288,7 @@ class LoadEasyAnimateModel:
                     vae=vae,
                     transformer=transformer,
                     scheduler=scheduler,
-                ).to(weight_dtype)
+                )
         else:
             pipeline = EasyAnimateControlPipeline(
                 text_encoder=text_encoder,
@@ -298,7 +298,7 @@ class LoadEasyAnimateModel:
                 vae=vae,
                 transformer=transformer,
                 scheduler=scheduler,
-            ).to(weight_dtype)
+            )
         if GPU_memory_mode == "sequential_cpu_offload":
             pipeline.enable_sequential_cpu_offload()
         elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":

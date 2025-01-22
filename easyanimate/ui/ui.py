@@ -267,7 +267,7 @@ class EasyAnimateController:
                     scheduler=scheduler,
                     clip_image_encoder=clip_image_encoder,
                     clip_image_processor=clip_image_processor,
-                ).to(self.weight_dtype)
+                )
             else:
                 self.pipeline = EasyAnimatePipeline(
                     text_encoder=text_encoder,
@@ -277,7 +277,7 @@ class EasyAnimateController:
                     vae=self.vae,
                     transformer=self.transformer,
                     scheduler=scheduler,
-                ).to(self.weight_dtype)
+                )
         else:
             self.pipeline = EasyAnimateControlPipeline(
                 text_encoder=text_encoder,
@@ -287,7 +287,7 @@ class EasyAnimateController:
                 vae=self.vae,
                 transformer=self.transformer,
                 scheduler=scheduler,
-            ).to(self.weight_dtype)
+            )
 
         if self.GPU_memory_mode == "sequential_cpu_offload":
             self.pipeline.enable_sequential_cpu_offload()
@@ -1115,7 +1115,7 @@ class EasyAnimateController_Modelscope:
                     scheduler=scheduler,
                     clip_image_encoder=clip_image_encoder,
                     clip_image_processor=clip_image_processor,
-                ).to(weight_dtype)
+                )
             else:
                 self.pipeline = EasyAnimatePipeline(
                     text_encoder=text_encoder,
@@ -1125,7 +1125,7 @@ class EasyAnimateController_Modelscope:
                     vae=self.vae,
                     transformer=self.transformer,
                     scheduler=scheduler
-                ).to(weight_dtype)
+                )
         else:
             self.pipeline = EasyAnimateControlPipeline(
                 text_encoder=text_encoder,
@@ -1135,7 +1135,7 @@ class EasyAnimateController_Modelscope:
                 vae=self.vae,
                 transformer=self.transformer,
                 scheduler=scheduler,
-            ).to(weight_dtype)
+            )
 
         if GPU_memory_mode == "sequential_cpu_offload":
             self.pipeline.enable_sequential_cpu_offload()

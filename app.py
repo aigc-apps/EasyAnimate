@@ -21,7 +21,8 @@ if __name__ == "__main__":
     # resulting in slower speeds but saving a large amount of GPU memory.
     # 
     # EasyAnimateV1, V2 and V3 support "model_cpu_offload" "sequential_cpu_offload"
-    # EasyAnimateV4, V5 and V5.1 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" "sequential_cpu_offload"
+    # EasyAnimateV4, V5 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" "sequential_cpu_offload"
+    # EasyAnimateV5.1 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" 
     GPU_memory_mode = "model_cpu_offload_and_qfloat8"
     # Use torch.float16 if GPU does not support torch.bfloat16
     # ome graphics cards, such as v100, 2080ti, do not support torch.bfloat16
