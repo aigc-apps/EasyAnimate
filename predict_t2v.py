@@ -35,6 +35,11 @@ from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 # EasyAnimateV4, V5 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" "sequential_cpu_offload"
 # EasyAnimateV5.1 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" 
 GPU_memory_mode     = "model_cpu_offload_and_qfloat8"
+# EasyAnimateV5.1 support TeaCache.
+enable_teacache     = True
+# Recommended to be set between 0.05 and 0.1. A larger threshold can cache more steps, speeding up the inference process, 
+# but it may cause slight differences between the generated content and the original content.
+teacache_threshold  = 0.06
 
 # Config and model path
 config_path         = "config/easyanimate_video_v5.1_magvit_qwen.yaml"
@@ -113,6 +118,10 @@ if transformer_path is not None:
 
     m, u = transformer.load_state_dict(state_dict, strict=False)
     print(f"missing keys: {len(m)}, unexpected keys: {len(u)}")
+
+if "v5.1" in config_path and enable_teacache:
+    print(f"Enable TeaCache with threshold: {teacache_threshold}.")
+    transformer.enable_teacache(num_inference_steps, teacache_threshold)
 
 if motion_module_path is not None:
     print(f"From Motion Module: {motion_module_path}")
