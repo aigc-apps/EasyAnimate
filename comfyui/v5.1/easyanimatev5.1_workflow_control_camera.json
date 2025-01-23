@@ -215,89 +215,6 @@
       ]
     },
     {
-      "id": 131,
-      "type": "EasyAnimateV5_V2VSampler",
-      "pos": {
-        "0": 821,
-        "1": 242
-      },
-      "size": {
-        "0": 504,
-        "1": 350
-      },
-      "flags": {},
-      "order": 12,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "easyanimate_model",
-          "type": "EASYANIMATESMODEL",
-          "link": 271
-        },
-        {
-          "name": "prompt",
-          "type": "STRING_PROMPT",
-          "link": 272
-        },
-        {
-          "name": "negative_prompt",
-          "type": "STRING_PROMPT",
-          "link": 273
-        },
-        {
-          "name": "validation_video",
-          "type": "IMAGE",
-          "link": null,
-          "shape": 7
-        },
-        {
-          "name": "control_video",
-          "type": "IMAGE",
-          "link": null,
-          "shape": 7
-        },
-        {
-          "name": "ref_image",
-          "type": "IMAGE",
-          "link": 274,
-          "shape": 7
-        },
-        {
-          "name": "camera_conditions",
-          "type": "STRING",
-          "link": 275,
-          "widget": {
-            "name": "camera_conditions"
-          },
-          "shape": 7
-        }
-      ],
-      "outputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "links": [
-            276
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "EasyAnimateV5_V2VSampler"
-      },
-      "widgets_values": [
-        49,
-        512,
-        43,
-        "fixed",
-        43,
-        6,
-        1,
-        "Flow",
-        ""
-      ]
-    },
-    {
       "id": 129,
       "type": "CameraTrajectoryFromChaoJie",
       "pos": {
@@ -454,7 +371,7 @@
       },
       "size": [
         390,
-        535.4285714285714
+        546
       ],
       "flags": {},
       "order": 13,
@@ -532,10 +449,10 @@
         "0": 819,
         "1": 658
       },
-      "size": [
-        517.6458089787227,
-        93.61251593411134
-      ],
+      "size": {
+        "0": 517.6458129882812,
+        "1": 93.61251831054688
+      },
       "flags": {},
       "order": 10,
       "mode": 0,
@@ -549,6 +466,91 @@
       ],
       "color": "#432",
       "bgcolor": "#653"
+    },
+    {
+      "id": 131,
+      "type": "EasyAnimateV5_V2VSampler",
+      "pos": {
+        "0": 822,
+        "1": 211
+      },
+      "size": {
+        "0": 504,
+        "1": 394
+      },
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "easyanimate_model",
+          "type": "EASYANIMATESMODEL",
+          "link": 271
+        },
+        {
+          "name": "prompt",
+          "type": "STRING_PROMPT",
+          "link": 272
+        },
+        {
+          "name": "negative_prompt",
+          "type": "STRING_PROMPT",
+          "link": 273
+        },
+        {
+          "name": "validation_video",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "control_video",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "ref_image",
+          "type": "IMAGE",
+          "link": 274,
+          "shape": 7
+        },
+        {
+          "name": "camera_conditions",
+          "type": "STRING",
+          "link": 275,
+          "widget": {
+            "name": "camera_conditions"
+          },
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            276
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EasyAnimateV5_V2VSampler"
+      },
+      "widgets_values": [
+        49,
+        512,
+        43,
+        "fixed",
+        43,
+        6,
+        1,
+        "Flow",
+        0.10,
+        true,
+        ""
+      ]
     }
   ],
   "links": [
@@ -662,11 +664,16 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.6209213230591558,
+      "scale": 1.1,
       "offset": [
-        417.7460035994012,
-        -70.36580413723722
+        -465.8996857769304,
+        51.92597569190605
       ]
+    },
+    "node_versions": {
+      "EasyAnimate": "de24d49f07f6d9b12b4e98de98ec959a8b44b989",
+      "comfy-core": "v0.2.7-3-g8afb97c",
+      "ComfyUI-VideoHelperSuite": "70faa9bcef65932ab72e7404d6373fb300013a2e"
     }
   },
   "version": 0.4

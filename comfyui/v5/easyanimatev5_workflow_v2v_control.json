@@ -391,6 +391,21 @@
           "type": "IMAGE",
           "link": 53,
           "shape": 7
+        },
+        {
+          "name": "ref_image",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "camera_conditions",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "camera_conditions"
+          },
+          "shape": 7
         }
       ],
       "outputs": [
@@ -415,7 +430,10 @@
         35,
         6,
         1,
-        "DDIM"
+        "DDIM",
+        0.10,
+        true,
+        ""
       ]
     },
     {

@@ -87,6 +87,40 @@ class Transformer3DModelOutput(BaseOutput):
     sample: torch.FloatTensor
 
 
+class TeaCache():
+    """
+    Timestep Embedding Aware Cache, a training-free caching approach that estimates and leverages
+    the fluctuating differences among model outputs across timesteps, thereby accelerating the inference.
+    Please refer to:
+    1. https://github.com/ali-vilab/TeaCache.
+    2. Liu, Feng, et al. "Timestep Embedding Tells: It's Time to Cache for Video Diffusion Model." arXiv preprint arXiv:2411.19108 (2024).
+    """
+    def __init__(self, coefficients: list[float], num_steps: int, rel_l1_thresh: float = 0.0):
+        if num_steps < 1:
+            raise ValueError("`num_steps` must be greater than 0 but is {num_steps}.")
+        if rel_l1_thresh < 0:
+            raise ValueError("`rel_l1_thresh` must be greater than or equal to 0 but is {rel_l1_thresh}.")
+        self.coefficients = coefficients
+        self.cnt = 0
+        self.num_steps = num_steps
+        self.rel_l1_thresh = rel_l1_thresh
+        self.accumulated_rel_l1_distance = 0
+        self.previous_modulated_input = None
+        self.previous_residual = None
+        self.rescale_func = np.poly1d(self.coefficients)
+    
+    @staticmethod
+    def compute_rel_l1_distance(prev, cur):
+        rel_l1_distance = (torch.abs(cur - prev).mean()) / torch.abs(prev).mean()
+
+        return rel_l1_distance.cpu().item()
+    
+    def reset(self):
+        self.cnt = 0
+        self.previous_modulated_input = None
+        self.previous_residual = None
+
+
 class Transformer3DModel(ModelMixin, ConfigMixin):
     """
     A 3D Transformer model for image-like data.
@@ -1428,7 +1462,21 @@ class EasyAnimateTransformer3DModel(ModelMixin, ConfigMixin):
         )
         self.proj_out = nn.Linear(self.inner_dim, patch_size * patch_size * out_channels)
 
+        self.teacache = None
+
         self.gradient_checkpointing = False
+    
+    def enable_teacache(
+        self,
+        num_steps: int,
+        rel_l1_thresh: float,
+        coefficients: list[float] = [-10.47857366, 8.33844143, -0.78477557, 0.68798618, 0.0136149]
+    ):
+        # The coefficient was obtained by sampling videos from T2V CompBench using EasyAnimateV5.1-12b-zh-InP.
+        # This coefficient can be applied to both the EasyAnimateV5.1-12b-zh and EasyAnimateV5.1-12b-Control.
+        # The coefficients for EasyAnimateV5.1-7b-zh-InP should be:
+        # [-3.64204720e+03, 1.43764725e+03, -1.93045263e+02, 1.09596499e+01, -1.70663507e-01]
+        self.teacache = TeaCache(coefficients, num_steps, rel_l1_thresh=rel_l1_thresh)
 
     def _set_gradient_checkpointing(self, module, value=False):
         self.gradient_checkpointing = value
@@ -1499,48 +1547,122 @@ class EasyAnimateTransformer3DModel(ModelMixin, ConfigMixin):
             clip_encoder_hidden_states = self.clip_proj(clip_encoder_hidden_states)
             
             encoder_hidden_states = torch.concat([clip_encoder_hidden_states, ref_latents], dim=1)
-
-        # 4. Transformer blocks
-        for i, block in enumerate(self.transformer_blocks):
-            if torch.is_grad_enabled() and self.gradient_checkpointing:
-                def create_custom_forward(module, return_dict=None):
-                    def custom_forward(*inputs):
-                        if return_dict is not None:
-                            return module(*inputs, return_dict=return_dict)
-                        else:
-                            return module(*inputs)
-
-                    return custom_forward
-
-                ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
-                hidden_states, encoder_hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
-                    hidden_states,
-                    encoder_hidden_states,
-                    temb,
-                    image_rotary_emb,
-                    video_length,
-                    height // self.patch_size,
-                    width // self.patch_size,
-                    **ckpt_kwargs,
-                )
+        
+        # TeaCache
+        if self.teacache is not None:
+            inp = hidden_states.clone()
+            temb_ = temb.clone()
+            encoder_hidden_states_ = encoder_hidden_states.clone()
+            modulated_inp, _, _, _ = self.transformer_blocks[0].norm1(inp, encoder_hidden_states_, temb_)
+            if self.teacache.cnt == 0 or self.teacache.cnt == self.teacache.num_steps - 1:
+                should_calc = True
+                self.teacache.accumulated_rel_l1_distance = 0
             else:
-                hidden_states, encoder_hidden_states = block(
-                    hidden_states=hidden_states,
-                    encoder_hidden_states=encoder_hidden_states,
-                    temb=temb,
-                    image_rotary_emb=image_rotary_emb,
-                    num_frames=video_length,
-                    height=height // self.patch_size,
-                    width=width // self.patch_size
-                )
+                rel_l1_distance = self.teacache.compute_rel_l1_distance(self.teacache.previous_modulated_input, modulated_inp)
+                self.teacache.accumulated_rel_l1_distance += self.teacache.rescale_func(rel_l1_distance)
+                if self.teacache.accumulated_rel_l1_distance < self.teacache.rel_l1_thresh:
+                    should_calc = False
+                else:
+                    should_calc = True
+                    self.teacache.accumulated_rel_l1_distance = 0
+            self.teacache.previous_modulated_input = modulated_inp
+            self.teacache.cnt += 1
+            if self.teacache.cnt == self.teacache.num_steps:
+                # self.cnt = 0
+                self.teacache.reset()
 
-        hidden_states = torch.cat([encoder_hidden_states, hidden_states], dim=1)
-        hidden_states = self.norm_final(hidden_states)
-        hidden_states = hidden_states[:, encoder_hidden_states.size()[1]:]
+        # TeaCache
+        if self.teacache is not None:
+            if not should_calc:
+                hidden_states += self.teacache.previous_residual
+            else:
+                ori_hidden_states = hidden_states.clone()
 
-        # 5. Final block
-        hidden_states = self.norm_out(hidden_states, temb=temb)
+                # 4. Transformer blocks
+                for i, block in enumerate(self.transformer_blocks):
+                    if torch.is_grad_enabled() and self.gradient_checkpointing:
+                        def create_custom_forward(module, return_dict=None):
+                            def custom_forward(*inputs):
+                                if return_dict is not None:
+                                    return module(*inputs, return_dict=return_dict)
+                                else:
+                                    return module(*inputs)
+
+                            return custom_forward
+
+                        ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
+                        hidden_states, encoder_hidden_states = torch.utils.checkpoint.checkpoint(
+                            create_custom_forward(block),
+                            hidden_states,
+                            encoder_hidden_states,
+                            temb,
+                            image_rotary_emb,
+                            video_length,
+                            height // self.patch_size,
+                            width // self.patch_size,
+                            **ckpt_kwargs,
+                        )
+                    else:
+                        hidden_states, encoder_hidden_states = block(
+                            hidden_states=hidden_states,
+                            encoder_hidden_states=encoder_hidden_states,
+                            temb=temb,
+                            image_rotary_emb=image_rotary_emb,
+                            num_frames=video_length,
+                            height=height // self.patch_size,
+                            width=width // self.patch_size
+                        )
+
+                hidden_states = torch.cat([encoder_hidden_states, hidden_states], dim=1)
+                hidden_states = self.norm_final(hidden_states)
+                hidden_states = hidden_states[:, encoder_hidden_states.size()[1]:]
+
+                # 5. Final block
+                hidden_states = self.norm_out(hidden_states, temb=temb)
+                self.teacache.previous_residual = hidden_states - ori_hidden_states
+        else:
+            # 4. Transformer blocks
+            for i, block in enumerate(self.transformer_blocks):
+                if torch.is_grad_enabled() and self.gradient_checkpointing:
+                    def create_custom_forward(module, return_dict=None):
+                        def custom_forward(*inputs):
+                            if return_dict is not None:
+                                return module(*inputs, return_dict=return_dict)
+                            else:
+                                return module(*inputs)
+
+                        return custom_forward
+
+                    ckpt_kwargs: Dict[str, Any] = {"use_reentrant": False} if is_torch_version(">=", "1.11.0") else {}
+                    hidden_states, encoder_hidden_states = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(block),
+                        hidden_states,
+                        encoder_hidden_states,
+                        temb,
+                        image_rotary_emb,
+                        video_length,
+                        height // self.patch_size,
+                        width // self.patch_size,
+                        **ckpt_kwargs,
+                    )
+                else:
+                    hidden_states, encoder_hidden_states = block(
+                        hidden_states=hidden_states,
+                        encoder_hidden_states=encoder_hidden_states,
+                        temb=temb,
+                        image_rotary_emb=image_rotary_emb,
+                        num_frames=video_length,
+                        height=height // self.patch_size,
+                        width=width // self.patch_size
+                    )
+
+            hidden_states = torch.cat([encoder_hidden_states, hidden_states], dim=1)
+            hidden_states = self.norm_final(hidden_states)
+            hidden_states = hidden_states[:, encoder_hidden_states.size()[1]:]
+
+            # 5. Final block
+            hidden_states = self.norm_out(hidden_states, temb=temb)
+
         hidden_states = self.proj_out(hidden_states)
 
         # 6. Unpatchify

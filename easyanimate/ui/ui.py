@@ -67,7 +67,7 @@ css = """
 """
 
 class EasyAnimateController:
-    def __init__(self, GPU_memory_mode, weight_dtype):
+    def __init__(self, GPU_memory_mode, enable_teacache, teacache_threshold, weight_dtype):
         # config dirs
         self.basedir                    = os.getcwd()
         self.config_dir                 = os.path.join(self.basedir, "config")
@@ -97,6 +97,8 @@ class EasyAnimateController:
         self.base_model_path       = "none"
         self.lora_model_path       = "none"
         self.GPU_memory_mode       = GPU_memory_mode
+        self.enable_teacache       = enable_teacache
+        self.teacache_threshold    = teacache_threshold
         
         self.weight_dtype          = weight_dtype
         self.edition               = "v5.1"
@@ -462,6 +464,9 @@ class EasyAnimateController:
             # lora part
             self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
         
+        if self.edition == "v5.1" and self.enable_teacache:
+            self.pipeline.transformer.enable_teacache(sample_step_slider, self.teacache_threshold)
+        
         try:
             if self.model_type == "Inpaint":
                 if self.transformer.config.in_channels != self.vae.config.latent_channels:
@@ -661,8 +666,8 @@ class EasyAnimateController:
                     return gr.Image.update(visible=False, value=None), gr.Video.update(value=save_sample_path, visible=True), "Success"
 
 
-def ui(GPU_memory_mode, weight_dtype):
-    controller = EasyAnimateController(GPU_memory_mode, weight_dtype)
+def ui(GPU_memory_mode, enable_teacache, teacache_threshold, weight_dtype):
+    controller = EasyAnimateController(GPU_memory_mode, enable_teacache, teacache_threshold, weight_dtype)
 
     with gr.Blocks(css=css) as demo:
         gr.Markdown(
@@ -1000,7 +1005,7 @@ def ui(GPU_memory_mode, weight_dtype):
 
 
 class EasyAnimateController_Modelscope:
-    def __init__(self, model_type, edition, config_path, model_name, savedir_sample, GPU_memory_mode, weight_dtype):
+    def __init__(self, model_type, edition, config_path, model_name, savedir_sample, GPU_memory_mode, enable_teacache, teacache_threshold, weight_dtype):
         # Basic dir
         self.basedir                    = os.getcwd()
         self.personalized_model_dir     = os.path.join(self.basedir, "models", "Personalized_Model")
@@ -1012,6 +1017,8 @@ class EasyAnimateController_Modelscope:
         # Config and model path
         self.model_type = model_type
         self.edition = edition
+        self.enable_teacache = enable_teacache
+        self.teacache_threshold = teacache_threshold
         self.weight_dtype = weight_dtype
         self.inference_config = OmegaConf.load(config_path)
         Choosen_AutoencoderKL = name_to_autoencoder_magvit[
@@ -1259,6 +1266,10 @@ class EasyAnimateController_Modelscope:
             # lora part
             self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
         
+        if self.edition == "v5.1" and self.enable_teacache:
+            print(f"Enable TeaCache with threshold: {self.teacache_threshold}.")
+            self.pipeline.transformer.enable_teacache(sample_step_slider, self.teacache_threshold)
+        
         try:
             if self.model_type == "Inpaint":
                 if self.vae.cache_mag_vae:
@@ -1373,8 +1384,8 @@ class EasyAnimateController_Modelscope:
                     return gr.Image.update(visible=False, value=None), gr.Video.update(value=save_sample_path, visible=True), "Success"
 
 
-def ui_modelscope(model_type, edition, config_path, model_name, savedir_sample, GPU_memory_mode, weight_dtype):
-    controller = EasyAnimateController_Modelscope(model_type, edition, config_path, model_name, savedir_sample, GPU_memory_mode, weight_dtype)
+def ui_modelscope(model_type, edition, config_path, model_name, savedir_sample, GPU_memory_mode, enable_teacache, teacache_threshold, weight_dtype):
+    controller = EasyAnimateController_Modelscope(model_type, edition, config_path, model_name, savedir_sample, GPU_memory_mode, enable_teacache, teacache_threshold, weight_dtype)
 
     with gr.Blocks(css=css) as demo:
         gr.Markdown(
