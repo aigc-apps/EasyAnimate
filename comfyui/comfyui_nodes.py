@@ -265,7 +265,6 @@ class LoadEasyAnimateModel:
         scheduler = DDIMScheduler.from_pretrained(model_name, subfolder='scheduler')
         # Update pbar
         pbar.update(1)
-
         if model_type == "Inpaint":
             if transformer.config.in_channels != vae.config.latent_channels:
                 pipeline = EasyAnimateInpaintPipeline(
@@ -434,6 +433,21 @@ class EasyAnimateT2VSampler:
                         "default": 'DDIM'
                     }
                 ),
+                "teacache_threshold":
+                (
+                    "FLOAT", {"default": 0.1, "min": 0.0, "max": 1.0, "step": 0.01}
+                ),
+                "enable_teacache":
+                (
+                    [
+                        False,
+                        True
+                    ], 
+                    {
+                        "default": False,
+                    }
+                ),
+
             },
         }
     
@@ -641,8 +655,23 @@ class EasyAnimateI2VSampler:
                     {
                         "default": 'DDIM'
                     }
-                )
+                ),
+                "teacache_threshold":
+                (
+                    "FLOAT", {"default": 0.1, "min": 0.0, "max": 1.0, "step": 0.01}
+                ),
+                "enable_teacache":
+                (
+                    [
+                        False,
+                        True
+                    ], 
+                    {
+                        "default": False,
+                    }
+                ),
             },
+
             "optional":{
                 "start_img": ("IMAGE",),
                 "end_img": ("IMAGE",),
@@ -845,6 +874,20 @@ class EasyAnimateV2VSampler:
                     ],
                     {
                         "default": 'DDIM'
+                    }
+                ),
+            "teacache_threshold":
+                (
+                    "FLOAT", {"default": 0.1, "min": 0.0, "max": 1.0, "step": 0.01}
+                ),
+                "enable_teacache":
+                (
+                    [
+                        False,
+                        True
+                    ], 
+                    {
+                        "default": False,
                     }
                 ),
             },
