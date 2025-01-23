@@ -37,7 +37,7 @@ GPU_memory_mode     = "model_cpu_offload_and_qfloat8"
 enable_teacache     = True
 # Recommended to be set between 0.05 and 0.1. A larger threshold can cache more steps, speeding up the inference process, 
 # but it may cause slight differences between the generated content and the original content.
-teacache_threshold  = 0.06
+teacache_threshold  = 0.1
 
 # Config and model path
 config_path         = "config/easyanimate_video_v5.1_magvit_qwen.yaml"
@@ -111,10 +111,6 @@ transformer = Choosen_Transformer3DModel.from_pretrained_2d(
     torch_dtype=torch.float8_e4m3fn if GPU_memory_mode == "model_cpu_offload_and_qfloat8" else weight_dtype,
     low_cpu_mem_usage=True,
 )
-
-if "v5.1" in config_path and enable_teacache:
-    print(f"Enable TeaCache with threshold: {teacache_threshold}.")
-    transformer.enable_teacache(num_inference_steps, teacache_threshold)
 
 if transformer_path is not None:
     print(f"From checkpoint: {transformer_path}")
@@ -256,6 +252,10 @@ elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
     convert_weight_dtype_wrapper(transformer, weight_dtype)
 else:
     pipeline.enable_model_cpu_offload()
+
+if "v5.1" in config_path and enable_teacache:
+    print(f"Enable TeaCache with threshold: {teacache_threshold}.")
+    pipeline.transformer.enable_teacache(num_inference_steps, teacache_threshold)
 
 generator = torch.Generator(device="cuda").manual_seed(seed)
 
