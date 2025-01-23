@@ -442,7 +442,7 @@ class EasyAnimateT2VSampler:
     FUNCTION = "process"
     CATEGORY = "EasyAnimateWrapper"
 
-    def process(self, easyanimate_model, prompt, negative_prompt, video_length, width, height, is_image, seed, steps, cfg, scheduler):
+    def process(self, easyanimate_model, prompt, negative_prompt, video_length, width, height, is_image, seed, steps, cfg, scheduler, teacache_threshold=0.10, enable_teacache=False):
         global transformer_cpu_cache
         global lora_path_before
         device = mm.get_torch_device()
@@ -458,6 +458,9 @@ class EasyAnimateT2VSampler:
 
         # Load Sampler
         pipeline.scheduler = all_cheduler_dict[scheduler].from_pretrained(model_name, subfolder='scheduler')
+
+        if enable_teacache:
+            pipeline.transformer.enable_teacache(steps, teacache_threshold)
 
         generator= torch.Generator(device).manual_seed(seed)
         
@@ -588,6 +591,8 @@ class EasyAnimateV5_T2VSampler(EasyAnimateT2VSampler):
                         "default": 'Flow'
                     }
                 ),
+                "teacache_threshold": ("FLOAT", {"default": 0.10, "min": 0.00, "max": 1.00, "step": 0.005}),
+                "enable_teacache":([False, True],  {"default": True,}),
             },
         }
 
@@ -649,7 +654,7 @@ class EasyAnimateI2VSampler:
     FUNCTION = "process"
     CATEGORY = "EasyAnimateWrapper"
 
-    def process(self, easyanimate_model, prompt, negative_prompt, video_length, base_resolution, seed, steps, cfg, scheduler, start_img=None, end_img=None):
+    def process(self, easyanimate_model, prompt, negative_prompt, video_length, base_resolution, seed, steps, cfg, scheduler, start_img=None, end_img=None, teacache_threshold=0.10, enable_teacache=False):
         global transformer_cpu_cache
         global lora_path_before
         device = mm.get_torch_device()
@@ -673,6 +678,9 @@ class EasyAnimateI2VSampler:
 
         # Load Sampler
         pipeline.scheduler = all_cheduler_dict[scheduler].from_pretrained(model_name, subfolder='scheduler')
+
+        if enable_teacache:
+            pipeline.transformer.enable_teacache(steps, teacache_threshold)
 
         generator= torch.Generator(device).manual_seed(seed)
 
@@ -780,7 +788,9 @@ class EasyAnimateV5_I2VSampler(EasyAnimateI2VSampler):
                     {
                         "default": 'Flow'
                     }
-                )
+                ),
+                "teacache_threshold": ("FLOAT", {"default": 0.10, "min": 0.00, "max": 1.00, "step": 0.005}),
+                "enable_teacache":([False, True],  {"default": True,}),
             },
             "optional":{
                 "start_img": ("IMAGE",),
@@ -849,7 +859,7 @@ class EasyAnimateV2VSampler:
     FUNCTION = "process"
     CATEGORY = "EasyAnimateWrapper"
 
-    def process(self, easyanimate_model, prompt, negative_prompt, video_length, base_resolution, seed, steps, cfg, denoise_strength, scheduler, validation_video=None, control_video=None, ref_image=None, camera_conditions=None):
+    def process(self, easyanimate_model, prompt, negative_prompt, video_length, base_resolution, seed, steps, cfg, denoise_strength, scheduler, validation_video=None, control_video=None, ref_image=None, camera_conditions=None, teacache_threshold=0.10, enable_teacache=False):
         global transformer_cpu_cache
         global lora_path_before
 
@@ -891,6 +901,9 @@ class EasyAnimateV2VSampler:
 
         # Load Sampler
         pipeline.scheduler = all_cheduler_dict[scheduler].from_pretrained(model_name, subfolder='scheduler')
+
+        if enable_teacache:
+            pipeline.transformer.enable_teacache(steps, teacache_threshold)
 
         generator= torch.Generator(device).manual_seed(seed)
 
@@ -1033,6 +1046,8 @@ class EasyAnimateV5_V2VSampler(EasyAnimateV2VSampler):
                         "default": 'Flow'
                     }
                 ),
+                "teacache_threshold": ("FLOAT", {"default": 0.10, "min": 0.00, "max": 1.00, "step": 0.005}),
+                "enable_teacache":([False, True],  {"default": True,}),
             },
             "optional":{
                 "validation_video": ("IMAGE",),

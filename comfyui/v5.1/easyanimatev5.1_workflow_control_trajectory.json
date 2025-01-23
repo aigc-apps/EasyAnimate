@@ -212,86 +212,6 @@
       "bgcolor": "#653"
     },
     {
-      "id": 106,
-      "type": "VHS_VideoCombine",
-      "pos": {
-        "0": 1497,
-        "1": 204
-      },
-      "size": [
-        390,
-        546
-      ],
-      "flags": {},
-      "order": 14,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 261,
-          "slot_index": 0,
-          "label": "图像",
-          "shape": 7
-        },
-        {
-          "name": "audio",
-          "type": "AUDIO",
-          "link": null,
-          "label": "音频",
-          "shape": 7
-        },
-        {
-          "name": "meta_batch",
-          "type": "VHS_BatchManager",
-          "link": null,
-          "label": "批次管理",
-          "shape": 7
-        },
-        {
-          "name": "vae",
-          "type": "VAE",
-          "link": null,
-          "shape": 7
-        }
-      ],
-      "outputs": [
-        {
-          "name": "Filenames",
-          "type": "VHS_FILENAMES",
-          "links": null,
-          "slot_index": 0,
-          "shape": 3,
-          "label": "文件名"
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "VHS_VideoCombine"
-      },
-      "widgets_values": {
-        "frame_rate": 8,
-        "loop_count": 0,
-        "filename_prefix": "EasyAnimate",
-        "format": "video/h264-mp4",
-        "pix_fmt": "yuv420p",
-        "crf": 22,
-        "save_metadata": true,
-        "pingpong": false,
-        "save_output": true,
-        "videopreview": {
-          "hidden": false,
-          "paused": false,
-          "params": {
-            "filename": "EasyAnimate_00105.mp4",
-            "subfolder": "",
-            "type": "output",
-            "format": "video/h264-mp4",
-            "frame_rate": 8
-          }
-        }
-      }
-    },
-    {
       "id": 99,
       "type": "LoadEasyAnimateModel",
       "pos": {
@@ -321,94 +241,10 @@
       },
       "widgets_values": [
         "EasyAnimateV5.1-12b-zh-Control",
-        "model_cpu_offload",
+        "model_cpu_offload_and_qfloat8",
         "Control",
         "easyanimate_video_v5.1_magvit_qwen.yaml",
         "bf16"
-      ]
-    },
-    {
-      "id": 111,
-      "type": "EasyAnimateV5_V2VSampler",
-      "pos": {
-        "0": 905,
-        "1": 201
-      },
-      "size": {
-        "0": 504,
-        "1": 350
-      },
-      "flags": {},
-      "order": 13,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "easyanimate_model",
-          "type": "EASYANIMATESMODEL",
-          "link": 256
-        },
-        {
-          "name": "prompt",
-          "type": "STRING_PROMPT",
-          "link": 257
-        },
-        {
-          "name": "negative_prompt",
-          "type": "STRING_PROMPT",
-          "link": 258
-        },
-        {
-          "name": "validation_video",
-          "type": "IMAGE",
-          "link": null,
-          "shape": 7
-        },
-        {
-          "name": "control_video",
-          "type": "IMAGE",
-          "link": 259,
-          "shape": 7
-        },
-        {
-          "name": "ref_image",
-          "type": "IMAGE",
-          "link": 260,
-          "shape": 7
-        },
-        {
-          "name": "camera_conditions",
-          "type": "STRING",
-          "link": null,
-          "widget": {
-            "name": "camera_conditions"
-          },
-          "shape": 7
-        }
-      ],
-      "outputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "links": [
-            261,
-            263
-          ],
-          "slot_index": 0
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "EasyAnimateV5_V2VSampler"
-      },
-      "widgets_values": [
-        49,
-        512,
-        43,
-        "fixed",
-        50,
-        6,
-        1,
-        "Flow",
-        ""
       ]
     },
     {
@@ -498,7 +334,7 @@
       },
       "size": [
         530,
-        650.4
+        310
       ],
       "flags": {},
       "order": 12,
@@ -621,10 +457,10 @@
         "0": 1140.1396484375,
         "1": 909.9193115234375
       },
-      "size": [
-        315,
-        82
-      ],
+      "size": {
+        "0": 315,
+        "1": 82
+      },
       "flags": {
         "collapsed": false
       },
@@ -715,7 +551,7 @@
       },
       "size": [
         530,
-        630
+        310
       ],
       "flags": {},
       "order": 16,
@@ -790,10 +626,10 @@
         "0": 1544.139404296875,
         "1": 1047.919189453125
       },
-      "size": [
-        645,
-        812
-      ],
+      "size": {
+        "0": 645,
+        "1": 812
+      },
       "flags": {},
       "order": 9,
       "mode": 0,
@@ -858,6 +694,172 @@
         null,
         null
       ]
+    },
+    {
+      "id": 111,
+      "type": "EasyAnimateV5_V2VSampler",
+      "pos": {
+        "0": 876,
+        "1": 147
+      },
+      "size": {
+        "0": 504,
+        "1": 394
+      },
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "easyanimate_model",
+          "type": "EASYANIMATESMODEL",
+          "link": 256
+        },
+        {
+          "name": "prompt",
+          "type": "STRING_PROMPT",
+          "link": 257
+        },
+        {
+          "name": "negative_prompt",
+          "type": "STRING_PROMPT",
+          "link": 258
+        },
+        {
+          "name": "validation_video",
+          "type": "IMAGE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "control_video",
+          "type": "IMAGE",
+          "link": 259,
+          "shape": 7
+        },
+        {
+          "name": "ref_image",
+          "type": "IMAGE",
+          "link": 260,
+          "shape": 7
+        },
+        {
+          "name": "camera_conditions",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "camera_conditions"
+          },
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            261,
+            263
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EasyAnimateV5_V2VSampler"
+      },
+      "widgets_values": [
+        49,
+        512,
+        43,
+        "fixed",
+        50,
+        6,
+        1,
+        "Flow",
+        0.10,
+        true,
+        ""
+      ]
+    },
+    {
+      "id": 106,
+      "type": "VHS_VideoCombine",
+      "pos": {
+        "0": 1496,
+        "1": 153
+      },
+      "size": [
+        390,
+        310
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 261,
+          "slot_index": 0,
+          "label": "图像",
+          "shape": 7
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": null,
+          "label": "音频",
+          "shape": 7
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "label": "批次管理",
+          "shape": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null,
+          "slot_index": 0,
+          "shape": 3,
+          "label": "文件名"
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 8,
+        "loop_count": 0,
+        "filename_prefix": "EasyAnimate",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 22,
+        "save_metadata": true,
+        "pingpong": false,
+        "save_output": true,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "filename": "EasyAnimate_00105.mp4",
+            "subfolder": "",
+            "type": "output",
+            "format": "video/h264-mp4",
+            "frame_rate": 8
+          }
+        }
+      }
     }
   ],
   "links": [
@@ -1027,11 +1029,17 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.5054470284993016,
+      "scale": 1.1,
       "offset": [
-        -239.62344289721364,
-        114.98345539297088
+        -465.8996857769304,
+        51.92597569190605
       ]
+    },
+    "node_versions": {
+      "EasyAnimate": "de24d49f07f6d9b12b4e98de98ec959a8b44b989",
+      "comfy-core": "v0.2.7-3-g8afb97c",
+      "ComfyUI-KJNodes": "4c5c26a2c91de356212419ac8bc7fcf9869527e9",
+      "ComfyUI-VideoHelperSuite": "70faa9bcef65932ab72e7404d6373fb300013a2e"
     }
   },
   "version": 0.4

@@ -154,7 +154,7 @@
       },
       "size": [
         390.9534912109375,
-        973.1686096191406
+        546.5720947265625
       ],
       "flags": {},
       "order": 9,
@@ -234,7 +234,7 @@
       },
       "size": {
         "0": 336,
-        "1": 350
+        "1": 394
       },
       "flags": {},
       "order": 8,
@@ -275,6 +275,15 @@
           "type": "IMAGE",
           "link": null,
           "shape": 7
+        },
+        {
+          "name": "camera_conditions",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "camera_conditions"
+          },
+          "shape": 7
         }
       ],
       "outputs": [
@@ -300,6 +309,8 @@
         6,
         1,
         "Flow",
+        0.10,
+        true,
         ""
       ]
     },
@@ -349,7 +360,7 @@
       },
       "size": [
         252.056640625,
-        685.7
+        262
       ],
       "flags": {},
       "order": 6,
@@ -432,10 +443,10 @@
         "0": -192,
         "1": -293
       },
-      "size": [
-        427.074951171875,
-        143.9142608642578
-      ],
+      "size": {
+        "0": 427.074951171875,
+        "1": 143.9142608642578
+      },
       "flags": {},
       "order": 7,
       "mode": 0,
@@ -495,14 +506,14 @@
   ],
   "groups": [
     {
-      "title": "Prompts",
+      "title": "Upload Your Video",
       "bounding": [
         218,
-        -127,
-        450,
-        483
+        385,
+        487,
+        789
       ],
-      "color": "#3f789e",
+      "color": "#a1309b",
       "font_size": 24,
       "flags": {}
     },
@@ -519,14 +530,14 @@
       "flags": {}
     },
     {
-      "title": "Upload Your Video",
+      "title": "Prompts",
       "bounding": [
         218,
-        385,
-        487,
-        789
+        -127,
+        450,
+        483
       ],
-      "color": "#a1309b",
+      "color": "#3f789e",
       "font_size": 24,
       "flags": {}
     }
@@ -534,14 +545,18 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.5644739300537782,
+      "scale": 0.8264462809917354,
       "offset": [
-        634.4708817322136,
-        478.05663679245043
+        -156.13347668602108,
+        275.2525393282698
       ]
     },
     "workspace_info": {
       "id": "776b62b4-bd17-4ed3-9923-b7aad000b1ea"
+    },
+    "node_versions": {
+      "EasyAnimate": "de24d49f07f6d9b12b4e98de98ec959a8b44b989",
+      "ComfyUI-VideoHelperSuite": "70faa9bcef65932ab72e7404d6373fb300013a2e"
     }
   },
   "version": 0.4
