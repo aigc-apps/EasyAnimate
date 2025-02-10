@@ -1558,25 +1558,26 @@ class EasyAnimateTransformer3DModel(ModelMixin, ConfigMixin):
                 should_calc = True
                 self.teacache.accumulated_rel_l1_distance = 0
             else:
-                rel_l1_distance = self.teacache.compute_rel_l1_distance(self.teacache.previous_modulated_input, modulated_inp)
+                rel_l1_distance = self.teacache.compute_rel_l1_distance(self.teacache.previous_modulated_input.to(modulated_inp.device), modulated_inp)
                 self.teacache.accumulated_rel_l1_distance += self.teacache.rescale_func(rel_l1_distance)
                 if self.teacache.accumulated_rel_l1_distance < self.teacache.rel_l1_thresh:
                     should_calc = False
                 else:
                     should_calc = True
                     self.teacache.accumulated_rel_l1_distance = 0
-            self.teacache.previous_modulated_input = modulated_inp
+            self.teacache.previous_modulated_input = modulated_inp.cpu()
             self.teacache.cnt += 1
             if self.teacache.cnt == self.teacache.num_steps:
                 # self.cnt = 0
                 self.teacache.reset()
+            del inp, temb_, encoder_hidden_states_
 
         # TeaCache
         if self.teacache is not None:
             if not should_calc:
-                hidden_states += self.teacache.previous_residual
+                hidden_states += self.teacache.previous_residual.to(modulated_inp.device)
             else:
-                ori_hidden_states = hidden_states.clone()
+                ori_hidden_states = hidden_states.clone().cpu()
 
                 # 4. Transformer blocks
                 for i, block in enumerate(self.transformer_blocks):
@@ -1619,7 +1620,8 @@ class EasyAnimateTransformer3DModel(ModelMixin, ConfigMixin):
 
                 # 5. Final block
                 hidden_states = self.norm_out(hidden_states, temb=temb)
-                self.teacache.previous_residual = hidden_states - ori_hidden_states
+                self.teacache.previous_residual = hidden_states.cpu() - ori_hidden_states
+                del ori_hidden_states
         else:
             # 4. Transformer blocks
             for i, block in enumerate(self.transformer_blocks):
