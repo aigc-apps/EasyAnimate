@@ -30,6 +30,7 @@ from transformers import (BertModel, BertTokenizer, CLIPImageProcessor,
 from ..data.bucket_sampler import ASPECT_RATIO_512, get_closest_ratio
 from ..models import (name_to_autoencoder_magvit,
                                 name_to_transformer3d)
+from ..models.transformer3d import get_teacache_coefficients
 from ..pipeline.pipeline_easyanimate import \
     EasyAnimatePipeline
 from ..pipeline.pipeline_easyanimate_control import \
@@ -467,8 +468,10 @@ class EasyAnimateController:
             # lora part
             self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
         
-        if self.edition == "v5.1" and self.enable_teacache:
-            self.pipeline.transformer.enable_teacache(sample_step_slider, self.teacache_threshold)
+        coefficients = get_teacache_coefficients(self.base_model_path)
+        if coefficients is not None and self.enable_teacache:
+            print(f"Enable TeaCache with threshold: {self.teacache_threshold}.")
+            self.pipeline.transformer.enable_teacache(sample_step_slider, self.teacache_threshold, coefficients=coefficients)
         
         try:
             if self.model_type == "Inpaint":
@@ -1020,6 +1023,7 @@ class EasyAnimateController_Modelscope:
         # Config and model path
         self.model_type = model_type
         self.edition = edition
+        self.model_name = model_name
         self.enable_teacache = enable_teacache
         self.teacache_threshold = teacache_threshold
         self.weight_dtype = weight_dtype
@@ -1272,9 +1276,10 @@ class EasyAnimateController_Modelscope:
             # lora part
             self.pipeline = merge_lora(self.pipeline, self.lora_model_path, multiplier=lora_alpha_slider)
         
-        if self.edition == "v5.1" and self.enable_teacache:
+        coefficients = get_teacache_coefficients(self.model_name)
+        if coefficients is not None and self.enable_teacache:
             print(f"Enable TeaCache with threshold: {self.teacache_threshold}.")
-            self.pipeline.transformer.enable_teacache(sample_step_slider, self.teacache_threshold)
+            self.pipeline.transformer.enable_teacache(sample_step_slider, self.teacache_threshold, coefficients=coefficients)
         
         try:
             if self.model_type == "Inpaint":

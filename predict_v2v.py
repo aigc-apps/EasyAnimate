@@ -14,6 +14,7 @@ from transformers import (BertModel, BertTokenizer, CLIPImageProcessor,
 
 from easyanimate.models import (name_to_autoencoder_magvit,
                                 name_to_transformer3d)
+from easyanimate.models.transformer3d import get_teacache_coefficients
 from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
     EasyAnimateInpaintPipeline
 from easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
@@ -251,9 +252,10 @@ elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
 else:
     pipeline.enable_model_cpu_offload()
 
-if "v5.1" in config_path and enable_teacache:
+coefficients = get_teacache_coefficients(model_name)
+if coefficients is not None and enable_teacache:
     print(f"Enable TeaCache with threshold: {teacache_threshold}.")
-    pipeline.transformer.enable_teacache(num_inference_steps, teacache_threshold)
+    pipeline.transformer.enable_teacache(num_inference_steps, teacache_threshold, coefficients=coefficients)
 
 generator = torch.Generator(device="cuda").manual_seed(seed)
 
