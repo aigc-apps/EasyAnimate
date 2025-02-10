@@ -297,6 +297,9 @@ class EasyAnimateController:
             self.pipeline.enable_sequential_cpu_offload()
         elif self.GPU_memory_mode == "model_cpu_offload_and_qfloat8":
             self.pipeline.enable_model_cpu_offload()
+            for _text_encoder in [self.pipeline.text_encoder, self.pipeline.text_encoder_2]:
+                if hasattr(_text_encoder, "visual"):
+                    del _text_encoder.visual
             convert_weight_dtype_wrapper(self.pipeline.transformer, self.weight_dtype)
         else:
             self.pipeline.enable_model_cpu_offload()
@@ -1154,6 +1157,9 @@ class EasyAnimateController_Modelscope:
             self.pipeline.enable_sequential_cpu_offload()
         elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
             self.pipeline.enable_model_cpu_offload()
+            for _text_encoder in [self.pipeline.text_encoder, self.pipeline.text_encoder_2]:
+                if hasattr(_text_encoder, "visual"):
+                    del _text_encoder.visual
             convert_weight_dtype_wrapper(self.pipeline.transformer, weight_dtype)
         else:
             GPU_memory_mode.enable_model_cpu_offload()

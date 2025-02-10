@@ -16,7 +16,7 @@ def autocast_model_forward(cls, origin_dtype, *inputs, **kwargs):
 
 def convert_weight_dtype_wrapper(module, origin_dtype):
     for name, module in module.named_modules():
-        if name == "":
+        if name == "" or "embed_tokens" in name:
             continue
         original_forward = module.forward
         if hasattr(module, "weight"):

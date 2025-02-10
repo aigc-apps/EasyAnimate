@@ -249,6 +249,9 @@ if GPU_memory_mode == "sequential_cpu_offload":
     pipeline.enable_sequential_cpu_offload()
 elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
     pipeline.enable_model_cpu_offload()
+    for _text_encoder in [pipeline.text_encoder, pipeline.text_encoder_2]:
+        if hasattr(_text_encoder, "visual"):
+            del _text_encoder.visual
     convert_weight_dtype_wrapper(transformer, weight_dtype)
 else:
     pipeline.enable_model_cpu_offload()
