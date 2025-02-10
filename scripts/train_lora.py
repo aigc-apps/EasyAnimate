@@ -186,8 +186,6 @@ def encode_prompt(
             texts.append(text)
         text_inputs = tokenizer(
             text=texts,
-            images=None,
-            videos=None,
             padding="max_length",
             max_length=max_length,
             truncation=True,
