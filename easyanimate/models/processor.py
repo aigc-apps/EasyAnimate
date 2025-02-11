@@ -318,8 +318,8 @@ except:
     print("Flash Attention is not installed. Please install with `pip install flash-attn`, if you want to use SWA.")
 
 class EasyAnimateSWAttnProcessor2_0:
-    def __init__(self, window_size=1024):
-        self.window_size = window_size
+    def __init__(self, cross_attention_size=1024):
+        self.cross_attention_size = cross_attention_size
 
     def __call__(
         self,
@@ -334,6 +334,7 @@ class EasyAnimateSWAttnProcessor2_0:
         attn2: Attention = None,
     ) -> torch.Tensor:
         text_seq_length = encoder_hidden_states.size(1)
+        windows_size = height * width
 
         batch_size, sequence_length, _ = (
             hidden_states.shape if encoder_hidden_states is None else encoder_hidden_states.shape
@@ -387,7 +388,7 @@ class EasyAnimateSWAttnProcessor2_0:
             
         query = query.transpose(1, 2).to(value)
         key = key.transpose(1, 2).to(value)
-        interval = max((query.size(1) - text_seq_length) // (self.window_size - text_seq_length), 1)
+        interval = max((query.size(1) - text_seq_length) // (self.cross_attention_size - text_seq_length), 1)
 
         cross_key = torch.cat([key[:, :text_seq_length], key[:, text_seq_length::interval]], dim=1)
         cross_val = torch.cat([value[:, :text_seq_length], value[:, text_seq_length::interval]], dim=1)
@@ -418,8 +419,8 @@ class EasyAnimateSWAttnProcessor2_0:
         value = torch.cat(new_values, dim=2)
         
         # apply attention
-        hidden_states = flash_attn_func(query, key, value, dropout_p=0.0, causal=False, window_size=(self.window_size, self.window_size))
-        
+        hidden_states = flash_attn_func(query, key, value, dropout_p=0.0, causal=False, window_size=(windows_size, windows_size))
+
         hidden_states = torch.tensor_split(hidden_states, 6, 2)
         new_hidden_states = [hidden_states[0]]
         for index, mode in enumerate(
