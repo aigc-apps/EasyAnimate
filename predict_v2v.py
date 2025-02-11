@@ -39,7 +39,7 @@ GPU_memory_mode     = "model_cpu_offload_and_qfloat8"
 enable_teacache     = True
 # Recommended to be set between 0.05 and 0.1. A larger threshold can cache more steps, speeding up the inference process, 
 # but it may cause slight differences between the generated content and the original content.
-teacache_threshold  = 0.1
+teacache_threshold  = 0.08
 
 # Config and model path
 config_path         = "config/easyanimate_video_v5.1_magvit_qwen.yaml"
@@ -75,7 +75,7 @@ denoise_strength        = 0.70
 
 # 使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性
 # 在neg prompt中添加"安静，固定"等词语可以增加动态性。
-prompt                  = "一只穿着小外套的猫咪正在花园秋千上安静地弹吉他。晚霞的余光洒在它柔软的毛皮上，和煦的微风轻轻拂过，周围斑驳的光影随着音乐的旋律轻轻摇曳。"
+prompt                  = "一只穿着小外套的猫咪正安静地坐在花园的秋千上弹吉他。它的小外套精致而合身，增添了几分俏皮与可爱。晚霞的余光洒在它柔软的毛皮上，给它的毛发镀上了一层温暖的金色光辉。和煦的微风轻轻拂过，带来阵阵花香和草木的气息，令人心旷神怡。周围斑驳的光影随着音乐的旋律轻轻摇曳，仿佛整个花园都在为这只小猫咪的演奏伴舞。阳光透过树叶间的缝隙，投下一片片光影交错的图案，与悠扬的吉他声交织在一起，营造出一种梦幻而宁静的氛围。猫咪专注而投入地弹奏着，每一个音符都似乎充满了魔力，让这个傍晚变得更加美好。"
 negative_prompt         = "扭曲的身体，肢体残缺，文本字幕，漫画，静止，丑陋，错误，乱码。"
 # 
 # Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics, text subtitles, line art." can increase stability

@@ -38,7 +38,7 @@ GPU_memory_mode     = "model_cpu_offload_and_qfloat8"
 enable_teacache     = True
 # Recommended to be set between 0.05 and 0.1. A larger threshold can cache more steps, speeding up the inference process, 
 # but it may cause slight differences between the generated content and the original content.
-teacache_threshold  = 0.1
+teacache_threshold  = 0.08
 
 # Config and model path
 config_path         = "config/easyanimate_video_v5.1_magvit_qwen.yaml"
@@ -81,7 +81,7 @@ validation_image_end    = None
 # EasyAnimateV4, V5 and V5.1 support English and Chinese.
 # 使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性
 # 在neg prompt中添加"安静，固定"等词语可以增加动态性。
-prompt                  = "一只棕褐色的狗在摇晃脑袋，坐在一个舒适的房间里的浅色沙发上。在狗的后面，架子上有一幅镶框的画，周围是粉红色的花朵。房间里的灯光柔和温暖，营造出舒适的氛围。"
+prompt                  = "一只棕褐色的狗正摇晃着脑袋，坐在一个舒适的房间里的浅色沙发上。沙发看起来柔软而宽敞，为这只活泼的狗狗提供了一个完美的休息地点。在狗的后面，靠墙摆放着一个架子，架子上挂着一幅精美的镶框画，画中描绘着一些美丽的风景或场景。画框周围装饰着粉红色的花朵，这些花朵不仅增添了房间的色彩，还带来了一丝自然和生机。房间里的灯光柔和而温暖，从天花板上的吊灯和角落里的台灯散发出来，营造出一种温馨舒适的氛围。整个空间给人一种宁静和谐的感觉，仿佛时间在这里变得缓慢而美好。"
 negative_prompt         = "扭曲的身体，肢体残缺，文本字幕，漫画，静止，丑陋，错误，乱码。"
 # 
 # Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics, text subtitles, line art." can increase stability

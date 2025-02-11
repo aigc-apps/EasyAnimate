@@ -150,14 +150,18 @@ def resize_mask(mask, latent, process_first_frame_only=True):
 
 
 ## Add noise to reference video
-def add_noise_to_reference_video(image, ratio=None):
+def add_noise_to_reference_video(image, ratio=None, generator=None):
     if ratio is None:
         sigma = torch.normal(mean=-3.0, std=0.5, size=(image.shape[0],)).to(image.device)
         sigma = torch.exp(sigma).to(image.dtype)
     else:
         sigma = torch.ones((image.shape[0],)).to(image.device, image.dtype) * ratio
     
-    image_noise = torch.randn_like(image) * sigma[:, None, None, None, None]
+    if generator is not None:
+        image_noise = torch.randn(image.size(), generator=generator, dtype=image.dtype, device=image.device) * \
+            sigma[:, None, None, None, None]
+    else:
+        image_noise = torch.randn_like(image) * sigma[:, None, None, None, None]
     image_noise = torch.where(image==-1, torch.zeros_like(image), image_noise)
     image = image + image_noise
     return image
@@ -738,7 +742,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         if masked_image is not None:
             masked_image = masked_image.to(device=device, dtype=dtype)
             if self.transformer.config.add_noise_in_inpaint_model:
-                masked_image = add_noise_to_reference_video(masked_image, ratio=noise_aug_strength)
+                masked_image = add_noise_to_reference_video(masked_image, ratio=noise_aug_strength, generator=generator)
             if self.vae.quant_conv is None or self.vae.quant_conv.weight.ndim==5:
                 bs = 1
                 new_mask_pixel_values = []
@@ -809,7 +813,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
                 for i in range(0, video.shape[0], bs):
                     video_bs = video[i : i + bs]
                     video_bs = self.vae.encode(video_bs)[0]
-                    video_bs = video_bs.sample()
+                    video_bs = video_bs.mode()
                     new_video.append(video_bs)
                 video = torch.cat(new_video, dim = 0)
                 video = video * self.vae.config.scaling_factor

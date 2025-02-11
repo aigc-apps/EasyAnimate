@@ -28,7 +28,7 @@ if __name__ == "__main__":
     enable_teacache     = True
     # Recommended to be set between 0.05 and 0.1. A larger threshold can cache more steps, speeding up the inference process, 
     # but it may cause slight differences between the generated content and the original content.
-    teacache_threshold  = 0.1
+    teacache_threshold  = 0.08
     # Use torch.float16 if GPU does not support torch.bfloat16
     # ome graphics cards, such as v100, 2080ti, do not support torch.bfloat16
     weight_dtype = torch.bfloat16

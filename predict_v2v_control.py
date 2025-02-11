@@ -39,7 +39,7 @@ GPU_memory_mode     = "model_cpu_offload_and_qfloat8"
 enable_teacache     = True
 # Recommended to be set between 0.05 and 0.1. A larger threshold can cache more steps, speeding up the inference process, 
 # but it may cause slight differences between the generated content and the original content.
-teacache_threshold  = 0.1
+teacache_threshold  = 0.08
 
 # Config and model path
 config_path         = "config/easyanimate_video_v5.1_magvit_qwen.yaml"
@@ -73,7 +73,7 @@ ref_image               = None
 
 # 使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性
 # 在neg prompt中添加"安静，固定"等词语可以增加动态性。
-prompt                  = "一位穿着合身的白色连衣裙，带着细肩带的女人站在一个铺着木地板的房间里。她有一头深色的长发。背景是一个放着各种瓶子的架子。灯光温暖，背景似乎在室内。"
+prompt                  = "在这个阳光明媚的户外花园里，美女身穿一袭及膝的白色无袖连衣裙，裙摆在她轻盈的舞姿中轻柔地摆动，宛如一只翩翩起舞的蝴蝶。阳光透过树叶间洒下斑驳的光影，映衬出她柔和的脸庞和清澈的眼眸，显得格外优雅。仿佛每一个动作都在诉说着青春与活力，她在草地上旋转，裙摆随之飞扬，仿佛整个花园都因她的舞动而欢愉。周围五彩缤纷的花朵在微风中摇曳，玫瑰、菊花、百合，各自释放出阵阵香气，营造出一种轻松而愉快的氛围。"
 negative_prompt         = "扭曲的身体，肢体残缺，文本字幕，漫画，静止，丑陋，错误，乱码。"
 # 
 # Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics, text subtitles, line art." can increase stability
