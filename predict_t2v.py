@@ -7,19 +7,19 @@ from diffusers import (DDIMScheduler, DPMSolverMultistepScheduler,
                        FlowMatchEulerDiscreteScheduler, PNDMScheduler)
 from omegaconf import OmegaConf
 from PIL import Image
-from transformers import (BertModel, BertTokenizer,
-                          CLIPImageProcessor, CLIPVisionModelWithProjection,
-                          Qwen2Tokenizer, Qwen2VLForConditionalGeneration,
-                          T5EncoderModel, T5Tokenizer)
+from transformers import (BertModel, BertTokenizer, CLIPImageProcessor,
+                          CLIPVisionModelWithProjection, Qwen2Tokenizer,
+                          Qwen2VLForConditionalGeneration, T5EncoderModel,
+                          T5Tokenizer)
 
 from easyanimate.models import (name_to_autoencoder_magvit,
                                 name_to_transformer3d)
 from easyanimate.models.transformer3d import get_teacache_coefficients
-from easyanimate.pipeline.pipeline_easyanimate import \
-    EasyAnimatePipeline
+from easyanimate.pipeline.pipeline_easyanimate import EasyAnimatePipeline
 from easyanimate.pipeline.pipeline_easyanimate_inpaint import \
     EasyAnimateInpaintPipeline
-from easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
+from easyanimate.utils.fp8_optimization import (convert_model_weight_to_float8,
+                                                convert_weight_dtype_wrapper)
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 
@@ -33,8 +33,7 @@ from easyanimate.utils.utils import get_image_to_video_latent, save_videos_grid
 # resulting in slower speeds but saving a large amount of GPU memory.
 # 
 # EasyAnimateV1, V2 and V3 support "model_cpu_offload" "sequential_cpu_offload"
-# EasyAnimateV4, V5 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" "sequential_cpu_offload"
-# EasyAnimateV5.1 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" 
+# EasyAnimateV4, V5 and V5.1 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" "sequential_cpu_offload"
 GPU_memory_mode     = "model_cpu_offload_and_qfloat8"
 # EasyAnimateV5.1 support TeaCache.
 enable_teacache     = True
@@ -97,7 +96,7 @@ Choosen_Transformer3DModel = name_to_transformer3d[
 ]
 
 transformer_additional_kwargs = OmegaConf.to_container(config['transformer_additional_kwargs'])
-if weight_dtype == torch.float16:
+if weight_dtype == torch.float16 and "v5.1" not in model_name.lower():
     transformer_additional_kwargs["upcast_attention"] = True
 
 transformer = Choosen_Transformer3DModel.from_pretrained_2d(
@@ -141,7 +140,7 @@ vae = Choosen_AutoencoderKL.from_pretrained(
     subfolder="vae",
     vae_additional_kwargs=OmegaConf.to_container(config['vae_kwargs'])
 ).to(weight_dtype)
-if config['vae_kwargs'].get('vae_type', 'AutoencoderKL') == 'AutoencoderKLMagvit' and weight_dtype == torch.float16:
+if weight_dtype == torch.float16 and "v5.1" not in model_name.lower():
     vae.upcast_vae = True
 
 if vae_path is not None:
@@ -255,13 +254,21 @@ else:
     )
 
 if GPU_memory_mode == "sequential_cpu_offload":
+    pipeline._manual_cpu_offload_in_sequential_cpu_offload = []
+    for name, _text_encoder in zip(["text_encoder", "text_encoder_2"], [pipeline.text_encoder, pipeline.text_encoder_2]):
+        if isinstance(_text_encoder, Qwen2VLForConditionalGeneration):
+            if hasattr(_text_encoder, "visual"):
+                del _text_encoder.visual
+            convert_model_weight_to_float8(_text_encoder)
+            convert_weight_dtype_wrapper(_text_encoder, weight_dtype)
+            pipeline._manual_cpu_offload_in_sequential_cpu_offload = [name]
     pipeline.enable_sequential_cpu_offload()
 elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
-    pipeline.enable_model_cpu_offload()
     for _text_encoder in [pipeline.text_encoder, pipeline.text_encoder_2]:
         if hasattr(_text_encoder, "visual"):
             del _text_encoder.visual
-    convert_weight_dtype_wrapper(pipeline.transformer, weight_dtype)
+    convert_weight_dtype_wrapper(transformer, weight_dtype)
+    pipeline.enable_model_cpu_offload()
 else:
     pipeline.enable_model_cpu_offload()
 

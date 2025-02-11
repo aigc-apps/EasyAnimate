@@ -28,20 +28,18 @@ from transformers import (BertModel, BertTokenizer, CLIPImageProcessor,
                           T5Tokenizer)
 
 from ..data.bucket_sampler import ASPECT_RATIO_512, get_closest_ratio
-from ..models import (name_to_autoencoder_magvit,
-                                name_to_transformer3d)
+from ..models import name_to_autoencoder_magvit, name_to_transformer3d
 from ..models.transformer3d import get_teacache_coefficients
-from ..pipeline.pipeline_easyanimate import \
-    EasyAnimatePipeline
-from ..pipeline.pipeline_easyanimate_control import \
-    EasyAnimateControlPipeline
-from ..pipeline.pipeline_easyanimate_inpaint import \
-    EasyAnimateInpaintPipeline
-from ..utils.fp8_optimization import convert_weight_dtype_wrapper
+from ..pipeline.pipeline_easyanimate import EasyAnimatePipeline
+from ..pipeline.pipeline_easyanimate_control import EasyAnimateControlPipeline
+from ..pipeline.pipeline_easyanimate_inpaint import EasyAnimateInpaintPipeline
+from ..utils.fp8_optimization import (convert_model_weight_to_float8,
+                                      convert_weight_dtype_wrapper)
 from ..utils.lora_utils import merge_lora, unmerge_lora
-from ..utils.utils import (
-    get_image_to_video_latent, get_video_to_video_latent,
-    get_width_and_height_from_image_and_base_resolution, save_videos_grid)
+from ..utils.utils import (get_image_to_video_latent,
+                           get_video_to_video_latent,
+                           get_width_and_height_from_image_and_base_resolution,
+                           save_videos_grid)
 
 ddpm_scheduler_dict = {
     "Euler": EulerDiscreteScheduler,
@@ -170,11 +168,11 @@ class EasyAnimateController:
             diffusion_transformer_dropdown, 
             subfolder="vae", 
         ).to(self.weight_dtype)
-        if self.inference_config['vae_kwargs'].get('vae_type', 'AutoencoderKL') == 'AutoencoderKLMagvit' and self.weight_dtype == torch.float16:
+        if self.weight_dtype == torch.float16 and "v5.1" not in diffusion_transformer_dropdown.lower():
             self.vae.upcast_vae = True
             
         transformer_additional_kwargs = OmegaConf.to_container(self.inference_config['transformer_additional_kwargs'])
-        if self.weight_dtype == torch.float16:
+        if self.weight_dtype == torch.float16 and "v5.1" not in diffusion_transformer_dropdown.lower():
             transformer_additional_kwargs["upcast_attention"] = True
 
         # Get Transformer
@@ -295,12 +293,20 @@ class EasyAnimateController:
             )
 
         if self.GPU_memory_mode == "sequential_cpu_offload":
+            self.pipeline._manual_cpu_offload_in_sequential_cpu_offload = []
+            for name, _text_encoder in zip(["text_encoder", "text_encoder_2"], [self.pipeline.text_encoder, self.pipeline.text_encoder_2]):
+                if isinstance(_text_encoder, Qwen2VLForConditionalGeneration):
+                    if hasattr(_text_encoder, "visual"):
+                        del _text_encoder.visual
+                    convert_model_weight_to_float8(_text_encoder)
+                    convert_weight_dtype_wrapper(_text_encoder, self.weight_dtype)
+                    self.pipeline._manual_cpu_offload_in_sequential_cpu_offload = [name]
             self.pipeline.enable_sequential_cpu_offload()
         elif self.GPU_memory_mode == "model_cpu_offload_and_qfloat8":
-            self.pipeline.enable_model_cpu_offload()
             for _text_encoder in [self.pipeline.text_encoder, self.pipeline.text_encoder_2]:
                 if hasattr(_text_encoder, "visual"):
                     del _text_encoder.visual
+            self.pipeline.enable_model_cpu_offload()
             convert_weight_dtype_wrapper(self.pipeline.transformer, self.weight_dtype)
         else:
             self.pipeline.enable_model_cpu_offload()
@@ -1035,11 +1041,11 @@ class EasyAnimateController_Modelscope:
             model_name, 
             subfolder="vae", 
         ).to(self.weight_dtype)
-        if self.inference_config['vae_kwargs'].get('vae_type', 'AutoencoderKL') == 'AutoencoderKLMagvit' and weight_dtype == torch.float16:
+        if self.weight_dtype == torch.float16 and "v5.1" not in model_name.lower():
             self.vae.upcast_vae = True
             
         transformer_additional_kwargs = OmegaConf.to_container(self.inference_config['transformer_additional_kwargs'])
-        if self.weight_dtype == torch.float16:
+        if self.weight_dtype == torch.float16 and "v5.1" not in model_name.lower():
             transformer_additional_kwargs["upcast_attention"] = True
 
         # Get Transformer
@@ -1158,15 +1164,23 @@ class EasyAnimateController_Modelscope:
             )
 
         if GPU_memory_mode == "sequential_cpu_offload":
+            self.pipeline._manual_cpu_offload_in_sequential_cpu_offload = []
+            for name, _text_encoder in zip(["text_encoder", "text_encoder_2"], [self.pipeline.text_encoder, self.pipeline.text_encoder_2]):
+                if isinstance(_text_encoder, Qwen2VLForConditionalGeneration):
+                    if hasattr(_text_encoder, "visual"):
+                        del _text_encoder.visual
+                    convert_model_weight_to_float8(_text_encoder)
+                    convert_weight_dtype_wrapper(_text_encoder, weight_dtype)
+                    self.pipeline._manual_cpu_offload_in_sequential_cpu_offload = [name]
             self.pipeline.enable_sequential_cpu_offload()
         elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
-            self.pipeline.enable_model_cpu_offload()
             for _text_encoder in [self.pipeline.text_encoder, self.pipeline.text_encoder_2]:
                 if hasattr(_text_encoder, "visual"):
                     del _text_encoder.visual
             convert_weight_dtype_wrapper(self.pipeline.transformer, weight_dtype)
+            self.pipeline.enable_model_cpu_offload()
         else:
-            GPU_memory_mode.enable_model_cpu_offload()
+            self.pipeline.enable_model_cpu_offload()
         print("Update diffusion transformer done")
 
     def refresh_personalized_model(self):

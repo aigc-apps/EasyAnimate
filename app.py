@@ -21,8 +21,7 @@ if __name__ == "__main__":
     # resulting in slower speeds but saving a large amount of GPU memory.
     # 
     # EasyAnimateV1, V2 and V3 support "model_cpu_offload" "sequential_cpu_offload"
-    # EasyAnimateV4, V5 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" "sequential_cpu_offload"
-    # EasyAnimateV5.1 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" 
+    # EasyAnimateV4, V5 and V5.1 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" "sequential_cpu_offload"
     GPU_memory_mode = "model_cpu_offload_and_qfloat8"
     # EasyAnimateV5.1 support TeaCache.
     enable_teacache     = True
