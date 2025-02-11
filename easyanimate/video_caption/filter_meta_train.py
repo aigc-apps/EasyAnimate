@@ -18,6 +18,12 @@ def parse_args():
         default="video_path",
         help="The column contains the video path (an absolute path or a relative path w.r.t the video_folder).",
     )
+    parser.add_argument(
+        "--caption_column",
+        type=str,
+        default="caption",
+        help="The column contains the caption.",
+    )
     parser.add_argument("--video_folder", type=str, default="", help="The video folder.")
     parser.add_argument(
         "--basic_metadata_path", type=str, default=None, help="The path to the basic metadata (csv/jsonl)."
@@ -76,7 +82,7 @@ def main():
     )
     filtered_video_path_list = natsorted(filtered_video_path_list)
     filtered_caption_df = raw_caption_df[raw_caption_df[args.video_path_column].isin(filtered_video_path_list)]
-    train_df = filtered_caption_df.rename(columns={"video_path": "file_path", "caption": "text"})
+    train_df = filtered_caption_df.rename(columns={args.video_path_column: "file_path", args.caption_column: "text"})
     train_df["file_path"] = train_df["file_path"].map(lambda x: os.path.join(args.video_folder, x))
     train_df["type"] = "video"
     train_df.to_json(args.saved_path, orient="records", force_ascii=False, indent=2)

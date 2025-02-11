@@ -162,6 +162,7 @@ def main():
         video_dataset = VideoDataset(
             dataset_inputs={args.video_path_column: splitted_video_path_list},
             video_folder=args.video_folder,
+            video_path_column=args.video_path_column,
             sample_method=args.frame_sample_method,
             num_sampled_frames=args.num_sampled_frames,
             sample_stride=args.sample_stride,
