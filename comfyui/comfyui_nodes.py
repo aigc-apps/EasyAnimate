@@ -39,7 +39,8 @@ from ..easyanimate.pipeline.pipeline_easyanimate_control import \
 from ..easyanimate.utils.lora_utils import merge_lora, unmerge_lora
 from ..easyanimate.utils.utils import (get_image_to_video_latent, get_image_latent,
                                        get_video_to_video_latent)
-from ..easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
+from ..easyanimate.utils.fp8_optimization import (convert_model_weight_to_float8,
+                                                convert_weight_dtype_wrapper)
 from ..easyanimate.ui.ui import ddpm_scheduler_dict, flow_scheduler_dict, all_cheduler_dict
 
 # Compatible with Alibaba EAS for quick launch
@@ -98,6 +99,11 @@ class LoadEasyAnimateModel:
                         'EasyAnimateV5-12b-zh-InP',
                         'EasyAnimateV5-12b-zh-Control',
                         'EasyAnimateV5-12b-zh',
+                        'EasyAnimateV5.1-7b-zh',
+                        'EasyAnimateV5.1-7b-zh-InP',
+                        'EasyAnimateV5.1-7b-zh-Control',
+                        'EasyAnimateV5.1-7b-zh-Control-Camera',
+                        'EasyAnimateV5.1-12b-zh',
                         'EasyAnimateV5.1-12b-zh-InP',
                         'EasyAnimateV5.1-12b-zh-Control',
                         'EasyAnimateV5.1-12b-zh-Control-Camera',
@@ -174,7 +180,7 @@ class LoadEasyAnimateModel:
             model_name, 
             subfolder="vae"
         ).to(weight_dtype)
-        if config['vae_kwargs'].get('vae_type', 'AutoencoderKL') == 'AutoencoderKLMagvit' and weight_dtype == torch.float16:
+        if weight_dtype == torch.float16 and "v5.1" not in model_name.lower():
             vae.upcast_vae = True
         # Update pbar
         pbar.update(1)
@@ -185,7 +191,7 @@ class LoadEasyAnimateModel:
         ]
 
         transformer_additional_kwargs = OmegaConf.to_container(config['transformer_additional_kwargs'])
-        if weight_dtype == torch.float16:
+        if weight_dtype == torch.float16 and "v5.1" not in model_name.lower():
             transformer_additional_kwargs["upcast_attention"] = True
 
         transformer = Choosen_Transformer3DModel.from_pretrained_2d(
@@ -299,11 +305,23 @@ class LoadEasyAnimateModel:
                 transformer=transformer,
                 scheduler=scheduler,
             )
+
         if GPU_memory_mode == "sequential_cpu_offload":
+            pipeline._manual_cpu_offload_in_sequential_cpu_offload = []
+            for name, _text_encoder in zip(["text_encoder", "text_encoder_2"], [pipeline.text_encoder, pipeline.text_encoder_2]):
+                if isinstance(_text_encoder, Qwen2VLForConditionalGeneration):
+                    if hasattr(_text_encoder, "visual"):
+                        del _text_encoder.visual
+                    convert_model_weight_to_float8(_text_encoder)
+                    convert_weight_dtype_wrapper(_text_encoder, weight_dtype)
+                    pipeline._manual_cpu_offload_in_sequential_cpu_offload = [name]
             pipeline.enable_sequential_cpu_offload()
         elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
-            pipeline.enable_model_cpu_offload()
+            for _text_encoder in [pipeline.text_encoder, pipeline.text_encoder_2]:
+                if hasattr(_text_encoder, "visual"):
+                    del _text_encoder.visual
             convert_weight_dtype_wrapper(transformer, weight_dtype)
+            pipeline.enable_model_cpu_offload()
         else:
             pipeline.enable_model_cpu_offload()
         easyanimate_model = {

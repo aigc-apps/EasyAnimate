@@ -89,10 +89,10 @@ def main():
             saved_metadata_df = pd.read_json(args.saved_path, lines=True)
 
         # Filter out the unprocessed video-caption pairs by setting the indicator=True.
-        merged_df = video_metadata_df.merge(saved_metadata_df, on="video_path", how="outer", indicator=True)
+        merged_df = video_metadata_df.merge(saved_metadata_df, on=args.video_path_column, how="outer", indicator=True)
         video_metadata_df = merged_df[merged_df["_merge"] == "left_only"]
         # Sorting to guarantee the same result for each process.
-        video_metadata_df = video_metadata_df.iloc[index_natsorted(video_metadata_df["video_path"])].reset_index(drop=True)
+        video_metadata_df = video_metadata_df.iloc[index_natsorted(video_metadata_df[args.video_path_column])].reset_index(drop=True)
         if args.caption_column is None:
             video_metadata_df = video_metadata_df[[args.video_path_column]]
         else:
@@ -160,6 +160,7 @@ def main():
         video_dataset = VideoDataset(
             dataset_inputs=splitted_video_metadata,
             video_folder=args.video_folder,
+            video_path_column=args.video_path_column,
             text_column=args.caption_column,
             sample_method=args.frame_sample_method,
             num_sampled_frames=args.num_sampled_frames

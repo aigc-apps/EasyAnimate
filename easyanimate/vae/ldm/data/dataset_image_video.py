@@ -172,7 +172,7 @@ class ImageVideoDataset(Dataset):
                 video_reader = VideoReader(example['file_path'])
             video_length = len(video_reader)
             if self.slice_interval == "rand":
-                slice_interval = np.random.choice([1, 2, 3])
+                slice_interval = np.random.choice([1, 2, 3, 4, 5, 6, 7, 8])
             else:
                 slice_interval = int(self.slice_interval)
             clip_length = min(video_length, (self.video_len - 1) * slice_interval + 1)

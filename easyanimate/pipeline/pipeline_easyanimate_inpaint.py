@@ -150,14 +150,18 @@ def resize_mask(mask, latent, process_first_frame_only=True):
 
 
 ## Add noise to reference video
-def add_noise_to_reference_video(image, ratio=None):
+def add_noise_to_reference_video(image, ratio=None, generator=None):
     if ratio is None:
         sigma = torch.normal(mean=-3.0, std=0.5, size=(image.shape[0],)).to(image.device)
         sigma = torch.exp(sigma).to(image.dtype)
     else:
         sigma = torch.ones((image.shape[0],)).to(image.device, image.dtype) * ratio
     
-    image_noise = torch.randn_like(image) * sigma[:, None, None, None, None]
+    if generator is not None:
+        image_noise = torch.randn(image.size(), generator=generator, dtype=image.dtype, device=image.device) * \
+            sigma[:, None, None, None, None]
+    else:
+        image_noise = torch.randn_like(image) * sigma[:, None, None, None, None]
     image_noise = torch.where(image==-1, torch.zeros_like(image), image_noise)
     image = image + image_noise
     return image
@@ -319,13 +323,68 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         self.mask_processor = VaeImageProcessor(
             vae_scale_factor=self.vae_scale_factor, do_normalize=False, do_binarize=True, do_convert_grayscale=True
         )
+        self.manual_cpu_offload_flag = False
 
-    def enable_sequential_cpu_offload(self, *args, **kwargs):
-        super().enable_sequential_cpu_offload(*args, **kwargs)
+    def enable_sequential_cpu_offload(self, gpu_id: Optional[int] = None, device: Union[torch.device, str] = "cuda"):
+        from diffusers.pipelines.pipeline_utils import is_accelerate_available, is_accelerate_version
+
+        if is_accelerate_available() and is_accelerate_version(">=", "0.14.0"):
+            from accelerate import cpu_offload
+            from accelerate import cpu_offload_with_hook
+        else:
+            raise ImportError("`enable_sequential_cpu_offload` requires `accelerate v0.14.0` or higher")
+        self.remove_all_hooks()
+
+        is_pipeline_device_mapped = self.hf_device_map is not None and len(self.hf_device_map) > 1
+        if is_pipeline_device_mapped:
+            raise ValueError(
+                "It seems like you have activated a device mapping strategy on the pipeline so calling `enable_sequential_cpu_offload() isn't allowed. You can call `reset_device_map()` first and then call `enable_sequential_cpu_offload()`."
+            )
+
+        torch_device = torch.device(device)
+        device_index = torch_device.index
+
+        if gpu_id is not None and device_index is not None:
+            raise ValueError(
+                f"You have passed both `gpu_id`={gpu_id} and an index as part of the passed device `device`={device}"
+                f"Cannot pass both. Please make sure to either not define `gpu_id` or not pass the index as part of the device: `device`={torch_device.type}"
+            )
+
+        # _offload_gpu_id should be set to passed gpu_id (or id in passed `device`) or default to previously set id or default to 0
+        self._offload_gpu_id = gpu_id or torch_device.index or getattr(self, "_offload_gpu_id", 0)
+
+        device_type = torch_device.type
+        device = torch.device(f"{device_type}:{self._offload_gpu_id}")
+        self._offload_device = device
+
+        if self.device.type != "cpu":
+            self.to("cpu", silence_dtype_warnings=True)
+            device_mod = getattr(torch, self.device.type, None)
+            if hasattr(device_mod, "empty_cache") and device_mod.is_available():
+                device_mod.empty_cache()  # otherwise we don't see the memory savings (but they probably exist)
+
+        for name, model in self.components.items():
+            if not isinstance(model, torch.nn.Module):
+                continue
+
+            if name in self._manual_cpu_offload_in_sequential_cpu_offload:
+                pass
+            else:
+                # make sure to offload buffers if not all high level weights
+                # are of type nn.Module
+                offload_buffers = len(model._parameters) > 0
+                cpu_offload(model, device, offload_buffers=offload_buffers)
+
         if hasattr(self.transformer, "clip_projection") and self.transformer.clip_projection is not None:
             import accelerate
             accelerate.hooks.remove_hook_from_module(self.transformer.clip_projection, recurse=True)
             self.transformer.clip_projection = self.transformer.clip_projection.to("cuda")
+
+        self.manual_cpu_offload_flag = True
+
+    def enable_model_cpu_offload(self, *args, **kwargs):
+        super().enable_model_cpu_offload(*args, **kwargs)
+        self.manual_cpu_offload_flag = True
 
     def encode_prompt(
         self,
@@ -738,7 +797,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
         if masked_image is not None:
             masked_image = masked_image.to(device=device, dtype=dtype)
             if self.transformer.config.add_noise_in_inpaint_model:
-                masked_image = add_noise_to_reference_video(masked_image, ratio=noise_aug_strength)
+                masked_image = add_noise_to_reference_video(masked_image, ratio=noise_aug_strength, generator=generator)
             if self.vae.quant_conv is None or self.vae.quant_conv.weight.ndim==5:
                 bs = 1
                 new_mask_pixel_values = []
@@ -809,7 +868,7 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
                 for i in range(0, video.shape[0], bs):
                     video_bs = video[i : i + bs]
                     video_bs = self.vae.encode(video_bs)[0]
-                    video_bs = video_bs.sample()
+                    video_bs = video_bs.mode()
                     new_video.append(video_bs)
                 video = torch.cat(new_video, dim = 0)
                 video = video * self.vae.config.scaling_factor
@@ -1098,7 +1157,13 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
             dtype = self.text_encoder_2.dtype
         else:
             dtype = self.transformer.dtype
-            
+
+        if self.manual_cpu_offload_flag:
+            if isinstance(self.text_encoder, Qwen2VLForConditionalGeneration):
+                self.text_encoder.to(device)
+            if isinstance(self.text_encoder_2, Qwen2VLForConditionalGeneration) and self.text_encoder_2 is not None:
+                self.text_encoder_2.to(device)
+
         # 3. Encode input prompt
         (
             prompt_embeds,
@@ -1142,6 +1207,13 @@ class EasyAnimateInpaintPipeline(DiffusionPipeline):
             negative_prompt_embeds_2 = None
             prompt_attention_mask_2 = None
             negative_prompt_attention_mask_2 = None
+
+        if self.manual_cpu_offload_flag:
+            if isinstance(self.text_encoder, Qwen2VLForConditionalGeneration):
+                self.text_encoder.to("cpu")
+            if isinstance(self.text_encoder_2, Qwen2VLForConditionalGeneration) and self.text_encoder_2 is not None:
+                self.text_encoder_2.to("cpu")
+            torch.cuda.empty_cache()
 
         # 4. set timesteps
         if isinstance(self.scheduler, FlowMatchEulerDiscreteScheduler):

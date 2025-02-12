@@ -4,23 +4,26 @@ import numpy as np
 import torch
 from diffusers import (DDIMScheduler, DPMSolverMultistepScheduler,
                        EulerAncestralDiscreteScheduler, EulerDiscreteScheduler,
-                       PNDMScheduler)
+                       FlowMatchEulerDiscreteScheduler, PNDMScheduler)
 from omegaconf import OmegaConf
 from PIL import Image
-from transformers import (BertModel, BertTokenizer,
-                          CLIPImageProcessor, CLIPVisionModelWithProjection,
-                          Qwen2Tokenizer, Qwen2VLForConditionalGeneration,
-                          T5EncoderModel, T5Tokenizer)
+from transformers import (BertModel, BertTokenizer, CLIPImageProcessor,
+                          CLIPVisionModelWithProjection, Qwen2Tokenizer,
+                          Qwen2VLForConditionalGeneration, T5EncoderModel,
+                          T5Tokenizer)
 
 from easyanimate.data.dataset_image_video import process_pose_file
 from easyanimate.models import (name_to_autoencoder_magvit,
                                 name_to_transformer3d)
+from easyanimate.models.transformer3d import get_teacache_coefficients
 from easyanimate.pipeline.pipeline_easyanimate_control import \
     EasyAnimateControlPipeline
+from easyanimate.utils.fp8_optimization import (convert_model_weight_to_float8,
+                                                convert_weight_dtype_wrapper)
 from easyanimate.utils.lora_utils import merge_lora, unmerge_lora
-from easyanimate.utils.utils import get_video_to_video_latent, save_videos_grid, get_image_latent
-from easyanimate.utils.fp8_optimization import convert_weight_dtype_wrapper
-from diffusers import FlowMatchEulerDiscreteScheduler
+from easyanimate.utils.utils import (get_image_latent,
+                                     get_video_to_video_latent,
+                                     save_videos_grid)
 
 # GPU memory mode, which can be choosen in [model_cpu_offload, model_cpu_offload_and_qfloat8, sequential_cpu_offload].
 # model_cpu_offload means that the entire model will be moved to the CPU after use, which can save some GPU memory.
@@ -31,14 +34,13 @@ from diffusers import FlowMatchEulerDiscreteScheduler
 # sequential_cpu_offload means that each layer of the model will be moved to the CPU after use, 
 # resulting in slower speeds but saving a large amount of GPU memory.
 # 
-# EasyAnimateV5 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" "sequential_cpu_offload"
-# EasyAnimateV5.1 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" 
+# EasyAnimateV5 and V5.1 support "model_cpu_offload" "model_cpu_offload_and_qfloat8" "sequential_cpu_offload"
 GPU_memory_mode     = "model_cpu_offload_and_qfloat8"
 # EasyAnimateV5.1 support TeaCache.
 enable_teacache     = True
 # Recommended to be set between 0.05 and 0.1. A larger threshold can cache more steps, speeding up the inference process, 
 # but it may cause slight differences between the generated content and the original content.
-teacache_threshold  = 0.1
+teacache_threshold  = 0.08
 
 # Config and model path
 config_path         = "config/easyanimate_video_v5.1_magvit_qwen.yaml"
@@ -72,7 +74,7 @@ ref_image               = None
 
 # 使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性
 # 在neg prompt中添加"安静，固定"等词语可以增加动态性。
-prompt                  = "一位穿着合身的白色连衣裙，带着细肩带的女人站在一个铺着木地板的房间里。她有一头深色的长发。背景是一个放着各种瓶子的架子。灯光温暖，背景似乎在室内。"
+prompt                  = "在这个阳光明媚的户外花园里，美女身穿一袭及膝的白色无袖连衣裙，裙摆在她轻盈的舞姿中轻柔地摆动，宛如一只翩翩起舞的蝴蝶。阳光透过树叶间洒下斑驳的光影，映衬出她柔和的脸庞和清澈的眼眸，显得格外优雅。仿佛每一个动作都在诉说着青春与活力，她在草地上旋转，裙摆随之飞扬，仿佛整个花园都因她的舞动而欢愉。周围五彩缤纷的花朵在微风中摇曳，玫瑰、菊花、百合，各自释放出阵阵香气，营造出一种轻松而愉快的氛围。"
 negative_prompt         = "扭曲的身体，肢体残缺，文本字幕，漫画，静止，丑陋，错误，乱码。"
 # 
 # Using longer neg prompt such as "Blurring, mutation, deformation, distortion, dark and solid, comics, text subtitles, line art." can increase stability
@@ -93,7 +95,7 @@ Choosen_Transformer3DModel = name_to_transformer3d[
 ]
 
 transformer_additional_kwargs = OmegaConf.to_container(config['transformer_additional_kwargs'])
-if weight_dtype == torch.float16:
+if weight_dtype == torch.float16 and "v5.1" not in model_name.lower():
     transformer_additional_kwargs["upcast_attention"] = True
 
 transformer = Choosen_Transformer3DModel.from_pretrained_2d(
@@ -137,7 +139,7 @@ vae = Choosen_AutoencoderKL.from_pretrained(
     subfolder="vae",
     vae_additional_kwargs=OmegaConf.to_container(config['vae_kwargs'])
 ).to(weight_dtype)
-if config['vae_kwargs'].get('vae_type', 'AutoencoderKL') == 'AutoencoderKLMagvit' and weight_dtype == torch.float16:
+if weight_dtype == torch.float16 and "v5.1" not in model_name.lower():
     vae.upcast_vae = True
 
 if vae_path is not None:
@@ -226,16 +228,28 @@ pipeline = EasyAnimateControlPipeline(
 )
 
 if GPU_memory_mode == "sequential_cpu_offload":
+    pipeline._manual_cpu_offload_in_sequential_cpu_offload = []
+    for name, _text_encoder in zip(["text_encoder", "text_encoder_2"], [pipeline.text_encoder, pipeline.text_encoder_2]):
+        if isinstance(_text_encoder, Qwen2VLForConditionalGeneration):
+            if hasattr(_text_encoder, "visual"):
+                del _text_encoder.visual
+            convert_model_weight_to_float8(_text_encoder)
+            convert_weight_dtype_wrapper(_text_encoder, weight_dtype)
+            pipeline._manual_cpu_offload_in_sequential_cpu_offload = [name]
     pipeline.enable_sequential_cpu_offload()
 elif GPU_memory_mode == "model_cpu_offload_and_qfloat8":
+    for _text_encoder in [pipeline.text_encoder, pipeline.text_encoder_2]:
+        if hasattr(_text_encoder, "visual"):
+            del _text_encoder.visual
+    convert_weight_dtype_wrapper(transformer, weight_dtype)
     pipeline.enable_model_cpu_offload()
-    convert_weight_dtype_wrapper(pipeline.transformer, weight_dtype)
 else:
     pipeline.enable_model_cpu_offload()
 
-if "v5.1" in config_path and enable_teacache:
+coefficients = get_teacache_coefficients(model_name)
+if coefficients is not None and enable_teacache:
     print(f"Enable TeaCache with threshold: {teacache_threshold}.")
-    pipeline.transformer.enable_teacache(num_inference_steps, teacache_threshold)
+    pipeline.transformer.enable_teacache(num_inference_steps, teacache_threshold, coefficients=coefficients)
 
 generator = torch.Generator(device="cuda").manual_seed(seed)
 

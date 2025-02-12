@@ -121,6 +121,22 @@ class TeaCache():
         self.previous_residual = None
 
 
+def get_teacache_coefficients(model_name):
+    # The coefficients for EasyAnimateV5-7b-zh-InP should be:
+    # [-3.64204720e+03, 1.43764725e+03, -1.93045263e+02, 1.09596499e+01, -1.70663507e-01]
+    if "v5.1-7b" in model_name.lower():
+        # The coefficient was obtained by sampling videos from T2V CompBench using EasyAnimateV5.1-7b-zh-InP.
+        # This coefficient can be applied to both the EasyAnimateV5.1-7b-zh and EasyAnimateV5.1-7b-Control.
+        return [1.07862322, -4.19362456, 3.06725828, 0.33161686, 0.02374758]
+    elif "v5.1-12b" in model_name.lower():
+        # The coefficient was obtained by sampling videos from T2V CompBench using EasyAnimateV5.1-12b-zh-InP.
+        # This coefficient can be applied to both the EasyAnimateV5.1-12b-zh and EasyAnimateV5.1-12b-Control.
+        return [-10.47857366, 8.33844143, -0.78477557, 0.68798618, 0.0136149]
+    else:
+        print(f"The model {model_name} is not supported by TeaCache.")
+        return None
+
+
 class Transformer3DModel(ModelMixin, ConfigMixin):
     """
     A 3D Transformer model for image-like data.
@@ -1472,10 +1488,6 @@ class EasyAnimateTransformer3DModel(ModelMixin, ConfigMixin):
         rel_l1_thresh: float,
         coefficients: list[float] = [-10.47857366, 8.33844143, -0.78477557, 0.68798618, 0.0136149]
     ):
-        # The coefficient was obtained by sampling videos from T2V CompBench using EasyAnimateV5.1-12b-zh-InP.
-        # This coefficient can be applied to both the EasyAnimateV5.1-12b-zh and EasyAnimateV5.1-12b-Control.
-        # The coefficients for EasyAnimateV5.1-7b-zh-InP should be:
-        # [-3.64204720e+03, 1.43764725e+03, -1.93045263e+02, 1.09596499e+01, -1.70663507e-01]
         self.teacache = TeaCache(coefficients, num_steps, rel_l1_thresh=rel_l1_thresh)
 
     def _set_gradient_checkpointing(self, module, value=False):
@@ -1558,25 +1570,26 @@ class EasyAnimateTransformer3DModel(ModelMixin, ConfigMixin):
                 should_calc = True
                 self.teacache.accumulated_rel_l1_distance = 0
             else:
-                rel_l1_distance = self.teacache.compute_rel_l1_distance(self.teacache.previous_modulated_input, modulated_inp)
+                rel_l1_distance = self.teacache.compute_rel_l1_distance(self.teacache.previous_modulated_input.to(modulated_inp.device), modulated_inp)
                 self.teacache.accumulated_rel_l1_distance += self.teacache.rescale_func(rel_l1_distance)
                 if self.teacache.accumulated_rel_l1_distance < self.teacache.rel_l1_thresh:
                     should_calc = False
                 else:
                     should_calc = True
                     self.teacache.accumulated_rel_l1_distance = 0
-            self.teacache.previous_modulated_input = modulated_inp
+            self.teacache.previous_modulated_input = modulated_inp.cpu()
             self.teacache.cnt += 1
             if self.teacache.cnt == self.teacache.num_steps:
                 # self.cnt = 0
                 self.teacache.reset()
+            del inp, temb_, encoder_hidden_states_
 
         # TeaCache
         if self.teacache is not None:
             if not should_calc:
-                hidden_states += self.teacache.previous_residual
+                hidden_states += self.teacache.previous_residual.to(modulated_inp.device)
             else:
-                ori_hidden_states = hidden_states.clone()
+                ori_hidden_states = hidden_states.clone().cpu()
 
                 # 4. Transformer blocks
                 for i, block in enumerate(self.transformer_blocks):
@@ -1619,7 +1632,8 @@ class EasyAnimateTransformer3DModel(ModelMixin, ConfigMixin):
 
                 # 5. Final block
                 hidden_states = self.norm_out(hidden_states, temb=temb)
-                self.teacache.previous_residual = hidden_states - ori_hidden_states
+                self.teacache.previous_residual = hidden_states.cpu() - ori_hidden_states
+                del ori_hidden_states
         else:
             # 4. Transformer blocks
             for i, block in enumerate(self.transformer_blocks):

@@ -36,6 +36,15 @@ pip install -r comfyui/requirements.txt
 ## 将模型下载到`ComfyUI/models/EasyAnimate/`
 
 EasyAnimateV5.1：
+
+7B:
+| 名称 | 种类 | 存储空间 | Hugging Face | Model Scope | 描述 |
+|--|--|--|--|--|--|
+| EasyAnimateV5.1-7b-zh-InP | EasyAnimateV5.1 | 30 GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV5.1-7b-zh-InP) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV5.1-7b-zh-InP)| 官方的图生视频权重。支持多分辨率（512，768，1024）的视频预测，支持多分辨率（512，768，1024）的视频预测，以49帧、每秒8帧进行训练，支持多语言预测 |
+| EasyAnimateV5.1-7b-zh-Control | EasyAnimateV5.1 | 30 GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV5.1-7b-zh-Control) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV5.1-7b-zh-Control)| 官方的视频控制权重，支持不同的控制条件，如Canny、Depth、Pose、MLSD等，同时支持使用轨迹控制。支持多分辨率（512，768，1024）的视频预测，支持多分辨率（512，768，1024）的视频预测，以49帧、每秒8帧进行训练，支持多语言预测 |
+| EasyAnimateV5.1-7b-zh-Control-Camera | EasyAnimateV5.1 | 30 GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV5.1-7b-zh-Control-Camera) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV5.1-7b-zh-Control-Camera)| 官方的视频相机控制权重，支持通过输入相机运动轨迹控制生成方向。支持多分辨率（512，768，1024）的视频预测，支持多分辨率（512，768，1024）的视频预测，以49帧、每秒8帧进行训练，支持多语言预测 |
+| EasyAnimateV5.1-7b-zh | EasyAnimateV5.1 | 30 GB | [🤗Link](https://huggingface.co/alibaba-pai/EasyAnimateV5.1-7b-zh) | [😄Link](https://modelscope.cn/models/PAI/EasyAnimateV5.1-7b-zh)| 官方的文生视频权重。支持多分辨率（512，768，1024）的视频预测，支持多分辨率（512，768，1024）的视频预测，以49帧、每秒8帧进行训练，支持多语言预测 |
+
 12B：
 |名称|类型|存储空间|拥抱面|型号范围|描述|
 |--|--|--|--|--|--|

@@ -14,9 +14,16 @@ def autocast_model_forward(cls, origin_dtype, *inputs, **kwargs):
     cls.to(weight_dtype)
     return out
 
+def convert_model_weight_to_float8(model, exclude_module_name='embed_tokens'):
+    for name, module in model.named_modules():
+        if exclude_module_name not in name:
+            for param_name, param in module.named_parameters():
+                if exclude_module_name not in param_name:
+                    param.data = param.data.to(torch.float8_e4m3fn)
+
 def convert_weight_dtype_wrapper(module, origin_dtype):
     for name, module in module.named_modules():
-        if name == "":
+        if name == "" or "embed_tokens" in name:
             continue
         original_forward = module.forward
         if hasattr(module, "weight"):
