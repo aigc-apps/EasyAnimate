@@ -68,8 +68,12 @@ fps                 = 8
 # Use torch.float16 if GPU does not support torch.bfloat16
 # ome graphics cards, such as v100, 2080ti, do not support torch.bfloat16
 weight_dtype            = torch.bfloat16
-# If you want to generate from text, please set the validation_image_start = None and validation_image_end = None
+# If you are preparing to redraw the reference video, set validation_video and validation_video_mask. 
+# If you do not use validation_video_mask, the entire video will be redrawn; 
+# if you use validation_video_mask, as shown in asset/mask.jpg, only a portion of the video will be redrawn.
+# Please set a larger denoise_strength when using validation_video_mask, such as 1.00 instead of 0.70
 validation_video        = "asset/1.mp4"
+validation_video_mask   = None 
 denoise_strength        = 0.70
 
 # 使用更长的neg prompt如"模糊，突变，变形，失真，画面暗，文本字幕，画面固定，连环画，漫画，线稿，没有主体。"，可以增加稳定性
@@ -273,7 +277,7 @@ if vae.cache_mag_vae:
     video_length = int((video_length - 1) // vae.mini_batch_encoder * vae.mini_batch_encoder) + 1 if video_length != 1 else 1
 else:
     video_length = int(video_length // vae.mini_batch_encoder * vae.mini_batch_encoder) if video_length != 1 else 1
-input_video, input_video_mask, clip_image = get_video_to_video_latent(validation_video, video_length=video_length, fps=fps, sample_size=sample_size)
+input_video, input_video_mask, clip_image = get_video_to_video_latent(validation_video, video_length=video_length, fps=fps, validation_video_mask=validation_video_mask, sample_size=sample_size)
 
 with torch.no_grad():
     sample = pipeline(
