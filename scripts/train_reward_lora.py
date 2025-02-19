@@ -1414,193 +1414,192 @@ def main():
             ]
 
             with accelerator.accumulate(transformer3d):
-                with accelerator.autocast():
-                    latents = torch.randn(*latent_shape, device=accelerator.device, dtype=weight_dtype)
+                latents = torch.randn(*latent_shape, device=accelerator.device, dtype=weight_dtype)
 
-                    if hasattr(noise_scheduler, "init_noise_sigma"):
-                        latents = latents * noise_scheduler.init_noise_sigma
+                if hasattr(noise_scheduler, "init_noise_sigma"):
+                    latents = latents * noise_scheduler.init_noise_sigma
 
-                    # Prepare inpaint latents if it needs.
-                    # Use zero latents if we want to t2v.
-                    mask_latents = torch.zeros_like(latents)[:, :1].to(latents.device, latents.dtype)
-                    masked_video_latents = torch.zeros_like(latents).to(latents.device, latents.dtype)
+                # Prepare inpaint latents if it needs.
+                # Use zero latents if we want to t2v.
+                mask_latents = torch.zeros_like(latents)[:, :1].to(latents.device, latents.dtype)
+                masked_video_latents = torch.zeros_like(latents).to(latents.device, latents.dtype)
 
-                    mask_input = torch.cat([mask_latents] * 2) if do_classifier_free_guidance else mask_latents
-                    masked_video_latents_input = (
-                        torch.cat([masked_video_latents] * 2) if do_classifier_free_guidance else masked_video_latents
-                    )
-                    inpaint_latents = torch.cat([mask_input, masked_video_latents_input], dim=1).to(latents.dtype)
+                mask_input = torch.cat([mask_latents] * 2) if do_classifier_free_guidance else mask_latents
+                masked_video_latents_input = (
+                    torch.cat([masked_video_latents] * 2) if do_classifier_free_guidance else masked_video_latents
+                )
+                inpaint_latents = torch.cat([mask_input, masked_video_latents_input], dim=1).to(latents.dtype)
 
-                    # Check that sizes of mask, masked image and latents match
-                    if num_channels_transformer != num_channels_latents:
-                        num_channels_mask = mask_latents.shape[1]
-                        num_channels_masked_image = masked_video_latents.shape[1]
-                        if num_channels_latents + num_channels_mask + num_channels_masked_image != transformer3d.config.in_channels:
-                            raise ValueError(
-                                f"Incorrect configuration settings! The config of `pipeline.transformer`: {transformer3d.config} expects"
-                                f" {transformer3d.config.in_channels} but received `num_channels_latents`: {num_channels_latents} +"
-                                f" `num_channels_mask`: {num_channels_mask} + `num_channels_masked_image`: {num_channels_masked_image}"
-                                f" = {num_channels_latents+num_channels_masked_image+num_channels_mask}. Please verify the config of"
-                                " `pipeline.transformer` or your `mask_image` or `image` input."
-                            )
+                # Check that sizes of mask, masked image and latents match
+                if num_channels_transformer != num_channels_latents:
+                    num_channels_mask = mask_latents.shape[1]
+                    num_channels_masked_image = masked_video_latents.shape[1]
+                    if num_channels_latents + num_channels_mask + num_channels_masked_image != transformer3d.config.in_channels:
+                        raise ValueError(
+                            f"Incorrect configuration settings! The config of `pipeline.transformer`: {transformer3d.config} expects"
+                            f" {transformer3d.config.in_channels} but received `num_channels_latents`: {num_channels_latents} +"
+                            f" `num_channels_mask`: {num_channels_mask} + `num_channels_masked_image`: {num_channels_masked_image}"
+                            f" = {num_channels_latents+num_channels_masked_image+num_channels_mask}. Please verify the config of"
+                            " `pipeline.transformer` or your `mask_image` or `image` input."
+                        )
 
-                    generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
-                    # Prepare extra step kwargs.
-                    extra_step_kwargs = prepare_extra_step_kwargs(noise_scheduler, generator, args.eta)
+                generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
+                # Prepare extra step kwargs.
+                extra_step_kwargs = prepare_extra_step_kwargs(noise_scheduler, generator, args.eta)
 
-                    # Create image_rotary_emb, style embedding & time ids
-                    grid_height = height // 8 // transformer3d.config.patch_size
-                    grid_width = width // 8 // transformer3d.config.patch_size
-                    base_size_width = 720 // 8 // transformer3d.config.patch_size
-                    base_size_height = 480 // 8 // transformer3d.config.patch_size
-                    grid_crops_coords = get_resize_crop_region_for_grid(
-                        (grid_height, grid_width), base_size_width, base_size_height
-                    )
-                    image_rotary_emb = get_3d_rotary_pos_embed(
-                        transformer3d.config.attention_head_dim, grid_crops_coords, grid_size=(grid_height, grid_width),
-                        temporal_size=latents.size(2), use_real=True,
-                    )
+                # Create image_rotary_emb, style embedding & time ids
+                grid_height = height // 8 // transformer3d.config.patch_size
+                grid_width = width // 8 // transformer3d.config.patch_size
+                base_size_width = 720 // 8 // transformer3d.config.patch_size
+                base_size_height = 480 // 8 // transformer3d.config.patch_size
+                grid_crops_coords = get_resize_crop_region_for_grid(
+                    (grid_height, grid_width), base_size_width, base_size_height
+                )
+                image_rotary_emb = get_3d_rotary_pos_embed(
+                    transformer3d.config.attention_head_dim, grid_crops_coords, grid_size=(grid_height, grid_width),
+                    temporal_size=latents.size(2), use_real=True,
+                )
 
-                    # Get other hunyuan params
-                    style = torch.tensor([0], device=accelerator.device)
+                # Get other hunyuan params
+                style = torch.tensor([0], device=accelerator.device)
 
-                    original_size = (1024, 1024)
-                    crops_coords_top_left = (0, 0)
-                    target_size = (height, width)
-                    add_time_ids = list(original_size + target_size + crops_coords_top_left)
-                    add_time_ids = torch.tensor([add_time_ids], dtype=prompt_embeds.dtype)
+                original_size = (1024, 1024)
+                crops_coords_top_left = (0, 0)
+                target_size = (height, width)
+                add_time_ids = list(original_size + target_size + crops_coords_top_left)
+                add_time_ids = torch.tensor([add_time_ids], dtype=prompt_embeds.dtype)
 
-                    if do_classifier_free_guidance:
-                        prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
-                        prompt_attention_mask = torch.cat([negative_prompt_attention_mask, prompt_attention_mask])
-                        if prompt_embeds_2 is not None:
-                            prompt_embeds_2 = torch.cat([negative_prompt_embeds_2, prompt_embeds_2])
-                            prompt_attention_mask_2 = torch.cat([negative_prompt_attention_mask_2, prompt_attention_mask_2])
-                        add_time_ids = torch.cat([add_time_ids] * 2, dim=0)
-                        style = torch.cat([style] * 2, dim=0)
-                    
-                    prompt_embeds = prompt_embeds.to(device=accelerator.device)
-                    prompt_attention_mask = prompt_attention_mask.to(device=accelerator.device)
+                if do_classifier_free_guidance:
+                    prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
+                    prompt_attention_mask = torch.cat([negative_prompt_attention_mask, prompt_attention_mask])
                     if prompt_embeds_2 is not None:
-                        prompt_embeds_2 = prompt_embeds_2.to(device=accelerator.device)
-                        prompt_attention_mask_2 = prompt_attention_mask_2.to(device=accelerator.device)
-                    add_time_ids = add_time_ids.to(dtype=prompt_embeds.dtype, device=accelerator.device).repeat(
-                        args.train_batch_size, 1
+                        prompt_embeds_2 = torch.cat([negative_prompt_embeds_2, prompt_embeds_2])
+                        prompt_attention_mask_2 = torch.cat([negative_prompt_attention_mask_2, prompt_attention_mask_2])
+                    add_time_ids = torch.cat([add_time_ids] * 2, dim=0)
+                    style = torch.cat([style] * 2, dim=0)
+                
+                prompt_embeds = prompt_embeds.to(device=accelerator.device)
+                prompt_attention_mask = prompt_attention_mask.to(device=accelerator.device)
+                if prompt_embeds_2 is not None:
+                    prompt_embeds_2 = prompt_embeds_2.to(device=accelerator.device)
+                    prompt_attention_mask_2 = prompt_attention_mask_2.to(device=accelerator.device)
+                add_time_ids = add_time_ids.to(dtype=prompt_embeds.dtype, device=accelerator.device).repeat(
+                    args.train_batch_size, 1
+                )
+                style = style.to(device=accelerator.device).repeat(args.train_batch_size)
+
+                # Denoising loop
+                if args.backprop:
+                    if args.backprop_step_list is None:
+                        if args.backprop_strategy == "last":
+                            backprop_step_list = [args.num_inference_steps - 1]
+                        elif args.backprop_strategy == "tail":
+                            backprop_step_list = list(range(args.num_inference_steps))[-args.backprop_num_steps:]
+                        elif args.backprop_strategy == "uniform":
+                            interval = args.num_inference_steps // args.backprop_num_steps
+                            random_start = random.randint(0, interval)
+                            backprop_step_list = [random_start + i * interval for i in range(args.backprop_num_steps)]
+                        elif args.backprop_strategy == "random":
+                            backprop_step_list = random.sample(
+                                range(args.backprop_random_start_step, args.backprop_random_end_step + 1), args.backprop_num_steps
+                            )
+                        else:
+                            raise ValueError(f"Invalid backprop strategy: {args.backprop_strategy}.")
+                    else:
+                        backprop_step_list = args.backprop_step_list
+                
+                for i, t in enumerate(tqdm(timesteps)):
+                    # expand the latents if we are doing classifier free guidance
+                    latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+                    if hasattr(noise_scheduler, "scale_model_input"):
+                        latent_model_input = noise_scheduler.scale_model_input(latent_model_input, t)
+                    
+                    # expand scalar t to 1-D tensor to match the 1st dim of latent_model_input
+                    t_expand = torch.tensor([t] * latent_model_input.shape[0], device=accelerator.device).to(
+                        dtype=latent_model_input.dtype
                     )
-                    style = style.to(device=accelerator.device).repeat(args.train_batch_size)
 
-                    # Denoising loop
-                    if args.backprop:
-                        if args.backprop_step_list is None:
-                            if args.backprop_strategy == "last":
-                                backprop_step_list = [args.num_inference_steps - 1]
-                            elif args.backprop_strategy == "tail":
-                                backprop_step_list = list(range(args.num_inference_steps))[-args.backprop_num_steps:]
-                            elif args.backprop_strategy == "uniform":
-                                interval = args.num_inference_steps // args.backprop_num_steps
-                                random_start = random.randint(0, interval)
-                                backprop_step_list = [random_start + i * interval for i in range(args.backprop_num_steps)]
-                            elif args.backprop_strategy == "random":
-                                backprop_step_list = random.sample(
-                                    range(args.backprop_random_start_step, args.backprop_random_end_step + 1), args.backprop_num_steps
-                                )
-                            else:
-                                raise ValueError(f"Invalid backprop strategy: {args.backprop_strategy}.")
-                        else:
-                            backprop_step_list = args.backprop_step_list
-                    
-                    for i, t in enumerate(tqdm(timesteps)):
-                        # expand the latents if we are doing classifier free guidance
-                        latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-                        if hasattr(noise_scheduler, "scale_model_input"):
-                            latent_model_input = noise_scheduler.scale_model_input(latent_model_input, t)
-                        
-                        # expand scalar t to 1-D tensor to match the 1st dim of latent_model_input
-                        t_expand = torch.tensor([t] * latent_model_input.shape[0], device=accelerator.device).to(
-                            dtype=latent_model_input.dtype
-                        )
+                    # predict the noise residual
+                    if args.stop_latent_model_input_gradient:
+                        # See https://arxiv.org/abs/2405.00760
+                        latent_model_input = latent_model_input.detach()
+                    noise_pred = transformer3d(
+                        latent_model_input,
+                        t_expand,
+                        encoder_hidden_states=prompt_embeds,
+                        text_embedding_mask=prompt_attention_mask,
+                        encoder_hidden_states_t5=prompt_embeds_2,
+                        text_embedding_mask_t5=prompt_attention_mask_2,
+                        image_meta_size=add_time_ids,
+                        style=style,
+                        image_rotary_emb=image_rotary_emb,
+                        inpaint_latents=inpaint_latents,
+                        clip_encoder_hidden_states=None,
+                        clip_attention_mask=None,
+                        return_dict=False,
+                    )[0]
 
-                        # predict the noise residual
-                        if args.stop_latent_model_input_gradient:
-                            # See https://arxiv.org/abs/2405.00760
-                            latent_model_input = latent_model_input.detach()
-                        noise_pred = transformer3d(
-                            latent_model_input,
-                            t_expand,
-                            encoder_hidden_states=prompt_embeds,
-                            text_embedding_mask=prompt_attention_mask,
-                            encoder_hidden_states_t5=prompt_embeds_2,
-                            text_embedding_mask_t5=prompt_attention_mask_2,
-                            image_meta_size=add_time_ids,
-                            style=style,
-                            image_rotary_emb=image_rotary_emb,
-                            inpaint_latents=inpaint_latents,
-                            clip_encoder_hidden_states=None,
-                            clip_attention_mask=None,
-                            return_dict=False,
-                        )[0]
+                    # Optimize the denoising results only for the specified steps.
+                    if i in backprop_step_list:
+                        noise_pred = noise_pred
+                    else:
+                        noise_pred = noise_pred.detach()
 
-                        # Optimize the denoising results only for the specified steps.
-                        if i in backprop_step_list:
-                            noise_pred = noise_pred
-                        else:
-                            noise_pred = noise_pred.detach()
+                    # perform guidance
+                    if do_classifier_free_guidance:
+                        noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                        noise_pred = noise_pred_uncond + args.guidance_scale * (noise_pred_text - noise_pred_uncond)
 
-                        # perform guidance
-                        if do_classifier_free_guidance:
-                            noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                            noise_pred = noise_pred_uncond + args.guidance_scale * (noise_pred_text - noise_pred_uncond)
+                    # compute the previous noisy sample x_t -> x_t-1
+                    latents = noise_scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
 
-                        # compute the previous noisy sample x_t -> x_t-1
-                        latents = noise_scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
+                # decode latents (tensor)
+                # latents = latents.permute(0, 2, 1, 3, 4)  # [B, C, T, H, W]
+                # Since the casual VAE decoding consumes a large amount of VRAM, and we need to keep the decoding 
+                # operation within the computational graph. Thus, we only decode the first args.num_decoded_latents 
+                # to calculate the reward.
+                # TODO: Decode all latents but keep a portion of the decoding operation within the computational graph.
+                sampled_latent_indices = list(range(args.num_decoded_latents))
+                sampled_latents = latents[:, :, sampled_latent_indices, :, :]
+                sampled_latents = 1 / vae.config.scaling_factor * sampled_latents
+                sampled_frames = vae.decode(sampled_latents)[0]
+                sampled_frames = sampled_frames.clamp(-1, 1)
+                sampled_frames = (sampled_frames / 2 + 0.5).clamp(0, 1)  # [-1, 1] -> [0, 1]
 
-                    # decode latents (tensor)
-                    # latents = latents.permute(0, 2, 1, 3, 4)  # [B, C, T, H, W]
-                    # Since the casual VAE decoding consumes a large amount of VRAM, and we need to keep the decoding 
-                    # operation within the computational graph. Thus, we only decode the first args.num_decoded_latents 
-                    # to calculate the reward.
-                    # TODO: Decode all latents but keep a portion of the decoding operation within the computational graph.
-                    sampled_latent_indices = list(range(args.num_decoded_latents))
-                    sampled_latents = latents[:, :, sampled_latent_indices, :, :]
-                    sampled_latents = 1 / vae.config.scaling_factor * sampled_latents
-                    sampled_frames = vae.decode(sampled_latents)[0]
-                    sampled_frames = sampled_frames.clamp(-1, 1)
-                    sampled_frames = (sampled_frames / 2 + 0.5).clamp(0, 1)  # [-1, 1] -> [0, 1]
+                if global_step % args.checkpointing_steps == 0:
+                    saved_file = f"sample-{global_step}-{accelerator.process_index}.mp4"
+                    save_videos_grid(
+                        sampled_frames.to(torch.float32).detach().cpu(),
+                        os.path.join(args.output_dir, "train_sample", saved_file),
+                        fps=8
+                    )
+                
+                if args.num_sampled_frames is not None:
+                    num_frames = sampled_frames.size(2) - 1
+                    sampled_frames_indices = torch.linspace(0, num_frames, steps=args.num_sampled_frames).long()
+                    sampled_frames = sampled_frames[:, :, sampled_frames_indices, :, :]
+                # compute loss and reward
+                loss, reward = loss_fn(sampled_frames, train_prompt)
 
-                    if global_step % args.checkpointing_steps == 0:
-                        saved_file = f"sample-{global_step}-{accelerator.process_index}.mp4"
-                        save_videos_grid(
-                            sampled_frames.to(torch.float32).detach().cpu(),
-                            os.path.join(args.output_dir, "train_sample", saved_file),
-                            fps=8
-                        )
-                    
-                    if args.num_sampled_frames is not None:
-                        num_frames = sampled_frames.size(2) - 1
-                        sampled_frames_indices = torch.linspace(0, num_frames, steps=args.num_sampled_frames).long()
-                        sampled_frames = sampled_frames[:, :, sampled_frames_indices, :, :]
-                    # compute loss and reward
-                    loss, reward = loss_fn(sampled_frames, train_prompt)
+                # Gather the losses and rewards across all processes for logging (if we use distributed training).
+                avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
+                avg_reward = accelerator.gather(reward.repeat(args.train_batch_size)).mean()
+                train_loss += avg_loss.item() / args.gradient_accumulation_steps
+                train_reward += avg_reward.item() / args.gradient_accumulation_steps
 
-                    # Gather the losses and rewards across all processes for logging (if we use distributed training).
-                    avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
-                    avg_reward = accelerator.gather(reward.repeat(args.train_batch_size)).mean()
-                    train_loss += avg_loss.item() / args.gradient_accumulation_steps
-                    train_reward += avg_reward.item() / args.gradient_accumulation_steps
-
-                    # Backpropagate
-                    accelerator.backward(loss)
-                    if accelerator.sync_gradients:
-                        total_norm = accelerator.clip_grad_norm_(trainable_params, args.max_grad_norm)
-                        # If use_deepspeed, `total_norm` cannot be logged by accelerator.
-                        if not args.use_deepspeed:
-                            accelerator.log({"total_norm": total_norm}, step=global_step)
-                        else:
-                            if hasattr(optimizer, "optimizer") and hasattr(optimizer.optimizer, "_global_grad_norm"):
-                                accelerator.log({"total_norm":  optimizer.optimizer._global_grad_norm}, step=global_step)
-                    optimizer.step()
-                    lr_scheduler.step()
-                    optimizer.zero_grad()
+                # Backpropagate
+                accelerator.backward(loss)
+                if accelerator.sync_gradients:
+                    total_norm = accelerator.clip_grad_norm_(trainable_params, args.max_grad_norm)
+                    # If use_deepspeed, `total_norm` cannot be logged by accelerator.
+                    if not args.use_deepspeed:
+                        accelerator.log({"total_norm": total_norm}, step=global_step)
+                    else:
+                        if hasattr(optimizer, "optimizer") and hasattr(optimizer.optimizer, "_global_grad_norm"):
+                            accelerator.log({"total_norm":  optimizer.optimizer._global_grad_norm}, step=global_step)
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
             
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
