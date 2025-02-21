@@ -1148,8 +1148,10 @@ def main():
     if args.vae_gradient_checkpointing:
         # Since 3D casual VAE need a cache to decode all latents autoregressively, .Thus, gradient checkpointing can only be 
         # enabled when decoding the first batch (i.e. the first three) of latents, in which case the cache is not being used.
-        if args.num_decoded_latents > 3:
-            raise ValueError("The vae_gradient_checkpointing is not supported for num_decoded_latents > 3.")
+        
+        # num_decoded_latents > 3 is support in EasyAnimate now.
+        # if args.num_decoded_latents > 3:
+        #     raise ValueError("The vae_gradient_checkpointing is not supported for num_decoded_latents > 3.")
         vae.enable_gradient_checkpointing()
 
     # Enable TF32 for faster training on Ampere GPUs,
@@ -1418,6 +1420,8 @@ def main():
 
                 if hasattr(noise_scheduler, "init_noise_sigma"):
                     latents = latents * noise_scheduler.init_noise_sigma
+                if hasattr(vae, "enable_cache_in_vae"):
+                    vae.enable_cache_in_vae()
 
                 # Prepare inpaint latents if it needs.
                 # Use zero latents if we want to t2v.
@@ -1553,6 +1557,8 @@ def main():
                     # compute the previous noisy sample x_t -> x_t-1
                     latents = noise_scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
 
+                if hasattr(vae, "disable_cache_in_vae"):
+                    vae.disable_cache_in_vae()
                 # decode latents (tensor)
                 # latents = latents.permute(0, 2, 1, 3, 4)  # [B, C, T, H, W]
                 # Since the casual VAE decoding consumes a large amount of VRAM, and we need to keep the decoding 
@@ -1652,6 +1658,8 @@ def main():
                         args.validation_prompts = validation_prompts[:args.validation_batch_size]
                     validation_prompts_idx = [(i, p) for i, p in enumerate(args.validation_prompts)]
 
+                    if hasattr(vae, "enable_cache_in_vae"):
+                        vae.enable_cache_in_vae()
                     accelerator.wait_for_everyone()
                     with accelerator.split_between_processes(validation_prompts_idx) as splitted_prompts_idx:
                         validation_loss, validation_reward = log_validation(

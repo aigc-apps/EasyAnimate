@@ -185,6 +185,8 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         self.slice_compression_vae = slice_compression_vae
         self.cache_compression_vae = cache_compression_vae
         self.cache_mag_vae = cache_mag_vae
+        self.cache_compression_vae_copy = cache_compression_vae
+        self.cache_mag_vae_copy = cache_mag_vae
         self.mini_batch_encoder = mini_batch_encoder
         self.mini_batch_decoder = mini_batch_decoder
         self.use_slicing = False
@@ -196,6 +198,24 @@ class AutoencoderKLMagvit(ModelMixin, ConfigMixin, FromOriginalVAEMixin):
         self.tile_overlap_factor = tile_overlap_factor
         self.tile_latent_min_size = int(self.tile_sample_min_size / (2 ** (len(ch_mult) - 1)))
         self.scaling_factor = scaling_factor
+
+    def disable_cache_in_vae(self):
+        self.cache_compression_vae = False
+        self.encoder.cache_compression_vae = False
+        self.decoder.cache_compression_vae = False
+
+        self.cache_mag_vae = False
+        self.encoder.cache_mag_vae = False
+        self.decoder.cache_mag_vae = False
+
+    def enable_cache_in_vae(self):
+        self.cache_compression_vae = self.cache_compression_vae_copy
+        self.encoder.cache_compression_vae = self.cache_compression_vae_copy
+        self.decoder.cache_compression_vae = self.cache_compression_vae_copy
+
+        self.cache_mag_vae = self.cache_mag_vae_copy
+        self.encoder.cache_mag_vae = self.cache_mag_vae_copy
+        self.decoder.cache_mag_vae = self.cache_mag_vae_copy
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (omnigen_Mag_Encoder, omnigen_Mag_Decoder)):
