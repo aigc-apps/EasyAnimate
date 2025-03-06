@@ -31,6 +31,7 @@ EasyAnimate is a pipeline based on the transformer architecture, designed for ge
 We will support quick pull-ups from different platforms, refer to [Quick Start](#quick-start).
 
 **New Features:**
+- EasyAnimate-V5.1 is now supported in diffusers. For more implementation details, please refer to the [PR](https://github.com/huggingface/diffusers/pull/10626). Relevant weights can be downloaded from [EasyAnimate-V5.1-diffusers](https://huggingface.co/collections/alibaba-pai/easyanimate-v51-diffusers-67c81d1d19b236e056675cce). For usage instructions, please refer to [Usage](https://huggingface.co/alibaba-pai/EasyAnimateV5.1-7b-zh-diffusers#a%E3%80%81text-to-video). [ 2025.03.06 ]
 - **Updated to version v5.1**, the Qwen2 VL is used as the text encoder, and Flow is used as the sampling method. It supports bilingual prediction in both Chinese and English. In addition to common controls such as Canny and Pose, it also supports trajectory control, camera control. [2025.01.21]
 - Use reward backpropagation to train Lora and optimize the video, aligning it better with human preferences, detailes in [here](scripts/README_TRAIN_REWARD.md). EasyAnimateV5-7b is released now. [2024.11.27]
 - **Updated to v5**, supporting video generation up to 1024x1024, 49 frames, 6s, 8fps, with expanded model scale to 12B, incorporating the MMDIT structure, and enabling control models with diverse inputs; supports bilingual predictions in Chinese and English. [2024.11.08]

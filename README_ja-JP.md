@@ -31,6 +31,7 @@ EasyAnimateは、トランスフォーマーアーキテクチャに基づいた
 異なるプラットフォームからのクイックプルアップをサポートします。詳細は[クイックスタート](#クイックスタート)を参照してください。
 
 **新機能:**
+- EasyAnimate-V5.1は現在diffusersでサポートされています。実装の詳細については、[PR](https://github.com/huggingface/diffusers/pull/10626)をご覧ください。関連する重みは[EasyAnimate-V5.1-diffusers](https://huggingface.co/collections/alibaba-pai/easyanimate-v51-diffusers-67c81d1d19b236e056675cce)からダウンロードできます。使用方法については、[Usage](https://huggingface.co/alibaba-pai/EasyAnimateV5.1-7b-zh-diffusers#a%E3%80%81text-to-video)を参照してください。 [ 2025.03.06 ]
 - **バージョンv5.1に更新**、Qwen2 VLがテキストエンコーダーとして使用され、Flowがサンプリング方法として使用されます。中国語と英語の両方でバイリンガル予測をサポートしています。CannyやPoseといった一般的なコントロールに加えて、軌道制御やカメラ制御もサポートしています。[2025.01.21]
 - インセンティブ逆伝播を使用してLoraを訓練し、人間の好みに合うようにビデオを最適化します。詳細は、[ここ]（scripts/README _ train _ REVARD.md）を参照してください。EasyAnimateV 5-7 bがリリースされました。[2024.11.27]
 - **v5に更新**、1024x1024までの動画生成をサポート、49フレーム、6秒、8fps、モデルスケールを12Bに拡張、MMDIT構造を組み込み、さまざまな入力を持つ制御モデルをサポート。中国語と英語のバイリンガル予測をサポート。[2024.11.08]

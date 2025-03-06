@@ -31,6 +31,7 @@ EasyAnimate是一个基于transformer结构的pipeline，可用于生成AI图片
 我们会逐渐支持从不同平台快速启动，请参阅 [快速启动](#快速启动)。
 
 新特性：
+- EasyAnimate-V5.1现已在diffusers中得到支持，更多实现细节请参考[PR](https://github.com/huggingface/diffusers/pull/10626)，相关权重可以在[EasyAnimate-V5.1-diffusers](https://huggingface.co/collections/alibaba-pai/easyanimate-v51-diffusers-67c81d1d19b236e056675cce)下载，使用方案请参考[Usage](https://huggingface.co/alibaba-pai/EasyAnimateV5.1-7b-zh-diffusers#a%E3%80%81text-to-video)。 [ 2025.03.06 ]
 - 更新到v5.1版本，应用Qwen2 VL作为文本编码器，支持多语言预测，使用Flow作为采样方式，除去常见控制如Canny、Pose外，还支持轨迹控制，相机控制等。[ 2025.01.21 ]
 - 使用奖励反向传播来训练Lora并优化视频，使其更好地符合人类偏好，详细信息请参见[此处](scripts/README_train_REVARD.md)。EasyAnimateV5-7b现已发布。[ 2024.11.27 ]
 - 更新到v5版本，最大支持1024x1024，49帧, 6s, 8fps视频生成，拓展模型规模到12B，应用MMDIT结构，支持不同输入的控制模型，支持中文与英文双语预测。[ 2024.11.08 ]
