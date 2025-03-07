@@ -6,6 +6,21 @@ from diffusers.models.attention import Attention
 from diffusers.models.embeddings import apply_rotary_emb
 from einops import rearrange, repeat
 
+try:
+    import xfuser
+    from xfuser.core.distributed import (
+        get_sequence_parallel_world_size,
+        get_sequence_parallel_rank,
+        get_sp_group,
+        initialize_model_parallel,
+        init_distributed_environment
+    )
+    from xfuser.core.long_ctx_attention import xFuserLongContextAttention
+except Exception as ex:
+    get_sequence_parallel_world_size = None
+    get_sequence_parallel_rank = None
+    xFuserLongContextAttention = None
+
 
 class HunyuanAttnProcessor2_0:
     r"""
@@ -217,7 +232,14 @@ class LazyKVCompressionProcessor2_0:
 
 class EasyAnimateAttnProcessor2_0:
     def __init__(self):
-        pass
+        if xFuserLongContextAttention is not None:
+            try:
+                get_sequence_parallel_world_size()
+                self.hybrid_seq_parallel_attn = xFuserLongContextAttention()
+            except Exception:
+                self.hybrid_seq_parallel_attn = None
+        else:
+            self.hybrid_seq_parallel_attn = None
 
     def __call__(
         self,
@@ -284,11 +306,30 @@ class EasyAnimateAttnProcessor2_0:
             if not attn.is_cross_attention:
                 key[:, :, text_seq_length:] = apply_rotary_emb(key[:, :, text_seq_length:], image_rotary_emb)
 
-        hidden_states = F.scaled_dot_product_attention(
-            query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
-        )
+        if self.hybrid_seq_parallel_attn is None:
+            hidden_states = F.scaled_dot_product_attention(
+                query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
+            )
+            hidden_states = hidden_states.transpose(1, 2)
+        else:
+            sp_world_rank = get_sequence_parallel_rank()
+            sp_world_size = get_sequence_parallel_world_size()
 
-        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, attn.heads * head_dim)
+            img_q = query[:, :, text_seq_length:].transpose(1,2)
+            txt_q = query[:, :, :text_seq_length].transpose(1,2)
+            img_k = key[:, :, text_seq_length:].transpose(1,2)
+            txt_k = key[:, :, :text_seq_length].transpose(1,2)
+            img_v = value[:, :, text_seq_length:].transpose(1,2)
+            txt_v = value[:, :, :text_seq_length].transpose(1,2)
+
+            hidden_states = self.hybrid_seq_parallel_attn(None,
+                img_q, img_k, img_v, dropout_p=0.0, causal=False,
+                joint_tensor_query=txt_q,
+                joint_tensor_key=txt_k,
+                joint_tensor_value=txt_v,
+                joint_strategy='front',)
+
+        hidden_states = hidden_states.reshape(batch_size, -1, attn.heads * head_dim)
 
         if attn2 is None:
             # linear proj

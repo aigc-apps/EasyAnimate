@@ -2139,6 +2139,10 @@ def main():
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
+                if args.use_deepspeed and hasattr(optimizer, 'optimizer') and hasattr(optimizer.optimizer, '_global_grad_norm') and accelerator.is_main_process:
+                    writer.add_scalar(f'gradients/norm_sum', optimizer.optimizer._global_grad_norm,
+                            global_step=global_step)
+
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
 
