@@ -3,7 +3,7 @@ einops
 safetensors
 timm
 tomesd
-torch>=2.1.2
+torch
 torchdiffeq
 torchsde
 decord
@@ -20,7 +20,7 @@ tensorboard
 beautifulsoup4
 ftfy
 func_timeout
-accelerate>=0.25.0
-gradio>=3.41.2,<=3.48.0
-diffusers>=0.30.1,<=0.31.0
-transformers>=4.46.2
+accelerate
+gradio
+diffusers
+transformers
