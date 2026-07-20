@@ -11,7 +11,7 @@ if __name__ == "__main__":
     # Choose the ui mode  
     ui_mode = "normal"
     
-    # GPU memory mode, which can be choosen in ["model_cpu_offload", "model_cpu_offload_and_qfloat8", "sequential_cpu_offload"].
+    # GPU memory mode, which can be chosen in ["model_cpu_offload", "model_cpu_offload_and_qfloat8", "sequential_cpu_offload"].
     # "model_cpu_offload" means that the entire model will be moved to the CPU after use, which can save some GPU memory.
     # 
     # "model_cpu_offload_and_qfloat8" indicates that the entire model will be moved to the CPU after use, 
